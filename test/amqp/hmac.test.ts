@@ -5,8 +5,10 @@ import { signPayload, verifyPayload } from '../../src/amqp/hmac.js';
 
 /**
  * Server-generated canonical bytes + expected HMAC for v2 `AuthzRequest`/
- * `AuditEventMessage` (NEW-4). Ground truth for every SDK, not TS-owned —
- * see `crates/axiam-amqp/tests/fixtures/v2_reference_vectors.json`.
+ * `AuditEventMessage` (NEW-4). Ground truth for every SDK, not TS-owned:
+ * vendored verbatim from the server repo's
+ * `crates/axiam-amqp/tests/fixtures/v2_reference_vectors.json`. Re-copy it
+ * (never hand-edit it) whenever the server regenerates the vectors.
  */
 interface V2ReferenceVectors {
   audit_event: { canonical_signed_json: string; hmac_signature_hex: string };
@@ -18,13 +20,7 @@ interface V2ReferenceVectors {
 }
 
 const fixture: V2ReferenceVectors = JSON.parse(
-  readFileSync(
-    new URL(
-      '../../../../crates/axiam-amqp/tests/fixtures/v2_reference_vectors.json',
-      import.meta.url,
-    ),
-    'utf8',
-  ),
+  readFileSync(new URL('../fixtures/v2_reference_vectors.json', import.meta.url), 'utf8'),
 ) as V2ReferenceVectors;
 
 /**
