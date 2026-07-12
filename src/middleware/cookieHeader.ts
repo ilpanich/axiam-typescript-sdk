@@ -3,7 +3,7 @@
 // No `cookie-parser`/`@fastify/cookie` peer dependency — a small
 // RFC6265-lenient splitter shared by both Express and Fastify middleware,
 // mirroring the Rust extractor's cookie-then-Bearer fallback order
-// (sdks/rust/src/middleware/actix.rs:129-149).
+// (the Rust SDK's src/middleware/actix.rs:129-149).
 
 import { timingSafeEqual } from 'node:crypto';
 

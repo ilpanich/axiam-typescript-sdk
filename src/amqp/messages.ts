@@ -2,7 +2,7 @@
 //
 // Mirror, never import. These interfaces reproduce field declaration order
 // byte-for-byte from crates/axiam-amqp/src/messages.rs (and
-// sdks/rust/src/amqp/messages.rs) so that `JSON.stringify` on a parsed
+// the Rust SDK's src/amqp/messages.rs) so that `JSON.stringify` on a parsed
 // object (after deleting `hmac_signature`) produces canonical JSON
 // byte-identical to what the server signs/verifies against — see
 // Pitfall 5: no schema-validator reconstruction step before HMAC

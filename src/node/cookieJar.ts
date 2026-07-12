@@ -8,7 +8,7 @@
 //
 // Cookie names/paths mirror the server's CSRF/cookie middleware exactly
 // (crates/axiam-api-rest/src/middleware/csrf.rs) and the already-shipped
-// Rust SDK (sdks/rust/src/token/manager.rs).
+// Rust SDK (the Rust SDK's src/token/manager.rs).
 
 import { CookieJar } from 'tough-cookie';
 import { wrapper } from 'axios-cookiejar-support';

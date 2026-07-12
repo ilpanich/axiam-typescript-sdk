@@ -33,7 +33,7 @@ export interface AxiamIdentity {
  * verified claims to the identity shape injected by both middleware
  * modules. Roles are derived from the `scope` claim (space-separated) —
  * AXIAM's access token carries no dedicated `roles` claim server-side
- * (mirrors sdks/rust/src/middleware/actix.rs).
+ * (mirrors the Rust SDK's src/middleware/actix.rs).
  *
  * Throws `AuthError` on any verification failure (missing/invalid/expired
  * token, or a malformed sub/tenant_id claim).

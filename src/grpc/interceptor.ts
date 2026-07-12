@@ -8,7 +8,7 @@
 // it NEVER triggers a refresh itself. UNAUTHENTICATED handling belongs to
 // the async call-wrapper (callWithRefresh.ts), never here.
 //
-// Mirrors sdks/rust/src/grpc/interceptor.rs exactly, adapted to grpc-js's
+// Mirrors the Rust SDK's src/grpc/interceptor.rs exactly, adapted to grpc-js's
 // structurally different (non-tower) interceptor API
 // (RESEARCH.md Area 3 / grpc/proposal L5-node-client-interceptors.md).
 

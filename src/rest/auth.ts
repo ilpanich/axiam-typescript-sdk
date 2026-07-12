@@ -1,6 +1,6 @@
 // login/verifyMfa/refresh/logout over REST (D-18, §1).
 //
-// Mirrors sdks/rust/src/rest/auth.rs's request/response shapes exactly
+// Mirrors the Rust SDK's src/rest/auth.rs's request/response shapes exactly
 // (mirror only, no server crate dependency). Tokens are delivered
 // exclusively via Set-Cookie — LoginResult deliberately carries no session
 // token field anywhere in the public API (T-17-07).

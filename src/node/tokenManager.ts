@@ -5,7 +5,7 @@
 // RESEARCH.md Area 3) and wrapped in Sensitive<T> immediately. A
 // synchronous, non-blocking `cachedAccessToken()` fast-path is provided for
 // the grpc-js interceptor's `start()`, which cannot await (Pitfall 3) —
-// mirrors sdks/rust/src/token/manager.rs::cached_access_token exactly.
+// mirrors the Rust SDK's src/token/manager.rs::cached_access_token exactly.
 
 import type { CookieJar } from 'tough-cookie';
 import { Sensitive } from '../core/index.js';

@@ -18,7 +18,7 @@
 // the three validation gates below are new.
 //
 // This is the TS port of the already-tested Rust `verify_and_dispatch`/
-// `consume` (sdks/rust/src/amqp/consumer.rs).
+// `consume` (the Rust SDK's src/amqp/consumer.rs).
 
 import amqp from 'amqplib';
 import type { Channel, ConsumeMessage } from 'amqplib';

@@ -1,7 +1,7 @@
 // AMQP HMAC-SHA256 sign/verify (CONTRACT.md §8, D-12).
 //
 // Mirror, never import. This module reproduces the server's algorithm in
-// crates/axiam-amqp/src/messages.rs:35-50 (and sdks/rust/src/amqp/hmac.rs)
+// crates/axiam-amqp/src/messages.rs:35-50 (and the Rust SDK's src/amqp/hmac.rs)
 // byte-for-byte using only Node's built-in `node:crypto` module, so the
 // SDK's HMAC output is wire-compatible with the AXIAM server for the same
 // key + canonical JSON payload bytes.

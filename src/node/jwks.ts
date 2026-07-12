@@ -3,7 +3,7 @@
 //
 // Endpoint: `{baseUrl}/oauth2/jwks` — organization-wide, NOT tenant-scoped,
 // serving exactly one EdDSA (Ed25519) key in the common case
-// (RESEARCH.md Area 3, mirrors sdks/rust/src/token/jwks.rs). `jose`'s
+// (RESEARCH.md Area 3, mirrors the Rust SDK's src/token/jwks.rs). `jose`'s
 // `createRemoteJWKSet` handles fetch + cache + refetch-on-unknown-kid
 // natively; we use its single-cooldown model rather than porting the Rust
 // SDK's two-timer (TTL + forced-refetch) design (RESEARCH.md Area 3 explicit

@@ -1,6 +1,6 @@
 // checkAccess/can/batchCheck over REST (D-08, FND-04, §1).
 //
-// Mirrors sdks/rust/src/rest/authz.rs and
+// Mirrors the Rust SDK's src/rest/authz.rs and
 // crates/axiam-api-rest/src/handlers/authz_check.rs exactly. tenant_id is
 // never sent in the body — the server derives it from the JWT (§5); the SDK
 // only sends X-Tenant-ID (already attached by session.ts's request
