@@ -1,0 +1,82 @@
+name: Docs Publish
+
+# Publishes the TypeDoc API reference for a released version to this repo's
+# GitHub Pages site.
+#
+# npm renders only the README — it does not host API reference docs — so the
+# reference is generated here on each vX.Y.Z tag and deployed to the ROOT of
+# the gh-pages branch (this repo owns its whole Pages site; in the monorepo
+# these docs lived under a shared /sdk/typescript/ subtree).
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+# gh-pages is a single branch: serialize deploys so two tags pushed together
+# cannot race each other's commit.
+concurrency:
+  group: docs-publish
+  cancel-in-progress: false
+
+jobs:
+  # A release tag must be cut from main — same gate as sdk-ci-typescript.yml.
+  verify-tag-on-main:
+    name: Verify tag is on main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Assert the tagged commit is an ancestor of origin/main
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/main; then
+            echo "::error::Tag ${GITHUB_REF_NAME} is not on origin/main — refusing to publish docs."
+            exit 1
+          fi
+          echo "OK: ${GITHUB_REF_NAME} is on origin/main."
+
+  docs-typescript:
+    name: TypeScript SDK docs (TypeDoc)
+    needs: verify-tag-on-main
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # peaceiris/actions-gh-pages commits to the gh-pages branch
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: '22'
+
+      # buf generate needs the buf CLI: the gRPC surface is generated from
+      # proto/ at build time, so TypeDoc cannot resolve those types without it.
+      - name: Install buf
+        uses: bufbuild/buf-action@fd21066df7214747548607aaa45548ba2b9bc1ff  # v1.4.0
+        with:
+          setup_only: true
+
+      - name: Build API docs
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run generate
+          # typedoc is a pinned devDependency (not `npx typedoc`, which would
+          # resolve a floating latest at release time).
+          npm run docs
+
+      - name: Deploy to GitHub Pages (site root)
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453  # v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_docs
+          # No destination_dir: this repo's docs own the Pages site root.
+          # keep_files is deliberately false so a removed page does not linger
+          # from a previous release — the root is fully owned by this job.
+          keep_files: false
+          commit_message: "docs: publish API docs for ${{ github.ref_name }}"

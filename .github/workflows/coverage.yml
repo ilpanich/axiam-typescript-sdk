@@ -1,0 +1,49 @@
+name: Coverage
+
+# Runs the vitest suite under the v8 coverage provider and reports the lcov
+# result to Coveralls. Separate from sdk-ci-typescript.yml on purpose: that
+# workflow is the release/publish gate and runs the suite without
+# instrumentation, so a Coveralls outage can never block a merge or a publish.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    name: Vitest coverage → Coveralls
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: '22'
+
+      # The gRPC tests import the ts-proto stubs, which are gitignored build
+      # products — without buf generate the suite cannot compile.
+      - name: Install buf
+        uses: bufbuild/buf-action@fd21066df7214747548607aaa45548ba2b9bc1ff  # v1.4.0
+        with:
+          setup_only: true
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate proto stubs (buf generate)
+        run: npm run generate
+
+      - name: Run tests with coverage
+        run: npm run coverage
+
+      - name: Upload coverage to Coveralls
+        uses: coverallsapp/github-action@648a8eb78e6d50909eff900e4ec85cab4524a45b  # v2.3.6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          file: coverage/lcov.info
+          format: lcov

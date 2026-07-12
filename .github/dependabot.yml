@@ -1,0 +1,22 @@
+# .github/dependabot.yml
+# Automated dependency updates — D-16 (CONTEXT.md), CI-03.
+# Mirrors the AXIAM monorepo's dependabot style: weekly on Monday, with minor
+# and patch bumps grouped into a single PR.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday

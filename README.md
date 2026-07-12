@@ -6,13 +6,14 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 - **npm package:** `axiam-sdk`
 - **Registry:** [npmjs.com/package/axiam-sdk](https://www.npmjs.com/package/axiam-sdk) _(reserved, not yet published)_
+- **Source:** [github.com/ilpanich/axiam-typescript-sdk](https://github.com/ilpanich/axiam-typescript-sdk)
 - **License:** Apache-2.0
 
 ## Contract conformance
 
 This SDK conforms to CONTRACT.md §1–§10.
 
-See [`../CONTRACT.md`](../CONTRACT.md) for the full cross-language behavioral contract.
+See [`CONTRACT.md`](./CONTRACT.md) for the full cross-language behavioral contract.
 
 ## Install
 
@@ -205,11 +206,25 @@ try {
 
 ## Release / versioning
 
-Tagged releases follow the monorepo convention `axiam-typescript-sdk/vX.Y.Z`. CI runs the full
+Tagged releases follow the plain `vX.Y.Z` convention (e.g. `v1.0.0`). CI runs the full
 gate suite (build, test, SC#1 bundle-and-grep, CJS-require smoke, token-leak, TLS-lint,
-`npm publish --dry-run`) on every pull request touching `sdks/typescript/**`, and publishes
-to npm with [provenance](https://docs.npmjs.com/generating-provenance-statements) only when
-a `axiam-typescript-sdk/vX.Y.Z` tag is pushed.
+`npm publish --dry-run`) on every pull request, and publishes to npm with
+[provenance](https://docs.npmjs.com/generating-provenance-statements) only when a `vX.Y.Z`
+tag is pushed from `main` and its version matches `package.json`. The same tag publishes
+the TypeDoc API reference to this repo's GitHub Pages site.
+
+## Building from source
+
+The gRPC stubs under `src/gen/` are generated from `proto/` by
+[buf](https://buf.build) and are deliberately not committed, so a source build needs the
+`buf` CLI on `PATH`:
+
+```bash
+npm ci
+npm run generate   # buf generate → src/gen (also runs automatically via prebuild)
+npm run build
+npm test
+```
 
 ## License
 
