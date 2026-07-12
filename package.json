@@ -77,8 +77,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/ilpanich/axiam",
-    "directory": "sdks/typescript"
+    "url": "https://github.com/ilpanich/axiam-typescript-sdk"
+  },
+  "homepage": "https://github.com/ilpanich/axiam-typescript-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/ilpanich/axiam-typescript-sdk/issues"
   },
   "keywords": [
     "axiam",
@@ -91,10 +94,11 @@
     "node": ">=18"
   },
   "scripts": {
-    "generate": "cd ../.. && buf generate --template buf.gen.yaml",
+    "generate": "buf generate --template buf.gen.yaml",
     "prebuild": "npm run generate",
     "build": "tsup",
     "test": "vitest",
+    "coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "bundle-grep": "node scripts/bundle-grep.mjs",
     "docs": "typedoc"
@@ -123,6 +127,7 @@
     "@types/amqplib": "^0.10.8",
     "@types/express": "^5.0.6",
     "@types/node": "^22.20.1",
+    "@vitest/coverage-v8": "^3.2.7",
     "esbuild": "^0.25.12",
     "express": "^5.2.1",
     "fastify": "^5.10.0",
