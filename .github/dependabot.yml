@@ -14,6 +14,17 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # typedoc (used by `npm run docs`) has no TypeScript 7-compatible release:
+      # its peerDependency caps at 6.0.x and it crashes at runtime under TS 7
+      # (the compiler API it reaches into was rewritten). A TS 7 major bump
+      # therefore breaks `npm ci` with an ERESOLVE peer conflict, which fails the
+      # Coverage and SDK-CI workflows before any test runs. Hold TypeScript on the
+      # major line typedoc supports; drop this ignore once typedoc ships TS 7.x
+      # support. Minor/patch TypeScript updates still flow via the minor-patch group.
+      - dependency-name: "typescript"
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: github-actions
     directory: /
