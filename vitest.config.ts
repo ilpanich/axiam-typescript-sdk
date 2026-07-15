@@ -16,6 +16,15 @@ export default defineConfig({
       // src/gen is ts-proto output, not hand-written code — measuring it would
       // dilute the ratio without saying anything about the SDK's own tests.
       exclude: ['src/gen/**'],
+      // Regression gate: fail `vitest run --coverage` if coverage drops below
+      // the floor. Set below the current level (lines ~95%, branches ~87%) so
+      // it never false-fails; ratchet upward as coverage rises.
+      thresholds: {
+        lines: 93,
+        statements: 92,
+        functions: 95,
+        branches: 84,
+      },
     },
   },
 });
