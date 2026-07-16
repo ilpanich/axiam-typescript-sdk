@@ -1,11 +1,42 @@
-// AXIAM SDK — middleware entry point (D-27, CONTRACT.md §10).
+// AXIAM SDK — middleware entry point (D-27, CONTRACT.md §10; declarative
+// authorization helpers, CONTRACT.md §11).
 //
-// Re-exports the Express and Fastify middleware plus the shared verify
-// core / cookie parser they're both built on.
+// Re-exports the Express and Fastify middleware/guards plus the shared
+// verify core / authz core / cookie parser they're all built on.
 
-export { axiamMiddleware, type AxiamRequest } from './express.js';
-export { axiamPlugin, type AxiamFastifyRequest } from './fastify.js';
+export {
+  axiamMiddleware,
+  requireAccess,
+  requireAuth,
+  requireRole,
+  type AxiamRequest,
+} from './express.js';
+export {
+  axiamPlugin,
+  requireAccessHook,
+  requireAuthHook,
+  requireRoleHook,
+  type AxiamFastifyRequest,
+  type PreHandlerHook,
+} from './fastify.js';
 export { authenticateRequest, type AxiamIdentity, type VerifiableSession } from './verifyCore.js';
+export {
+  assertAuthzClient,
+  evaluateAccess,
+  fromParam,
+  hasAnyRole,
+  resolveResourceId,
+  ResourceResolutionError,
+  type AuthzChecker,
+  type AuthzLogger,
+  type AuthzVerifiableSession,
+  type CheckOutcome,
+  type ErrorBody,
+  type RequireAccessOptions,
+  type ResourceParamRef,
+  type ResourceResolver,
+  type ResourceSpec,
+} from './authzCore.js';
 export {
   parseCookieHeader,
   extractToken,

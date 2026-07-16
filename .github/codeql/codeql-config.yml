@@ -1,0 +1,14 @@
+name: "AXIAM TypeScript SDK — CodeQL config"
+
+# CodeQL runs the default security query suite, minus a small set of queries
+# that do not apply to an SDK library (as opposed to a deployed application).
+#
+# js/missing-rate-limiting: rate limiting is the responsibility of the
+#   application that mounts these route guards, not of the SDK middleware or
+#   its example apps. The SDK deliberately does not impose a rate limiter on a
+#   consumer's routes (that would be a policy decision the SDK cannot own), so
+#   the "route handler performs authorization but is not rate-limited" finding
+#   is a false positive for this library and its illustrative examples.
+query-filters:
+  - exclude:
+      id: js/missing-rate-limiting

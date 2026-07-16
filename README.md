@@ -11,7 +11,7 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to CONTRACT.md §1–§10.
+This SDK conforms to CONTRACT.md §1–§11.
 
 See [`CONTRACT.md`](./CONTRACT.md) for the full cross-language behavioral contract.
 
@@ -33,7 +33,8 @@ never contains `@grpc/grpc-js` or `amqplib`):
 | `axiam-sdk` / `axiam-sdk/rest` | Browser + Node, REST-only  | `AxiamClient`: `login`/`verifyMfa`/`refresh`/`logout`, `can`/`batchCheck` over the FND-04 REST authz endpoint |
 | `axiam-sdk/grpc`        | Node only                   | Everything in `/rest` plus `AuthzGrpcClient.checkAccess`/`batchCheck` over gRPC, the Node persona (`createNodeSession`), and the local-JWKS verifier |
 | `axiam-sdk/amqp`        | Node only                   | `consume()` — HMAC-verified AMQP audit/authz event consumer (CONTRACT.md §8) |
-| `axiam-sdk/middleware`  | Node only                   | `axiamMiddleware` (Express) / `axiamPlugin` (Fastify) — shared local-JWKS verify core (CONTRACT.md §10) |
+| `axiam-sdk/middleware`  | Node only                   | `axiamMiddleware` (Express) / `axiamPlugin` (Fastify) — shared local-JWKS verify core (CONTRACT.md §10) — plus `requireAuth`/`requireAccess`/`requireRole` declarative route guards (CONTRACT.md §11) |
+| `axiam-sdk/nestjs`      | Node only, optional         | `@RequireAccess`/`@RequireAuth`/`@RequireRole` metadata decorators + `AxiamGuard` (CONTRACT.md §11, Tier 2) |
 
 **Browser code should only ever import from `axiam-sdk` or `axiam-sdk/rest`.** Importing
 `axiam-sdk/grpc`, `axiam-sdk/amqp`, or `axiam-sdk/middleware` pulls in Node-only
@@ -169,6 +170,111 @@ Both middleware integrations verify the session against a locally-cached JWKS (n
 `cookie-parser` / `@fastify/cookie` peer dependency required), inject the authenticated
 identity into the request context, and surface `AuthError` as HTTP 401 / `AuthzError` as
 HTTP 403 with a standardized JSON error body (CONTRACT.md §10).
+
+### Declarative authorization helpers (`axiam-sdk/middleware`)
+
+CONTRACT.md §11 adds a per-endpoint authorization layer on top of the §10 guard above:
+`requireAuth`, `requireAccess`, `requireRole` (Express) and their `*Hook` counterparts
+(Fastify). They never extract or verify a token themselves — they read the identity
+`axiamMiddleware`/`axiamPlugin` already injected (401 if absent) — and `requireAccess`
+additionally needs an authz-capable client on the session (`authzClient`, satisfied by
+`AxiamClient.checkAccess`):
+
+```typescript
+import { AxiamClient } from 'axiam-sdk/rest';
+import { createNodeSession } from 'axiam-sdk/grpc';
+import {
+  axiamMiddleware,
+  fromParam,
+  requireAccess,
+  requireRole,
+  type AuthzVerifiableSession,
+} from 'axiam-sdk/middleware';
+
+const session = createNodeSession({ baseUrl: 'https://iam.example.com', tenantSlug: 'acme' });
+const authzSession: AuthzVerifiableSession = {
+  ...session,
+  // Adopts the SAME session, so the cookie jar/refresh guard is shared with axiamMiddleware.
+  authzClient: new AxiamClient({ baseUrl: 'https://iam.example.com', tenantSlug: 'acme' }, session),
+};
+
+const app = express();
+app.use(axiamMiddleware(session));
+
+// action before resource (§1); resource is a literal, `fromParam('id')`, or a `(req) => string` resolver.
+app.get('/documents/:id', requireAccess(authzSession, 'read', fromParam('id')), (req, res) => {
+  res.json({ documentId: req.params.id });
+});
+
+// Local-only (no server round-trip) role check — NOT a substitute for requireAccess.
+app.get('/admin', requireRole(session, 'admin'), (_req, res) => res.json({ ok: true }));
+```
+
+The Fastify equivalents are `requireAuthHook`/`requireAccessHook`/`requireRoleHook`, each
+returning a plain `preHandler` function:
+
+```typescript
+import { requireAccessHook, fromParam } from 'axiam-sdk/middleware';
+
+app.get(
+  '/documents/:id',
+  { preHandler: requireAccessHook(authzSession, 'read', fromParam('id')) },
+  async (request) => ({ documentId: (request.params as { id: string }).id }),
+);
+```
+
+Error mapping (§11.2.5, same `{ error, message }` JSON shape as §10): 401
+`authentication_failed` (no authenticated identity on the request), 403
+`authorization_denied` (denied by policy), 400 `invalid_request` (the resource id
+couldn't be resolved — never a silent allow), 503 `authz_unavailable` on any transport
+failure while calling the authz endpoint (fail closed — a network error never allows).
+The check is always made for the *authenticated request's* user (`subjectId =
+axiamUser.userId`), never the SDK client's own service-account identity, and the decision
+is never cached.
+
+#### NestJS (`axiam-sdk/nestjs`, optional)
+
+An optional Tier 2 on top of the same `middleware/authzCore.ts` primitives: metadata
+decorators plus an `AxiamGuard` (`CanActivate`) that reads them via `Reflector`.
+`@nestjs/common`/`@nestjs/core` are optional peer dependencies, like `express`/`fastify`
+above. `AxiamGuard` never extracts or verifies a token itself — mount
+`axiamMiddleware`/`axiamPlugin` on the underlying HTTP adapter (Nest runs on top of
+Express or Fastify) so `request.axiamUser` is already set:
+
+```typescript
+import { APP_GUARD, Reflector } from '@nestjs/core';
+import { Controller, Get, Module, Param } from '@nestjs/common';
+import { AXIAM_SESSION, AxiamGuard, RequireAccess, RequireRole } from 'axiam-sdk/nestjs';
+
+@Controller('documents')
+class DocumentsController {
+  @RequireAccess('read', { param: 'id' })
+  @Get(':id')
+  getDocument(@Param('id') id: string) {
+    return { documentId: id };
+  }
+
+  @RequireRole('admin')
+  @Get()
+  listDocuments() {
+    return { message: 'admin-only listing' };
+  }
+}
+
+@Module({
+  controllers: [DocumentsController],
+  providers: [
+    { provide: AXIAM_SESSION, useValue: authzSession },
+    // AxiamGuard is a plain class with no Nest decorators of its own (this SDK's
+    // tsconfig does not enable experimentalDecorators) — wire it via a factory provider.
+    { provide: APP_GUARD, useFactory: (r: Reflector) => new AxiamGuard(r, authzSession), inject: [Reflector] },
+  ],
+})
+class AppModule {}
+```
+
+See `examples/nestjs-app.ts` for a complete, compiling example (including the
+`axiamMiddleware` wiring `AxiamGuard` depends on).
 
 More runnable examples (all compiling under `tsc --noEmit -p examples/tsconfig.json`) live
 in `examples/` at the package root.

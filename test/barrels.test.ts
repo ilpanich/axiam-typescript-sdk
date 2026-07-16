@@ -59,4 +59,20 @@ describe('barrel entry points', () => {
     expect(typeof mod.isCsrfValid).toBe('function');
     expect(mod.ACCESS_COOKIE_NAME).toBe('axiam_access');
   });
+
+  it('/middleware exposes the §11 declarative authorization helpers (Express + Fastify)', async () => {
+    const mod = await import('../src/middleware/index.js');
+    expect(typeof mod.requireAuth).toBe('function');
+    expect(typeof mod.requireAccess).toBe('function');
+    expect(typeof mod.requireRole).toBe('function');
+    expect(typeof mod.requireAuthHook).toBe('function');
+    expect(typeof mod.requireAccessHook).toBe('function');
+    expect(typeof mod.requireRoleHook).toBe('function');
+    expect(typeof mod.fromParam).toBe('function');
+    expect(typeof mod.assertAuthzClient).toBe('function');
+    expect(typeof mod.evaluateAccess).toBe('function');
+    expect(typeof mod.resolveResourceId).toBe('function');
+    expect(typeof mod.hasAnyRole).toBe('function');
+    expect(typeof mod.ResourceResolutionError).toBe('function');
+  });
 });
