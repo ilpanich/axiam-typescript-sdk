@@ -12,13 +12,31 @@
 
 import Fastify from 'fastify';
 import { createNodeSession } from 'axiam-sdk/grpc';
-import { axiamPlugin, type AxiamFastifyRequest } from 'axiam-sdk/middleware';
+import { AxiamClient } from 'axiam-sdk/rest';
+import {
+  axiamPlugin,
+  fromParam,
+  requireAccessHook,
+  requireRoleHook,
+  type AuthzVerifiableSession,
+  type AxiamFastifyRequest,
+} from 'axiam-sdk/middleware';
 
 const baseUrl = process.env.AXIAM_BASE_URL ?? 'https://localhost:8443';
 const tenantSlug = process.env.AXIAM_TENANT_SLUG ?? 'default';
 const listenAddr = process.env.AXIAM_LISTEN_ADDR ?? '127.0.0.1:8081';
 
 const session = createNodeSession({ baseUrl, tenantSlug });
+
+// Declarative authorization helpers (CONTRACT.md §11) additionally need an
+// authz-capable client on the session — `AxiamClient`'s session-injection
+// constructor adopts the SAME `NodeSession` built above, so
+// `requireAccessHook` and the base `axiamPlugin` share one cookie
+// jar/refresh guard for this app.
+const authzSession: AuthzVerifiableSession = {
+  ...session,
+  authzClient: new AxiamClient({ baseUrl, tenantSlug }, session),
+};
 
 const app = Fastify();
 
@@ -32,6 +50,24 @@ async function main(): Promise<void> {
       roles: axiamUser?.roles ?? [],
     };
   });
+
+  // `requireAccessHook` (CONTRACT.md §11) — the Fastify `preHandler`
+  // counterpart to Express's `requireAccess`; see src/middleware/express.ts
+  // for the full §11 semantics (401/403/400/503 mapping, subjectId
+  // propagation, no decision caching).
+  app.get(
+    '/documents/:id',
+    { preHandler: requireAccessHook(authzSession, 'read', fromParam('id')) },
+    async (request) => {
+      const { id } = request.params as { id: string };
+      return { documentId: id, message: 'access granted' };
+    },
+  );
+
+  // `requireRoleHook` (CONTRACT.md §11, MAY) — local, no server round-trip.
+  app.get('/admin', { preHandler: requireRoleHook(session, 'admin') }, async () => ({
+    message: 'admin-only route',
+  }));
 
   const [host, port] = listenAddr.split(':');
   await app.listen({ host, port: Number(port) });
