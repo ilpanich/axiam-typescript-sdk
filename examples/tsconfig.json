@@ -3,6 +3,14 @@
   "compilerOptions": {
     "strict": true,
     "noEmit": true,
+    // Scoped to examples/ ONLY (never the SDK's own src/**/*.ts, which
+    // deliberately omits these) — examples/nestjs-app.ts represents what a
+    // CONSUMING Nest application writes, and every real Nest app enables
+    // these two for its own `@Controller`/`@Get`/DI decorator syntax to
+    // work (Nest's decorator machinery is legacy/stage-2, not the stage-3
+    // decorators TypeScript 5 supports natively).
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
     // The SDK is resolved via source rather than dist/ here: `npm run build`
     // cannot complete end-to-end in environments without the `buf` CLI
     // (src/gen is never generated — see 17-01/17-03 notes), so these
@@ -14,7 +22,8 @@
       "axiam-sdk/rest": ["../src/rest/index.ts"],
       "axiam-sdk/grpc": ["../src/grpc/index.ts"],
       "axiam-sdk/amqp": ["../src/amqp/index.ts"],
-      "axiam-sdk/middleware": ["../src/middleware/index.ts"]
+      "axiam-sdk/middleware": ["../src/middleware/index.ts"],
+      "axiam-sdk/nestjs": ["../src/nestjs/index.ts"]
     }
   },
   "include": ["*.ts"],

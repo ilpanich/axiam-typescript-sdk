@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `authzClient` (any `{ checkAccess(...) }`, satisfied by `AxiamClient`) —
   `requireAccess`/`requireAccessHook` throw synchronously at construction if
   it is not configured.
+- Optional `axiam-sdk/nestjs` subpath (Tier 2 of CONTRACT.md §11):
+  `@RequireAuth()`, `@RequireAccess(action, resource, opts?)`,
+  `@RequireRole(...roles)` metadata decorators plus an `AxiamGuard`
+  (`CanActivate`) that enforces them via `Reflector`, reusing the same §11
+  primitives (resource resolution, error mapping, no decision caching) as
+  the Express/Fastify guards. `@nestjs/common`/`@nestjs/core` are optional
+  peer dependencies.
 
 ## [1.0.0-alpha] - 2026-07-15
 

@@ -8,6 +8,7 @@ export default defineConfig({
     'grpc/index': 'src/grpc/index.ts',
     'amqp/index': 'src/amqp/index.ts',
     'middleware/index': 'src/middleware/index.ts',
+    'nestjs/index': 'src/nestjs/index.ts',
   },
   format: ['esm', 'cjs'],
   // package.json's `type: module` makes tsup's default extension mapping
@@ -38,5 +39,7 @@ export default defineConfig({
     'axios-cookiejar-support',
     'express',
     'fastify',
+    '@nestjs/common',
+    '@nestjs/core',
   ],
 });
