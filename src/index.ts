@@ -4,7 +4,7 @@
 // identical to the `/rest` subpath. `axiam-sdk/grpc` and `axiam-sdk/amqp`
 // are Node-only opt-in subpaths that augment the same AxiamClient.
 //
-// See CONTRACT.md §1-§11 for the cross-language behavioral contract.
-// This SDK conforms to CONTRACT.md §1-§11.
+// See CONTRACT.md §1–§11 for the cross-language behavioral contract.
+// This SDK conforms to CONTRACT.md §1–§11.
 
 export * from './rest/index.js';
