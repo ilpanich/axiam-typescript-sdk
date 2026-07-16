@@ -1,5 +1,11 @@
 # axiam-sdk (TypeScript/JavaScript)
 
+[![CI](https://github.com/ilpanich/axiam-typescript-sdk/actions/workflows/sdk-ci-typescript.yml/badge.svg?branch=main)](https://github.com/ilpanich/axiam-typescript-sdk/actions/workflows/sdk-ci-typescript.yml)
+[![Coverage Status](https://coveralls.io/repos/github/ilpanich/axiam-typescript-sdk/badge.svg?branch=main)](https://coveralls.io/github/ilpanich/axiam-typescript-sdk?branch=main)
+[![npm](https://img.shields.io/npm/v/axiam-sdk.svg)](https://www.npmjs.com/package/axiam-sdk)
+[![Docs](https://img.shields.io/badge/docs-TypeDoc-blue.svg)](https://ilpanich.github.io/axiam-typescript-sdk/)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanich/axiam) — Access eXtended Identity and Authorization Management.
 
 ## Package identity
