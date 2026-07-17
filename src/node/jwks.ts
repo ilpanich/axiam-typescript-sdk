@@ -16,6 +16,7 @@
 // module-load time — this keeps `require('axiam-sdk/grpc')` (or any other
 // CJS entry that reaches this module) from throwing at import time.
 
+/** Verified claims carried by an AXIAM access token (the JWT payload {@link Verifier.verifyAccessToken} returns). */
 export interface AxiamClaims {
   /** Subject — user ID (UUID). */
   sub: string;
@@ -23,8 +24,11 @@ export interface AxiamClaims {
   tenant_id: string;
   /** Organization ID (UUID), if present. */
   org_id?: string;
+  /** Issuer — the AXIAM authorization server that minted the token. */
   iss: string;
+  /** Issued-at time (epoch seconds), if present. */
   iat?: number;
+  /** Expiry time (epoch seconds); the verifier rejects the token once it has passed. */
   exp: number;
   /** Unique token ID / session id — needed for logout(). */
   jti?: string;
@@ -34,12 +38,15 @@ export interface AxiamClaims {
   scope?: string;
 }
 
+/** Path (relative to the client base URL) of the org-wide JWKS endpoint. */
 export const JWKS_PATH = '/oauth2/jwks';
 
 const COOLDOWN_DURATION_MS = 60_000;
 const TIMEOUT_DURATION_MS = 5_000;
 
+/** Verifies an AXIAM access token's EdDSA signature against the org-wide remote JWKS. */
 export interface Verifier {
+  /** Verify `token` against the cached JWKS (EdDSA only) and return its claims; rejects any invalid/expired/wrong-algorithm token. */
   verifyAccessToken(token: string): Promise<AxiamClaims>;
 }
 

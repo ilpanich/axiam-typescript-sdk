@@ -35,6 +35,7 @@ export function parseCookieHeader(header: string | undefined): Record<string, st
   return cookies;
 }
 
+/** Name of the cookie carrying the AXIAM access token (`axiam_access`). */
 export const ACCESS_COOKIE_NAME = 'axiam_access';
 
 /**
@@ -47,8 +48,11 @@ export const ACCESS_COOKIE_NAME = 'axiam_access';
  */
 export type CredentialSource = 'cookie' | 'header';
 
+/** A bearer credential together with where it was read from. */
 export interface ExtractedCredential {
+  /** The raw bearer token value. */
   token: string;
+  /** Whether the token came from the `axiam_access` cookie or the `Authorization` header — load-bearing for the CSRF gate (§3). */
   source: CredentialSource;
 }
 
@@ -98,7 +102,9 @@ export function extractToken(
   return extractCredential(cookieHeader, authHeader)?.token;
 }
 
+/** Name of the double-submit CSRF cookie (`axiam_csrf`). */
 export const CSRF_COOKIE_NAME = 'axiam_csrf';
+/** Name of the CSRF request header (`x-csrf-token`) matched against {@link CSRF_COOKIE_NAME}. */
 export const CSRF_HEADER_NAME = 'x-csrf-token';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);

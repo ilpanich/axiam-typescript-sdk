@@ -22,6 +22,7 @@ import type { VerifiableSession } from './verifyCore.js';
  * itself, so this module pulls in no axios/grpc dependency.
  */
 export interface AuthzChecker {
+  /** Issue a single access check for the authenticated end user (`subjectId`, §11.2.2). Satisfied structurally by `AxiamClient.checkAccess`. */
   checkAccess(check: AccessCheck): Promise<AccessDecision>;
 }
 
@@ -34,12 +35,15 @@ export interface AuthzChecker {
  * not per-request, when it is absent.
  */
 export interface AuthzVerifiableSession extends VerifiableSession {
+  /** Authz transport required by `requireAccess`/`requireAccessHook` (validated by {@link assertAuthzClient}); unused by `requireAuth`/`requireRole`. */
   authzClient?: AuthzChecker;
 }
 
 /** Marker produced by {@link fromParam} — resolve the resource id from a named path/route parameter. */
 export interface ResourceParamRef {
+  /** Discriminant marking the path/route-parameter resolution strategy (§11.2.3.b). */
   readonly kind: 'param';
+  /** The path/route parameter name the resource id is read from. */
   readonly name: string;
 }
 
@@ -110,6 +114,7 @@ export interface RequireAccessOptions {
 
 /** Minimal logger seam for the §11.2.8 debug-only denial/error log (mirrors `amqp/consumer.ts`'s `ConsumeLogger`). */
 export interface AuthzLogger {
+  /** Emit a debug-only denial/error record (§11.2.8) — receives `action`/`resourceId` context, never the token. */
   debug(event: string, message: string, context?: Record<string, unknown>): void;
 }
 
@@ -130,7 +135,9 @@ export function assertAuthzClient(session: AuthzVerifiableSession): AuthzChecker
 
 /** Standardized JSON error body shape (§10/§11 — `{ error, message }`). */
 export interface ErrorBody {
+  /** Stable machine-readable error code (e.g. `authentication_failed`, `authorization_denied`). */
   error: string;
+  /** Human-readable explanation; never contains token material. */
   message: string;
 }
 
@@ -155,9 +162,22 @@ export function authzUnavailableBody(message: string): ErrorBody {
 
 /** The outcome of an `evaluateAccess` call — one arm per §11.2.5's error-mapping table (the 401/400 arms are handled by callers before this is ever invoked). */
 export type CheckOutcome =
-  | { kind: 'allowed' }
-  | { kind: 'denied'; message: string }
-  | { kind: 'unavailable'; message: string };
+  | {
+      /** The check passed — the caller proceeds to the handler. */
+      kind: 'allowed';
+    }
+  | {
+      /** The check was evaluated and denied (`allowed: false` or a server 403) → HTTP 403. */
+      kind: 'denied';
+      /** Denial message surfaced in the 403 body. */
+      message: string;
+    }
+  | {
+      /** The authz transport failed — fail-closed → HTTP 503, never an allow. */
+      kind: 'unavailable';
+      /** Failure message surfaced in the 503 body. */
+      message: string;
+    };
 
 /**
  * Call `checker.checkAccess` with `subjectId` set to the *authenticated

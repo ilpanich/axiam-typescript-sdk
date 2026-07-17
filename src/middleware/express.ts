@@ -23,7 +23,9 @@ import {
 import { CSRF_HEADER_NAME, extractCredential, isCsrfValid, isSafeMethod } from './cookieHeader.js';
 import { authenticateRequest, type AxiamIdentity, type VerifiableSession } from './verifyCore.js';
 
+/** An Express `Request` augmented with the AXIAM identity that `axiamMiddleware` injects after §10 verification. */
 export interface AxiamRequest extends Request {
+  /** The authenticated identity, present once `axiamMiddleware` (or `requireAuth`) has run; absent on an unauthenticated request. */
   axiamUser?: AxiamIdentity;
 }
 

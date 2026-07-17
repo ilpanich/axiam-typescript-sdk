@@ -17,14 +17,19 @@ import type { Verifier } from '../node/jwks.js';
  * DIFFERENT tenant in the same org.
  */
 export interface VerifiableSession {
+  /** Local JWKS verifier (D-11) — validates the token's EdDSA signature against the org-wide cached JWKS, offline on a cache hit. */
   jwksVerifier: Verifier;
+  /** The tenant this resource server is configured for (CR-03); a validly-signed token minted for a different tenant in the same org is rejected. */
   tenantHeaderValue: string;
 }
 
 /** Authenticated identity injected as req.axiamUser / request.axiamUser (§10). */
 export interface AxiamIdentity {
+  /** The authenticated end user's id (the token's `sub` claim). */
   userId: string;
+  /** The tenant the verified token was minted for (the token's `tenant_id` claim). */
   tenantId: string;
+  /** Roles derived from the token's space-separated `scope` claim (§10). */
   roles: string[];
 }
 

@@ -14,6 +14,7 @@ import { ACCESS_COOKIE, REFRESH_COOKIE, extractCookieValue } from './cookieJar.j
 /** Path the server scopes the `axiam_refresh` cookie to (mirrors csrf.rs). */
 const REFRESH_COOKIE_PATH = '/api/v1/auth/refresh';
 
+/** Tracks the access/refresh token pair for a Node session, kept in sync with the cookie jar after each REST call/refresh. */
 export class TokenManager {
   readonly #jar: CookieJar;
   readonly #baseUrl: string;
