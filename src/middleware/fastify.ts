@@ -21,7 +21,9 @@ import {
 import { CSRF_HEADER_NAME, extractCredential, isCsrfValid, isSafeMethod } from './cookieHeader.js';
 import { authenticateRequest, type AxiamIdentity, type VerifiableSession } from './verifyCore.js';
 
+/** A Fastify `FastifyRequest` augmented with the AXIAM identity that `axiamPlugin` injects after §10 verification. */
 export interface AxiamFastifyRequest extends FastifyRequest {
+  /** The authenticated identity, present once `axiamPlugin` (or `requireAuthHook`) has run; absent on an unauthenticated request. */
   axiamUser?: AxiamIdentity;
 }
 
@@ -105,8 +107,8 @@ function buildAuthHook(session: VerifiableSession): PreHandlerHook {
 }
 
 /**
- * `axiamPlugin(session)` — a `FastifyPluginAsync` registering
- * {@link buildAuthHook}'s `preHandler` hook globally (D-27, CONTRACT.md
+ * `axiamPlugin(session)` — a `FastifyPluginAsync` registering the shared
+ * auth `preHandler` hook globally (D-27, CONTRACT.md
  * §10). Marked with fastify's own `skip-override` plugin symbol (the same
  * mechanism the `fastify-plugin` package wraps) so the `preHandler` hook
  * applies to routes registered as siblings of this plugin rather than
@@ -129,8 +131,8 @@ export const axiamPlugin: (session: VerifiableSession) => FastifyPluginAsync = (
  * `preHandler` function usable per-route:
  * `fastify.get('/x', { preHandler: requireAuthHook(session) }, handler)`,
  * rather than registered globally via `fastify.register(axiamPlugin(session))`.
- * Pure sugar: it performs no verification of its own beyond what
- * {@link buildAuthHook} (shared with `axiamPlugin`) already does.
+ * Pure sugar: it performs no verification of its own beyond what the shared
+ * auth `preHandler` hook (also used by `axiamPlugin`) already does.
  */
 export function requireAuthHook(session: VerifiableSession): PreHandlerHook {
   return buildAuthHook(session);

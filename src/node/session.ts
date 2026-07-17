@@ -21,8 +21,11 @@ import { CSRF_COOKIE, createJar, extractCookieValue, wrapAxios } from './cookieJ
 import { TokenManager } from './tokenManager.js';
 import { createVerifier, type Verifier } from './jwks.js';
 
+/** Node-only {@link SharedSession} adding a {@link TokenManager} and a JWKS {@link Verifier} for local (offline) access-token verification. */
 export class NodeSession extends SharedSession {
+  /** Manages the access/refresh token pair backing this session. */
   readonly tokenManager: TokenManager;
+  /** Local JWKS verifier for validating access tokens without a server round-trip. */
   readonly jwksVerifier: Verifier;
   readonly #jar: CookieJar;
 

@@ -20,6 +20,11 @@ export {
   type PreHandlerHook,
 } from './fastify.js';
 export { authenticateRequest, type AxiamIdentity, type VerifiableSession } from './verifyCore.js';
+// Re-exported so the middleware entry point's own generated docs can resolve
+// `VerifiableSession.jwksVerifier`'s `Verifier` type (and the `AxiamClaims` it
+// returns) without a dangling cross-module link (`node/jwks.ts` is not itself
+// a TypeDoc entry point) — single source of truth stays node/jwks.ts.
+export type { Verifier, AxiamClaims } from '../node/jwks.js';
 export {
   assertAuthzClient,
   evaluateAccess,
