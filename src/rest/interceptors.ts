@@ -73,7 +73,7 @@ export function installRefreshInterceptor(axiosInstance: AxiosInstance, session:
 
         try {
           await session.refreshGuard(async () => {
-            await session.axios.post('/api/v1/auth/refresh', {});
+            await session.axios.post('/api/v1/auth/refresh', session.buildRefreshBody());
           });
           return axiosInstance(originalRequest);
         } catch (refreshError) {
