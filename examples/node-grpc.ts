@@ -15,9 +15,12 @@ import { AuthzGrpcClient, createNodeSession } from 'axiam-sdk/grpc';
 
 const baseUrl = process.env.AXIAM_BASE_URL ?? 'https://localhost:8443';
 const tenantSlug = process.env.AXIAM_TENANT_SLUG ?? 'default';
+// login/refresh require an organization context in addition to the tenant — a
+// tenant slug is only unique within an organization (CONTRACT.md §5.1).
+const orgSlug = process.env.AXIAM_ORG_SLUG ?? 'acme';
 
 async function main(): Promise<void> {
-  const session = createNodeSession({ baseUrl, tenantSlug });
+  const session = createNodeSession({ baseUrl, tenantSlug, orgSlug });
 
   // A real caller authenticates first (e.g. session.axios.post('/api/v1/auth/login', ...))
   // so the cookie jar carries a valid axiam_access/axiam_refresh pair before
