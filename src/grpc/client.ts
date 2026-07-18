@@ -17,7 +17,8 @@
 // buf-enabled CI run (RESEARCH.md D-20; environment note in this plan).
 
 import * as grpc from '@grpc/grpc-js';
-import type { AccessDecision } from '../core/index.js';
+import type { AccessDecision, ClientIdentity } from '../core/index.js';
+import { resolveClientIdentity } from '../core/index.js';
 import type { NodeSession } from '../node/session.js';
 import { authInterceptor } from './interceptor.js';
 import { callWithRefresh } from './callWithRefresh.js';
@@ -141,11 +142,17 @@ function promisifyUnary<TReq, TResp>(
  * plaintext channel must opt in explicitly with `allowInsecure: true`, which
  * emits a `console.warn`. As a convenience the opt-in is required for ANY host
  * (including loopback) — there is no silent path to an insecure channel.
+ *
+ * When a §6.1 mTLS client identity is configured it is applied to the secure
+ * channel via `createSsl(rootCerts, privateKey, certChain)` — the SAME strict
+ * verification as the default `createSsl()`, just additionally presenting a
+ * client certificate. The identity never affects the plaintext-refusal path.
  */
 function buildCredentials(
   baseUrl: string,
   customCa: string | undefined,
   allowInsecure: boolean,
+  identity: ClientIdentity | undefined,
 ): grpc.ChannelCredentials {
   const isSecure = baseUrl.startsWith('https://') || baseUrl.startsWith('grpcs://');
   if (!isSecure) {
@@ -166,8 +173,19 @@ function buildCredentials(
     );
     return grpc.ChannelCredentials.createInsecure();
   }
+  const rootCerts = customCa ? Buffer.from(customCa, 'utf8') : null;
+  if (identity) {
+    // mTLS (§6.1): present the client cert+key. `rootCerts ?? null` keeps the
+    // platform trust store (null = default roots) when no customCa is given;
+    // strict server verification is unchanged.
+    return grpc.ChannelCredentials.createSsl(
+      rootCerts,
+      Buffer.from(identity.key.expose(), 'utf8'),
+      Buffer.from(identity.cert, 'utf8'),
+    );
+  }
   if (customCa) {
-    return grpc.ChannelCredentials.createSsl(Buffer.from(customCa, 'utf8'));
+    return grpc.ChannelCredentials.createSsl(rootCerts);
   }
   // Default: verify against the platform's native trust store.
   return grpc.ChannelCredentials.createSsl();
@@ -249,11 +267,27 @@ export class AuthzGrpcClient {
 
   constructor(
     session: NodeSession,
-    options: { baseUrl: string; customCa?: string; allowInsecure?: boolean },
+    options: {
+      baseUrl: string;
+      customCa?: string;
+      allowInsecure?: boolean;
+      /** PEM client-certificate chain for mutual TLS (§6.1); pair with `clientKey`. */
+      clientCert?: string;
+      /** PEM private key for mutual TLS (§6.1); pair with `clientCert`. Secret (§7). */
+      clientKey?: string;
+    },
     clientFactory: AuthorizationServiceClientFactory = buildAuthorizationServiceClient,
   ) {
     this.#session = session;
-    const credentials = buildCredentials(options.baseUrl, options.customCa, options.allowInsecure ?? false);
+    // Validate + resolve the §6.1 identity (throws on one-of/bad-PEM, §6.1) and
+    // apply it to the gRPC channel — the SAME identity the REST transport uses.
+    const identity = resolveClientIdentity(options);
+    const credentials = buildCredentials(
+      options.baseUrl,
+      options.customCa,
+      options.allowInsecure ?? false,
+      identity,
+    );
     this.#inner = clientFactory(options.baseUrl, credentials, [authInterceptor(session)]);
   }
 

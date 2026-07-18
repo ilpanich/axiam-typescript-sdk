@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Client-certificate / mutual-TLS (mTLS) support (CONTRACT.md §6.1): new optional
+  `clientCert` / `clientKey` PEM options on `AxiamClientOptions` (and the
+  `AuthzGrpcClient` constructor options). When configured, the client identity is
+  presented on **both** the REST transport (Node `https.Agent` `{ cert, key }`) and the
+  gRPC channel (`createSsl(rootCerts, privateKey, certChain)`) of the same client.
+  Strict server verification is never relaxed — `rejectUnauthorized` stays at its secure
+  default and the client-cert path is kept separate from server-CA trust. The two options
+  are all-or-nothing and PEM-validated at construction (throwing on a one-of or non-PEM
+  value); the private key is held behind `Sensitive<T>` and never logged or serialized
+  (§7). Node-only: browsers validate the PEM shape then ignore it, as with `customCa`.
+
 ## [1.0.0-alpha2] - 2026-07-16
 
 ### Added
