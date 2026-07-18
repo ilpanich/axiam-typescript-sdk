@@ -20,14 +20,14 @@ which throws synchronously at guard-construction time (route-setup time),
 not per-request, when it is absent.</p>
 </div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">AuthzVerifiableSession</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#authzclient">authzClient</a><span class="tsd-signature-symbol">?:</span> <a href="middleware.AuthzChecker.html" class="tsd-signature-type tsd-kind-interface">AuthzChecker</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#jwksverifier">jwksVerifier</a><span class="tsd-signature-symbol">:</span> <a href="middleware.Verifier.html" class="tsd-signature-type tsd-kind-interface">Verifier</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#tenantheadervalue">tenantHeaderValue</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div>
-<section class="tsd-panel tsd-hierarchy" data-refl="702">
+<section class="tsd-panel tsd-hierarchy" data-refl="704">
 <h4>Hierarchy (<a href="../hierarchy.html#middleware.AuthzVerifiableSession">View Summary</a>)</h4>
 <ul class="tsd-hierarchy">
 <li class="tsd-hierarchy-item"><a href="middleware.VerifiableSession.html" class="tsd-signature-type tsd-kind-interface">VerifiableSession</a>
 <ul class="tsd-hierarchy">
 <li class="tsd-hierarchy-item"><span class="tsd-hierarchy-target">AuthzVerifiableSession</span></li></ul></li></ul></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b271364f3aaee3927b374220c84a1dc863634269/src/middleware/authzCore.ts#L37">src/middleware/authzCore.ts:37</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/67fb496b26678db4190e6f5828ba9aa46d3f6f24/src/middleware/authzCore.ts#L37">src/middleware/authzCore.ts:37</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -48,7 +48,7 @@ not per-request, when it is absent.</p>
 <div class="tsd-comment tsd-typography"><p>Authz transport required by <code>requireAccess</code>/<code>requireAccessHook</code> (validated by <a href="../functions/middleware.assertAuthzClient.html" class="tsd-kind-function">assertAuthzClient</a>); unused by <code>requireAuth</code>/<code>requireRole</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b271364f3aaee3927b374220c84a1dc863634269/src/middleware/authzCore.ts#L39">src/middleware/authzCore.ts:39</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/67fb496b26678db4190e6f5828ba9aa46d3f6f24/src/middleware/authzCore.ts#L39">src/middleware/authzCore.ts:39</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="jwksverifier"><span>jwks<wbr/>Verifier</span><a href="#jwksverifier" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">jwksVerifier</span><span class="tsd-signature-symbol">:</span> <a href="middleware.Verifier.html" class="tsd-signature-type tsd-kind-interface">Verifier</a></div>
@@ -56,7 +56,7 @@ not per-request, when it is absent.</p>
 </div><aside class="tsd-sources">
 <p>Inherited from <a href="middleware.VerifiableSession.html">VerifiableSession</a>.<a href="middleware.VerifiableSession.html#jwksverifier">jwksVerifier</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b271364f3aaee3927b374220c84a1dc863634269/src/middleware/verifyCore.ts#L21">src/middleware/verifyCore.ts:21</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/67fb496b26678db4190e6f5828ba9aa46d3f6f24/src/middleware/verifyCore.ts#L21">src/middleware/verifyCore.ts:21</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="tenantheadervalue"><span>tenant<wbr/>Header<wbr/>Value</span><a href="#tenantheadervalue" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">tenantHeaderValue</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
@@ -64,7 +64,7 @@ not per-request, when it is absent.</p>
 </div><aside class="tsd-sources">
 <p>Inherited from <a href="middleware.VerifiableSession.html">VerifiableSession</a>.<a href="middleware.VerifiableSession.html#tenantheadervalue">tenantHeaderValue</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b271364f3aaee3927b374220c84a1dc863634269/src/middleware/verifyCore.ts#L23">src/middleware/verifyCore.ts:23</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/67fb496b26678db4190e6f5828ba9aa46d3f6f24/src/middleware/verifyCore.ts#L23">src/middleware/verifyCore.ts:23</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
