@@ -9,10 +9,16 @@
 // One login() drives all transports for a given session.
 
 import axios, { type AxiosInstance } from 'axios';
-import type { AxiamClientOptions, RefreshGuard } from '../core/index.js';
-import { createRefreshGuard, DEFAULT_CONNECT_TIMEOUT_MS, DEFAULT_REQUEST_TIMEOUT_MS } from '../core/index.js';
+import type { AxiamClientOptions, ClientIdentity, RefreshGuard } from '../core/index.js';
+import {
+  CERT_PEM_MARKER,
+  createRefreshGuard,
+  DEFAULT_CONNECT_TIMEOUT_MS,
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  resolveClientIdentity,
+} from '../core/index.js';
 
-const PEM_MARKER = '-----BEGIN CERTIFICATE-----';
+const PEM_MARKER = CERT_PEM_MARKER;
 
 /**
  * The single session object every AXIAM transport (REST here, gRPC/AMQP in
@@ -99,29 +105,46 @@ export function resolveTenantHeaderValue(options: AxiamClientOptions): string {
 }
 
 /**
- * Build the Node-only `https.Agent` for a customCa PEM. Guarded by
- * `typeof process !== 'undefined'` as a CAPABILITY guard (Node has
- * node:https available), NOT a persona-sniffing branch — browsers ignore
- * customCa entirely since the platform manages TLS verification itself.
+ * Build the Node-only `https.Agent` carrying the customCa server-trust PEM
+ * (§6) and/or the mTLS client identity (§6.1). Guarded by
+ * `typeof process !== 'undefined'` as a CAPABILITY guard (Node has node:https
+ * available), NOT a persona-sniffing branch — browsers ignore both customCa
+ * and the client certificate entirely since the platform manages TLS itself.
+ *
+ * The client cert/key (§6.1) is an ADDITIVE client credential: it is passed
+ * as `{ cert, key }` alongside `{ ca }` and NEVER touches `rejectUnauthorized`
+ * — strict server verification stays at its secure default. The private key is
+ * exposed from its {@link ClientIdentity} `Sensitive` wrapper only here, at the
+ * point of handing it to the TLS stack, and is not retained anywhere else.
  */
-function maybeBuildHttpsAgent(customCa: string | undefined): unknown {
+function maybeBuildHttpsAgent(
+  customCa: string | undefined,
+  identity: ClientIdentity | undefined,
+): unknown {
   if (!customCa) {
-    return undefined;
-  }
-  if (!customCa.includes(PEM_MARKER)) {
+    // Still short-circuit only when there is nothing to configure at all.
+    if (!identity) {
+      return undefined;
+    }
+  } else if (!customCa.includes(PEM_MARKER)) {
     throw new Error(
       'customCa must be a PEM-encoded certificate (expected to contain "-----BEGIN CERTIFICATE-----") (CONTRACT.md §6).',
     );
   }
   if (typeof process === 'undefined') {
-    // Browser: platform manages TLS; customCa has no effect there.
+    // Browser: platform manages TLS; customCa and the client cert have no
+    // effect there (a browser cannot present a client certificate from JS).
     return undefined;
   }
   // Node capability guard — require lazily so this branch never executes
   // (and never needs to resolve) in a browser bundle.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const https = require('node:https') as typeof import('node:https');
-  return new https.Agent({ ca: customCa });
+  return new https.Agent({
+    ...(customCa ? { ca: customCa } : {}),
+    // rejectUnauthorized is intentionally left at its secure default (true).
+    ...(identity ? { cert: identity.cert, key: identity.key.expose() } : {}),
+  });
 }
 
 /** Build the axios instance + SharedSession for an AxiamClient (D-13/D-25). */
@@ -137,7 +160,12 @@ export function createSession(options: AxiamClientOptions): SharedSession {
     );
   }
 
-  const httpsAgent = maybeBuildHttpsAgent(options.customCa);
+  // The mTLS client identity (§6.1) is likewise validated on every persona so
+  // a one-of/bad-PEM misconfiguration throws identically in browser and Node,
+  // even though only Node presents the certificate.
+  const clientIdentity = resolveClientIdentity(options);
+
+  const httpsAgent = maybeBuildHttpsAgent(options.customCa, clientIdentity);
 
   const axiosInstance = axios.create({
     baseURL: options.baseUrl,

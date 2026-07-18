@@ -17,7 +17,7 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to CONTRACT.md §1–§11.
+This SDK conforms to CONTRACT.md §1–§11 (including §6.1 mTLS client certificates).
 
 See [`CONTRACT.md`](./CONTRACT.md) for the full cross-language behavioral contract.
 
@@ -62,6 +62,34 @@ const client = new AxiamClient({
   // customCa: pemString,
 });
 ```
+
+### mTLS / client certificates (Node only)
+
+For IoT devices and service accounts authenticated by **mutual TLS** (CONTRACT.md §6.1),
+pass a PEM client-certificate chain and its PEM private key. The identity is presented on
+**both** the REST and gRPC transports of the same client. Presenting a client certificate
+**never** relaxes server verification — strict TLS stays on.
+
+```typescript
+import { readFileSync } from 'node:fs';
+import { AxiamClient } from 'axiam-sdk';
+
+const client = new AxiamClient({
+  baseUrl: 'https://iam.example.com',
+  tenantSlug: 'acme',
+  clientCert: readFileSync('device.crt', 'utf8'), // PEM certificate chain
+  clientKey: readFileSync('device.key', 'utf8'),  // PEM private key (PKCS#8 or PKCS#1)
+  // customCa: readFileSync('ca.crt', 'utf8'),     // optional server-trust CA (§6)
+});
+```
+
+- `clientCert` and `clientKey` are **all-or-nothing** — providing exactly one throws at
+  construction, and each is validated to be PEM-shaped (as `customCa` is).
+- The private key is secret material: it is passed straight to the Node TLS stack and is
+  never retained on a public property, logged, or serialized (CONTRACT.md §7).
+- **Node only.** Browsers cannot present a client certificate from JavaScript, so the
+  browser build validates the PEM shape then ignores `clientCert`/`clientKey` — exactly as
+  it already ignores `customCa`.
 
 ## Usage per persona
 
@@ -311,8 +339,10 @@ try {
 - Token-carrying values are wrapped in `Sensitive<T>` — `toString()`/`toJSON()`/
   `util.inspect` all redact to `[SENSITIVE]`; the raw value is only reachable via an
   explicit accessor (CONTRACT.md §7).
-- Strict TLS verification is always on; the only escape hatch is the constructor's
-  `customCa` option for self-signed development environments (CONTRACT.md §6).
+- Strict TLS verification is always on; the only server-trust escape hatch is the
+  constructor's `customCa` option for self-signed development environments (CONTRACT.md §6).
+- Optional mutual TLS (mTLS): a PEM `clientCert`/`clientKey` client identity (Node only) is
+  presented on both REST and gRPC without ever relaxing server verification (CONTRACT.md §6.1).
 - AMQP messages are HMAC-SHA256 verified before your handler ever sees them; verification
   failures are nacked without requeue (CONTRACT.md §8).
 
