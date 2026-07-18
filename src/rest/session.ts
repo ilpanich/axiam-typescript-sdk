@@ -32,6 +32,28 @@ export class SharedSession {
   readonly baseUrl: string;
   /** The resolved tenant identifier (`tenantSlug` or `tenantId`) injected as the `X-Tenant-ID` header on every same-origin request (§5.2). */
   readonly tenantHeaderValue: string;
+  /** Configured tenant UUID (`AxiamClientOptions.tenantId`), if the client was built with the UUID form. */
+  readonly tenantId: string | undefined;
+  /** Configured tenant slug (`AxiamClientOptions.tenantSlug`), if the client was built with the slug form. */
+  readonly tenantSlug: string | undefined;
+  /** Configured organization UUID (`AxiamClientOptions.orgId`), if supplied (§5). */
+  readonly orgId: string | undefined;
+  /** Configured organization slug (`AxiamClientOptions.orgSlug`), if supplied (§5). */
+  readonly orgSlug: string | undefined;
+  /**
+   * Resolved tenant UUID used to build the `refresh` body (`RefreshRequest`
+   * requires the UUID form, not a slug). Seeded from `orgId`/`tenantId` config
+   * when the UUID was supplied, then updated from the access-token `tenant_id`
+   * claim after each successful login/refresh (Node persona only — the browser
+   * cannot read the httpOnly access-token cookie).
+   */
+  resolvedTenantId: string | undefined;
+  /**
+   * Resolved organization UUID used to build the `refresh` body. Seeded from
+   * `orgId` config, then updated from the access-token `org_id` claim after a
+   * successful login (Node persona). Mirrors the Rust SDK's `resolved_org_id`.
+   */
+  resolvedOrgId: string | undefined;
   /** Mutable CSRF token store — populated by the request/response interceptors (D-05). */
   csrfToken: string | undefined;
   /** Set true once a successful login/verifyMfa has completed. */
@@ -52,7 +74,60 @@ export class SharedSession {
     this.axios = axiosInstance;
     this.baseUrl = options.baseUrl;
     this.tenantHeaderValue = tenantHeaderValue;
+    this.tenantId = options.tenantId;
+    this.tenantSlug = options.tenantSlug;
+    this.orgId = options.orgId;
+    this.orgSlug = options.orgSlug;
+    // Seed the resolved UUIDs from any UUID-form config so the browser persona
+    // (which cannot decode the httpOnly access token) can still build a valid
+    // refresh body. The Node persona later overwrites these from the
+    // access-token claims (NodeSession#resolveIdentifiersFromToken).
+    this.resolvedTenantId = options.tenantId;
+    this.resolvedOrgId = options.orgId;
     this.refreshGuard = createRefreshGuard();
+  }
+
+  /**
+   * Build the `POST /api/v1/auth/refresh` request body (§1). The server's
+   * `RefreshRequest` requires both `tenant_id` and `org_id` as UUIDs, so this
+   * emits the resolved UUIDs — from the access-token claims after login, or
+   * from UUID-form construction options as a fallback. Fields that could not
+   * be resolved are omitted (the server then answers with a clear 400), rather
+   * than sending a slug where a UUID is required.
+   */
+  buildRefreshBody(): Record<string, string> {
+    const body: Record<string, string> = {};
+    if (this.resolvedTenantId) {
+      body.tenant_id = this.resolvedTenantId;
+    }
+    if (this.resolvedOrgId) {
+      body.org_id = this.resolvedOrgId;
+    }
+    return body;
+  }
+
+  /**
+   * Build the `POST /api/v1/auth/login` request body (§1/§5). Carries the
+   * configured tenant and organization identifiers (UUID or slug form) in
+   * addition to the credentials — the server resolves the workspace from the
+   * body, not the `X-Tenant-ID` header, and rejects a login that omits org
+   * context. Undefined identifiers are omitted.
+   */
+  buildLoginBody(email: string, password: string): Record<string, string> {
+    const body: Record<string, string> = { username_or_email: email, password };
+    if (this.tenantId) {
+      body.tenant_id = this.tenantId;
+    }
+    if (this.tenantSlug) {
+      body.tenant_slug = this.tenantSlug;
+    }
+    if (this.orgId) {
+      body.org_id = this.orgId;
+    }
+    if (this.orgSlug) {
+      body.org_slug = this.orgSlug;
+    }
+    return body;
   }
 
   /**

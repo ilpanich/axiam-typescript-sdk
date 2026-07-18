@@ -19,11 +19,6 @@ const MFA_VERIFY_PATH = '/api/v1/auth/mfa/verify';
 const REFRESH_PATH = '/api/v1/auth/refresh';
 const LOGOUT_PATH = '/api/v1/auth/logout';
 
-interface LoginRequestBody {
-  username_or_email: string;
-  password: string;
-}
-
 interface MfaVerifyRequestBody {
   challenge_token: string;
   totp_code: string;
@@ -61,7 +56,9 @@ function extractErrorMessage(err: unknown): string {
  * mfa_required branch (mfaToken sourced from the wire challenge_token).
  */
 export async function login(client: AxiamClient, email: string, password: string): Promise<LoginResult> {
-  const body: LoginRequestBody = { username_or_email: email, password };
+  // The server resolves the workspace from the login body (org + tenant), not
+  // the X-Tenant-ID header, so tenant/org context must travel here (§5).
+  const body = client.session.buildLoginBody(email, password);
 
   try {
     // axios treats any 2xx (including 202 MFA-required) as a resolved
@@ -126,7 +123,7 @@ export async function verifyMfa(client: AxiamClient, mfaToken: string, code: str
  */
 export async function refresh(client: AxiamClient): Promise<void> {
   try {
-    await client.session.axios.post<RefreshSuccessResponseWire>(REFRESH_PATH, {});
+    await client.session.axios.post<RefreshSuccessResponseWire>(REFRESH_PATH, client.session.buildRefreshBody());
   } catch (err) {
     const status = extractAxiosStatus(err);
     if (status !== undefined) {

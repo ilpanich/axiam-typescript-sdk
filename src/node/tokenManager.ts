@@ -74,8 +74,51 @@ export class TokenManager {
     this.#tenantId = tenantId;
   }
 
+  /**
+   * Best-effort decode of the `tenant_id`/`org_id` claims out of the cached
+   * access token, WITHOUT signature verification. Used only to populate the
+   * `refresh` request body (`RefreshRequest` requires both UUIDs) — never as a
+   * trust decision: the actual credential is the httpOnly `axiam_access` cookie
+   * the server verifies, and the server re-derives the authoritative `org_id`
+   * from the tenant on refresh (see crates/axiam-api-rest handlers/auth.rs),
+   * so echoing these values back carries no security weight. A malformed or
+   * absent token yields an empty result (the caller then keeps whatever UUIDs
+   * were resolved from construction options).
+   */
+  claimsFromCachedToken(): { tenantId?: string; orgId?: string } {
+    const token = this.#cachedAccess?.expose();
+    if (!token) {
+      return {};
+    }
+    const claims = decodeJwtPayload(token);
+    return {
+      tenantId: typeof claims.tenant_id === 'string' ? claims.tenant_id : undefined,
+      orgId: typeof claims.org_id === 'string' ? claims.org_id : undefined,
+    };
+  }
+
   /** Clear all cached token state (used by logout()). */
   clear(): void {
     this.#cachedAccess = null;
+  }
+}
+
+/**
+ * Decode a JWT's payload segment (the middle base64url part) into an object,
+ * without verifying its signature. Returns `{}` for anything that is not a
+ * well-formed three-segment JWT with a JSON object payload. This is a routing
+ * helper, not a verifier — see {@link TokenManager.claimsFromCachedToken}.
+ */
+function decodeJwtPayload(token: string): Record<string, unknown> {
+  try {
+    const segments = token.split('.');
+    if (segments.length !== 3) {
+      return {};
+    }
+    const json = Buffer.from(segments[1], 'base64url').toString('utf8');
+    const parsed: unknown = JSON.parse(json);
+    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
   }
 }

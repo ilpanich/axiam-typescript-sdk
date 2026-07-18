@@ -31,6 +31,24 @@ export interface AxiamClientOptions {
   tenantSlug?: string;
   /** Tenant UUID. At least one of tenantSlug/tenantId is required at runtime. */
   tenantId?: string;
+  /**
+   * Human-readable organization identifier (CONTRACT.md §5). Optional at
+   * construction, but the server REQUIRES an org context on login — a tenant
+   * slug is only unique *within* an organization — so a client that omits both
+   * `orgSlug` and `orgId` will fail login with a 400/401. Forwarded as
+   * `org_slug` in the login body. Mutually exclusive with {@link orgId}
+   * (if both are given, `orgId` wins, mirroring how `tenantSlug`/`tenantId`
+   * resolve).
+   */
+  orgSlug?: string;
+  /**
+   * Organization UUID (CONTRACT.md §5). Optional at construction (see
+   * {@link orgSlug}). When supplied it is forwarded as `org_id` on login and
+   * used to build the `refresh` body; otherwise the resolved organization UUID
+   * is decoded from the authenticated session's access-token `org_id` claim
+   * after the first successful login. Mutually exclusive with {@link orgSlug}.
+   */
+  orgId?: string;
   /** PEM-encoded custom CA certificate, for self-signed/dev environments (§6). */
   customCa?: string;
   /**

@@ -52,8 +52,11 @@ export class NodeSession extends SharedSession {
    * remaining fully independent from any other session's guard.
    */
   doRefresh = async (): Promise<void> => {
-    await this.axios.post('/api/v1/auth/refresh', {});
+    await this.axios.post('/api/v1/auth/refresh', this.buildRefreshBody());
     await this.tokenManager.syncFromJar();
+    // A rotated access token may carry a new tenant_id/org_id — keep the
+    // resolved refresh identifiers current for the next refresh.
+    this.#resolveIdentifiersFromToken();
     // The refresh response may rotate the axiam_csrf cookie — resync
     // session.csrfToken from the jar so the next state-changing request
     // still forwards a valid X-CSRF-Token (CR-01).
@@ -69,8 +72,29 @@ export class NodeSession extends SharedSession {
    */
   onAuthenticated = async (): Promise<void> => {
     await this.tokenManager.syncFromJar();
+    // D-14: resolve the authoritative tenant_id/org_id UUIDs from the freshly
+    // issued access token so refresh() can supply them (RefreshRequest needs
+    // the UUID form, and the client may have been constructed with slugs).
+    this.#resolveIdentifiersFromToken();
     await this.#syncCsrfFromJar();
   };
+
+  /**
+   * Populate `resolvedTenantId`/`resolvedOrgId` from the cached access token's
+   * claims when present, leaving any UUID resolved from construction options in
+   * place otherwise. Best-effort and unverified (see
+   * TokenManager.claimsFromCachedToken) — used purely to build the refresh body.
+   */
+  #resolveIdentifiersFromToken(): void {
+    const { tenantId, orgId } = this.tokenManager.claimsFromCachedToken();
+    if (tenantId) {
+      this.resolvedTenantId = tenantId;
+      this.tokenManager.setTenantId(tenantId);
+    }
+    if (orgId) {
+      this.resolvedOrgId = orgId;
+    }
+  }
 
   async #syncCsrfFromJar(): Promise<void> {
     this.csrfToken = await extractCookieValue(this.#jar, this.baseUrl, CSRF_COOKIE);
