@@ -15,8 +15,11 @@ import { AxiamClient } from 'axiam-sdk';
 
 const baseUrl = 'https://iam.example.com';
 const tenantSlug = 'acme';
+// login requires an organization context in addition to the tenant — a tenant
+// slug is only unique within an organization (CONTRACT.md §5.1).
+const orgSlug = 'acme';
 
-const client = new AxiamClient({ baseUrl, tenantSlug });
+const client = new AxiamClient({ baseUrl, tenantSlug, orgSlug });
 
 async function loginFlow(email: string, password: string): Promise<void> {
   const result = await client.login(email, password);

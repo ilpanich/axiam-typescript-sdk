@@ -58,6 +58,9 @@ import { AxiamClient } from 'axiam-sdk';
 const client = new AxiamClient({
   baseUrl: 'https://iam.example.com',
   tenantSlug: 'acme',
+  // Organization context is required for login/refresh — a tenant slug is only
+  // unique within an organization (CONTRACT.md §5.1). Pass orgSlug (or orgId).
+  orgSlug: 'acme',
   // customCa is optional — PEM-encoded CA cert for self-signed dev environments (§6)
   // customCa: pemString,
 });
@@ -77,6 +80,7 @@ import { AxiamClient } from 'axiam-sdk';
 const client = new AxiamClient({
   baseUrl: 'https://iam.example.com',
   tenantSlug: 'acme',
+  orgSlug: 'acme', // organization context required for login/refresh (CONTRACT.md §5.1)
   clientCert: readFileSync('device.crt', 'utf8'), // PEM certificate chain
   clientKey: readFileSync('device.key', 'utf8'),  // PEM private key (PKCS#8 or PKCS#1)
   // customCa: readFileSync('ca.crt', 'utf8'),     // optional server-trust CA (§6)
@@ -98,7 +102,7 @@ const client = new AxiamClient({
 ```typescript
 import { AxiamClient } from 'axiam-sdk';
 
-const client = new AxiamClient({ baseUrl: 'https://iam.example.com', tenantSlug: 'acme' });
+const client = new AxiamClient({ baseUrl: 'https://iam.example.com', tenantSlug: 'acme', orgSlug: 'acme' });
 
 const result = await client.login(email, password);
 switch (result.status) {
