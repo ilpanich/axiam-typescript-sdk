@@ -18,7 +18,7 @@
 
 import * as grpc from '@grpc/grpc-js';
 import type { AccessDecision, ClientIdentity } from '../core/index.js';
-import { resolveClientIdentity } from '../core/index.js';
+import { AuthError, resolveClientIdentity } from '../core/index.js';
 import type { NodeSession } from '../node/session.js';
 import { authInterceptor } from './interceptor.js';
 import { callWithRefresh } from './callWithRefresh.js';
@@ -58,6 +58,27 @@ export interface WireBatchCheckAccessResponse {
   results: WireCheckAccessResponse[];
 }
 
+// ---------------------------------------------------------------------------
+// Wire shapes (proto/axiam/v1/userinfo.proto) — mirrored, not imported.
+// ---------------------------------------------------------------------------
+
+/**
+ * `axiam.v1.GetUserInfoRequest` — an empty message. Identity is derived
+ * entirely server-side from the `authorization: Bearer <token>` metadata
+ * (CONTRACT.md §1.1), so the request carries no fields.
+ */
+export type WireGetUserInfoRequest = Record<string, never>;
+
+export interface WireGetUserInfoResponse {
+  sub: string;
+  tenant_id: string;
+  org_id: string;
+  // proto3 `optional` fields — absent on the wire unless the access token
+  // carried the gating scope ("email" / "profile" respectively).
+  email?: string;
+  preferred_username?: string;
+}
+
 type UnaryCallback<T> = (error: grpc.ServiceError | null, response?: T) => void;
 
 /**
@@ -76,6 +97,23 @@ export interface WireAuthorizationServiceClient {
     request: WireBatchCheckAccessRequest,
     metadata: grpc.Metadata,
     callback: UnaryCallback<WireBatchCheckAccessResponse>,
+  ): grpc.ClientUnaryCall;
+  close(): void;
+}
+
+/**
+ * The subset of a ts-proto (`outputServices=grpc-js`) generated
+ * `UserInfoServiceClient` this module needs. As with
+ * {@link WireAuthorizationServiceClient}, the real generated client satisfies
+ * this shape exactly (single unary Node-callback method), so a buf-enabled
+ * build's generated `UserInfoServiceClient` from `../gen/...` is a drop-in
+ * replacement.
+ */
+export interface WireUserInfoServiceClient {
+  getUserInfo(
+    request: WireGetUserInfoRequest,
+    metadata: grpc.Metadata,
+    callback: UnaryCallback<WireGetUserInfoResponse>,
   ): grpc.ClientUnaryCall;
   close(): void;
 }
@@ -113,6 +151,41 @@ function fromWireResponse(resp: WireCheckAccessResponse): AccessDecision {
   return {
     allowed: resp.allowed,
     reason: resp.deny_reason ? resp.deny_reason : undefined,
+  };
+}
+
+/**
+ * The authenticated caller's OIDC-style identity claims, returned by
+ * {@link UserInfoGrpcClient.getUserInfo} (CONTRACT.md §1.1). Public (camelCase,
+ * §1) counterpart of the `axiam.v1.GetUserInfoResponse` wire message.
+ *
+ * `sub`, `tenantId`, and `orgId` are always present. `email` is populated only
+ * when the access token carries the `email` scope, and `preferredUsername` only
+ * with the `profile` scope — the server gates these exactly as the REST
+ * `/oauth2/userinfo` endpoint does.
+ */
+export interface UserInfo {
+  /** Subject (user) UUID. Always present. */
+  sub: string;
+  /** Tenant UUID. Always present. */
+  tenantId: string;
+  /** Organization UUID. Always present. */
+  orgId: string;
+  /** User email — present only with the `email` scope. */
+  email?: string;
+  /** Preferred username — present only with the `profile` scope. */
+  preferredUsername?: string;
+}
+
+function fromWireUserInfo(resp: WireGetUserInfoResponse): UserInfo {
+  return {
+    sub: resp.sub,
+    tenantId: resp.tenant_id,
+    orgId: resp.org_id,
+    // Preserve absence: a missing (scope-gated) claim stays `undefined` rather
+    // than becoming an empty string.
+    email: resp.email ? resp.email : undefined,
+    preferredUsername: resp.preferred_username ? resp.preferred_username : undefined,
   };
 }
 
@@ -256,6 +329,55 @@ export type AuthorizationServiceClientFactory = (
 ) => WireAuthorizationServiceClient;
 
 /**
+ * Construct a real `UserInfoServiceClient` the same way
+ * {@link buildAuthorizationServiceClient} builds the AuthorizationService
+ * client — grpc-js's own `makeClientConstructor` primitive (the primitive
+ * ts-proto's `outputServices=grpc-js` codegen sits on top of), with a JSON
+ * codec as a build-independent stand-in for the protobuf binary serializers a
+ * buf-enabled build would generate. Swap this factory for the generated
+ * `UserInfoServiceClient` from `../gen/...` once `src/gen` exists (D-20); it
+ * satisfies {@link WireUserInfoServiceClient} by construction (same .proto).
+ *
+ * grpc-js pools subchannels by target + credentials, so a UserInfoService
+ * client built against the same `baseUrl`/credentials as the co-located
+ * {@link AuthzGrpcClient} shares the underlying connection rather than opening a
+ * redundant one (CONTRACT.md §1.1: reuse the existing channel machinery).
+ */
+export function buildUserInfoServiceClient(
+  baseUrl: string,
+  credentials: grpc.ChannelCredentials,
+  interceptors: grpc.Interceptor[],
+): WireUserInfoServiceClient {
+  const reqCodec = jsonCodec<WireGetUserInfoRequest>();
+  const respCodec = jsonCodec<WireGetUserInfoResponse>();
+
+  const ServiceClientConstructor = grpc.makeClientConstructor(
+    {
+      getUserInfo: {
+        path: '/axiam.v1.UserInfoService/GetUserInfo',
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: reqCodec.serialize,
+        requestDeserialize: reqCodec.deserialize,
+        responseSerialize: respCodec.serialize,
+        responseDeserialize: respCodec.deserialize,
+      },
+    },
+    'axiam.v1.UserInfoService',
+  );
+
+  return new ServiceClientConstructor(grpcTarget(baseUrl), credentials, {
+    interceptors,
+  }) as unknown as WireUserInfoServiceClient;
+}
+
+export type UserInfoServiceClientFactory = (
+  baseUrl: string,
+  credentials: grpc.ChannelCredentials,
+  interceptors: grpc.Interceptor[],
+) => WireUserInfoServiceClient;
+
+/**
  * gRPC transport for `AuthorizationService` (`checkAccess`/`batchCheck`,
  * SC#2 Node half), reusing one long-lived client/channel per instance (D-10
  * — never reconstructed per-call) and injecting auth + tenant metadata via
@@ -307,6 +429,75 @@ export class AuthzGrpcClient {
       promisifyUnary(this.#inner.batchCheckAccess.bind(this.#inner), wireRequest),
     );
     return response.results.map(fromWireResponse);
+  }
+
+  /** Close the underlying gRPC channel. */
+  close(): void {
+    this.#inner.close();
+  }
+}
+
+/**
+ * gRPC transport for `axiam.v1.UserInfoService` (`getUserInfo`, CONTRACT.md
+ * §1.1) — the low-latency counterpart of the server's REST
+ * `GET /oauth2/userinfo` endpoint.
+ *
+ * Reuses the SAME channel/interceptor/refresh machinery as {@link
+ * AuthzGrpcClient}: one long-lived client/channel per instance (D-10 — never
+ * reconstructed per-call), the shared auth + `x-tenant-id` interceptor
+ * (`authInterceptor(session)`), and this session's single-flight refresh guard
+ * via `callWithRefresh`. Built from the same {@link NodeSession}, it shares the
+ * pooled subchannel with a co-located `AuthzGrpcClient` (no second connection).
+ */
+export class UserInfoGrpcClient {
+  readonly #session: NodeSession;
+  readonly #inner: WireUserInfoServiceClient;
+
+  constructor(
+    session: NodeSession,
+    options: {
+      baseUrl: string;
+      customCa?: string;
+      allowInsecure?: boolean;
+      /** PEM client-certificate chain for mutual TLS (§6.1); pair with `clientKey`. */
+      clientCert?: string;
+      /** PEM private key for mutual TLS (§6.1); pair with `clientCert`. Secret (§7). */
+      clientKey?: string;
+    },
+    clientFactory: UserInfoServiceClientFactory = buildUserInfoServiceClient,
+  ) {
+    this.#session = session;
+    // Validate + resolve the §6.1 identity (throws on one-of/bad-PEM) and apply
+    // it to the gRPC channel — the SAME identity the REST/authz transports use.
+    const identity = resolveClientIdentity(options);
+    const credentials = buildCredentials(
+      options.baseUrl,
+      options.customCa,
+      options.allowInsecure ?? false,
+      identity,
+    );
+    this.#inner = clientFactory(options.baseUrl, credentials, [authInterceptor(session)]);
+  }
+
+  /**
+   * `GetUserInfo` over gRPC (CONTRACT.md §1.1). Returns the authenticated
+   * caller's identity claims; the request is empty (identity comes from the
+   * bearer token in the interceptor-injected metadata).
+   *
+   * Pre-flight (§1.1.3): with no cached access token this raises `AuthError`
+   * client-side, WITHOUT a wire call — the same synchronous cached-token view
+   * the auth interceptor reads. A gRPC `UNAUTHENTICATED` response otherwise
+   * drives exactly one shared-guard refresh + one retry (§9.3), identical to
+   * {@link AuthzGrpcClient.checkAccess}.
+   */
+  async getUserInfo(): Promise<UserInfo> {
+    if (this.#session.tokenManager.cachedAccessToken() === null) {
+      throw new AuthError('getUserInfo requires a prior successful login() (no access token present)');
+    }
+    const response = await callWithRefresh(this.#session, () =>
+      promisifyUnary(this.#inner.getUserInfo.bind(this.#inner), {} as WireGetUserInfoRequest),
+    );
+    return fromWireUserInfo(response);
   }
 
   /** Close the underlying gRPC channel. */

@@ -33,6 +33,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- gRPC `getUserInfo` operation (CONTRACT.md §1.1, adopting contract 1.3): new
+  `UserInfoGrpcClient.getUserInfo()` on the `axiam-sdk/grpc` subpath, calling
+  `axiam.v1.UserInfoService/GetUserInfo` (vendored `proto/axiam/v1/userinfo.proto`).
+  It is the low-latency, gRPC-only counterpart of the server's REST
+  `/oauth2/userinfo` endpoint (no REST form in the SDK vocabulary) and returns a
+  typed `UserInfo { sub, tenantId, orgId, email?, preferredUsername? }` — `email`
+  is populated only with the `email` scope and `preferredUsername` only with the
+  `profile` scope, matching the server's OIDC scope gating. Reuses the existing
+  gRPC channel, auth + `x-tenant-id` metadata interceptor, and single-flight
+  refresh guard (CONTRACT.md §9): a `UNAUTHENTICATED` response drives exactly one
+  refresh + one retry, and calling it with no token raises `AuthError` client-side
+  without a wire call (CONTRACT.md §1.1). The vendored `CONTRACT.md` is updated to
+  contract version 1.3.
 - Client-certificate / mutual-TLS (mTLS) support (CONTRACT.md §6.1): new optional
   `clientCert` / `clientKey` PEM options on `AxiamClientOptions` (and the
   `AuthzGrpcClient` constructor options). When configured, the client identity is

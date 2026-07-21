@@ -9,14 +9,21 @@ export { authInterceptor } from './interceptor.js';
 export { callWithRefresh } from './callWithRefresh.js';
 export {
   AuthzGrpcClient,
+  UserInfoGrpcClient,
   buildAuthorizationServiceClient,
+  buildUserInfoServiceClient,
   type AuthorizationServiceClientFactory,
+  type UserInfoServiceClientFactory,
   type WireAuthorizationServiceClient,
+  type WireUserInfoServiceClient,
   type WireCheckAccessRequest,
   type WireCheckAccessResponse,
   type WireBatchCheckAccessRequest,
   type WireBatchCheckAccessResponse,
+  type WireGetUserInfoRequest,
+  type WireGetUserInfoResponse,
   type CheckAccessRequest,
+  type UserInfo,
   type AccessDecision,
 } from './client.js';
 export { createNodeClient, createNodeSession, NodeSession } from '../node/session.js';
