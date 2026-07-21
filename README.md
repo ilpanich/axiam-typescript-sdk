@@ -37,7 +37,7 @@ never contains `@grpc/grpc-js` or `amqplib`):
 | Entry point            | Persona                    | Contents                                                                 |
 |-------------------------|-----------------------------|---------------------------------------------------------------------------|
 | `axiam-sdk` / `axiam-sdk/rest` | Browser + Node, REST-only  | `AxiamClient`: `login`/`verifyMfa`/`refresh`/`logout`, `can`/`batchCheck` over the FND-04 REST authz endpoint |
-| `axiam-sdk/grpc`        | Node only                   | Everything in `/rest` plus `AuthzGrpcClient.checkAccess`/`batchCheck` over gRPC, the Node persona (`createNodeSession`), and the local-JWKS verifier |
+| `axiam-sdk/grpc`        | Node only                   | Everything in `/rest` plus `AuthzGrpcClient.checkAccess`/`batchCheck` and `UserInfoGrpcClient.getUserInfo` over gRPC, the Node persona (`createNodeSession`), and the local-JWKS verifier |
 | `axiam-sdk/amqp`        | Node only                   | `consume()` — HMAC-verified AMQP audit/authz event consumer (CONTRACT.md §8) |
 | `axiam-sdk/middleware`  | Node only                   | `axiamMiddleware` (Express) / `axiamPlugin` (Fastify) — shared local-JWKS verify core (CONTRACT.md §10) — plus `requireAuth`/`requireAccess`/`requireRole` declarative route guards (CONTRACT.md §11) |
 | `axiam-sdk/nestjs`      | Node only, optional         | `@RequireAccess`/`@RequireAuth`/`@RequireRole` metadata decorators + `AxiamGuard` (CONTRACT.md §11, Tier 2) |
@@ -152,6 +152,32 @@ grpcClient.close();
 
 The gRPC channel is constructed once and reused; `UNAUTHENTICATED` responses transparently
 share the same single-flight refresh guard as the REST persona (CONTRACT.md §9).
+
+#### gRPC userinfo (`UserInfoGrpcClient.getUserInfo`, CONTRACT.md §1.1)
+
+`getUserInfo` is a **gRPC-only** operation (contract 1.3) — the low-latency counterpart of
+the server's REST `/oauth2/userinfo` endpoint. It takes no arguments; the caller's identity
+is derived server-side from the bearer token. It reuses the same channel, auth + `x-tenant-id`
+metadata interceptor, and single-flight refresh guard as `AuthzGrpcClient` (a co-located
+client built from the same session shares the pooled connection).
+
+```typescript
+import { UserInfoGrpcClient, createNodeSession } from 'axiam-sdk/grpc';
+
+const session = createNodeSession({ baseUrl: 'https://iam.example.com', tenantSlug: 'acme' });
+// ... after a successful login() on an AxiamClient sharing this session ...
+const userInfoClient = new UserInfoGrpcClient(session, { baseUrl: 'https://iam.example.com' });
+
+const info = await userInfoClient.getUserInfo();
+// info: { sub, tenantId, orgId, email?, preferredUsername? }
+// email is present only with the "email" scope, preferredUsername only with "profile".
+
+userInfoClient.close();
+```
+
+Calling `getUserInfo()` with no token present raises `AuthError` client-side, without a wire
+call (CONTRACT.md §1.1). A `UNAUTHENTICATED` response drives exactly one refresh + one retry,
+identical to `checkAccess`.
 
 ### Node — AMQP consumer (`axiam-sdk/amqp`)
 

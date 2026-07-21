@@ -34,9 +34,11 @@ describe('barrel entry points', () => {
   it('/grpc exposes the gRPC transport plus the Node persona re-exports', async () => {
     const mod = await import('../src/grpc/index.js');
     expect(typeof mod.AuthzGrpcClient).toBe('function');
+    expect(typeof mod.UserInfoGrpcClient).toBe('function');
     expect(typeof mod.authInterceptor).toBe('function');
     expect(typeof mod.callWithRefresh).toBe('function');
     expect(typeof mod.buildAuthorizationServiceClient).toBe('function');
+    expect(typeof mod.buildUserInfoServiceClient).toBe('function');
     expect(typeof mod.createNodeClient).toBe('function');
   });
 
