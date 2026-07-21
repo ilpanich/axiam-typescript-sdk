@@ -1,6 +1,6 @@
 {
   "name": "axiam-sdk",
-  "version": "1.0.0-alpha12",
+  "version": "1.0.0-alpha15",
   "description": "Official TypeScript/JavaScript client SDK for AXIAM IAM",
   "license": "Apache-2.0",
   "type": "module",
