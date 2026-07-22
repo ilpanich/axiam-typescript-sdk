@@ -51,7 +51,7 @@ never contains <code>@grpc/grpc-js</code> or <code>amqplib</code>):</p>
 <tr>
 <td><code>axiam-sdk/grpc</code></td>
 <td>Node only</td>
-<td>Everything in <code>/rest</code> plus <code>AuthzGrpcClient.checkAccess</code>/<code>batchCheck</code> over gRPC, the Node persona (<code>createNodeSession</code>), and the local-JWKS verifier</td>
+<td>Everything in <code>/rest</code> plus <code>AuthzGrpcClient.checkAccess</code>/<code>batchCheck</code> and <code>UserInfoGrpcClient.getUserInfo</code> over gRPC, the Node persona (<code>createNodeSession</code>), and the local-JWKS verifier</td>
 </tr>
 <tr>
 <td><code>axiam-sdk/amqp</code></td>
@@ -111,6 +111,18 @@ single-flight refresh (<a href="http://CONTRACT.md">CONTRACT.md</a> §9) are han
 
 <p>The gRPC channel is constructed once and reused; <code>UNAUTHENTICATED</code> responses transparently
 share the same single-flight refresh guard as the REST persona (<a href="http://CONTRACT.md">CONTRACT.md</a> §9).</p>
+<h4 id="grpc-userinfo-contractmd-§11" class="tsd-anchor-link">gRPC userinfo (<code>UserInfoGrpcClient.getUserInfo</code>, <a href="http://CONTRACT.md">CONTRACT.md</a> §1.1)<a href="#grpc-userinfo-contractmd-§11" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4>
+<p><code>getUserInfo</code> is a <strong>gRPC-only</strong> operation (contract 1.3) — the low-latency counterpart of
+the server's REST <code>/oauth2/userinfo</code> endpoint. It takes no arguments; the caller's identity
+is derived server-side from the bearer token. It reuses the same channel, auth + <code>x-tenant-id</code>
+metadata interceptor, and single-flight refresh guard as <code>AuthzGrpcClient</code> (a co-located
+client built from the same session shares the pooled connection).</p>
+<pre><code class="typescript"><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">UserInfoGrpcClient</span><span class="hl-1">, </span><span class="hl-4">createNodeSession</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;axiam-sdk/grpc&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">session</span><span class="hl-1"> = </span><span class="hl-0">createNodeSession</span><span class="hl-1">({ </span><span class="hl-4">baseUrl:</span><span class="hl-1"> </span><span class="hl-2">&#39;https://iam.example.com&#39;</span><span class="hl-1">, </span><span class="hl-4">tenantSlug:</span><span class="hl-1"> </span><span class="hl-2">&#39;acme&#39;</span><span class="hl-1"> });</span><br/><span class="hl-7">// ... after a successful login() on an AxiamClient sharing this session ...</span><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">userInfoClient</span><span class="hl-1"> = </span><span class="hl-5">new</span><span class="hl-1"> </span><span class="hl-0">UserInfoGrpcClient</span><span class="hl-1">(</span><span class="hl-4">session</span><span class="hl-1">, { </span><span class="hl-4">baseUrl:</span><span class="hl-1"> </span><span class="hl-2">&#39;https://iam.example.com&#39;</span><span class="hl-1"> });</span><br/><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">info</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">userInfoClient</span><span class="hl-1">.</span><span class="hl-0">getUserInfo</span><span class="hl-1">();</span><br/><span class="hl-7">// info: { sub, tenantId, orgId, email?, preferredUsername? }</span><br/><span class="hl-7">// email is present only with the &quot;email&quot; scope, preferredUsername only with &quot;profile&quot;.</span><br/><br/><span class="hl-4">userInfoClient</span><span class="hl-1">.</span><span class="hl-0">close</span><span class="hl-1">();</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Calling <code>getUserInfo()</code> with no token present raises <code>AuthError</code> client-side, without a wire
+call (<a href="http://CONTRACT.md">CONTRACT.md</a> §1.1). A <code>UNAUTHENTICATED</code> response drives exactly one refresh + one retry,
+identical to <code>checkAccess</code>.</p>
 <h3 id="node-amqp-consumer-" class="tsd-anchor-link">Node — AMQP consumer (<code>axiam-sdk/amqp</code>)<a href="#node-amqp-consumer-" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <pre><code class="typescript"><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">consume</span><span class="hl-1">, </span><span class="hl-4">Sensitive</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;axiam-sdk/amqp&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">signingKey</span><span class="hl-1"> = </span><span class="hl-5">new</span><span class="hl-1"> </span><span class="hl-0">Sensitive</span><span class="hl-1">(</span><span class="hl-4">Buffer</span><span class="hl-1">.</span><span class="hl-0">from</span><span class="hl-1">(</span><span class="hl-4">process</span><span class="hl-1">.</span><span class="hl-4">env</span><span class="hl-1">.</span><span class="hl-6">AXIAM_AMQP_SIGNING_KEY</span><span class="hl-1"> ?? </span><span class="hl-2">&#39;&#39;</span><span class="hl-1">, </span><span class="hl-2">&#39;hex&#39;</span><span class="hl-1">));</span><br/><br/><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-0">consume</span><span class="hl-1">(</span><span class="hl-2">&#39;amqp://localhost:5672&#39;</span><span class="hl-1">, </span><span class="hl-2">&#39;axiam.audit.events&#39;</span><span class="hl-1">, </span><span class="hl-4">signingKey</span><span class="hl-1">, </span><span class="hl-5">async</span><span class="hl-1"> (</span><span class="hl-4">event</span><span class="hl-1">) </span><span class="hl-5">=&gt;</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-7">// Only a verified event ever reaches this closure — HMAC-SHA256</span><br/><span class="hl-1">  </span><span class="hl-7">// signature checked and stripped by the SDK before your handler runs</span><br/><span class="hl-1">  </span><span class="hl-7">// (CONTRACT.md §8). Verification failures are nacked-without-requeue.</span><br/><span class="hl-1">  </span><span class="hl-4">console</span><span class="hl-1">.</span><span class="hl-0">log</span><span class="hl-1">(</span><span class="hl-2">&#39;verified audit event:&#39;</span><span class="hl-1">, </span><span class="hl-4">event</span><span class="hl-1">);</span><br/><span class="hl-1">});</span>
 </code><button type="button">Copy</button></pre>
@@ -227,6 +239,9 @@ the TypeDoc API reference to this repo's GitHub Pages site.</p>
 <ul>
 <li><a href="#browser-login--authz---"><span>Browser — login + authz ( / )</span></a></li>
 <li><a href="#node-grpc-authz-"><span>Node — g<wbr/>RPC authz ()</span></a></li>
+<li>
+<ul>
+<li><a href="#grpc-userinfo-contractmd-§11"><span>g<wbr/>RPC userinfo (, <wbr/>CONTRACT.md §1.1)</span></a></li></ul></li>
 <li><a href="#node-amqp-consumer-"><span>Node — <wbr/>AMQP consumer ()</span></a></li>
 <li><a href="#express-middleware-"><span>Express middleware ()</span></a></li>
 <li><a href="#fastify-plugin-"><span>Fastify plugin ()</span></a></li>
