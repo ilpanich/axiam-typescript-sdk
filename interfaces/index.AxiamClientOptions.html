@@ -24,7 +24,7 @@ are omitted (<a href="http://CONTRACT.md">CONTRACT.md</a> §5). <code>customCa</
 </div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">AxiamClientOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#baseurl">baseUrl</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#clientcert">clientCert</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#clientkey">clientKey</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#connecttimeoutms">connectTimeoutMs</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#customca">customCa</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#orgid">orgId</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#orgslug">orgSlug</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#requesttimeoutms">requestTimeoutMs</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#tenantid">tenantId</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#tenantslug">tenantSlug</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/d4b4972f20c95318aa3246c1bb5d7139b720bde1/src/core/config.ts#L27">src/core/config.ts:27</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/6659118b221a5c804f22f4b9093a989db7be50d5/src/core/config.ts#L27">src/core/config.ts:27</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -52,7 +52,7 @@ are omitted (<a href="http://CONTRACT.md">CONTRACT.md</a> §5). <code>customCa</
 <div class="tsd-comment tsd-typography"><p>Base URL of the AXIAM server, e.g. &quot;<a href="https://iam.example.com">https://iam.example.com</a>&quot;.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/d4b4972f20c95318aa3246c1bb5d7139b720bde1/src/core/config.ts#L29">src/core/config.ts:29</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/6659118b221a5c804f22f4b9093a989db7be50d5/src/core/config.ts#L29">src/core/config.ts:29</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="clientcert"><code class="tsd-tag">Optional</code><span>client<wbr/>Cert</span><a href="#clientcert" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">clientCert</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
@@ -63,7 +63,7 @@ ignored in the browser (browsers cannot present a client certificate from
 JS). Presenting a client certificate NEVER relaxes server verification.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/d4b4972f20c95318aa3246c1bb5d7139b720bde1/src/core/config.ts#L61">src/core/config.ts:61</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/6659118b221a5c804f22f4b9093a989db7be50d5/src/core/config.ts#L61">src/core/config.ts:61</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="clientkey"><code class="tsd-tag">Optional</code><span>client<wbr/>Key</span><a href="#clientkey" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">clientKey</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
@@ -73,21 +73,21 @@ logged, or serialized (§7). MUST be provided together with <code>clientCert</co
 Node only — ignored in the browser.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/d4b4972f20c95318aa3246c1bb5d7139b720bde1/src/core/config.ts#L69">src/core/config.ts:69</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/6659118b221a5c804f22f4b9093a989db7be50d5/src/core/config.ts#L69">src/core/config.ts:69</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="connecttimeoutms"><code class="tsd-tag">Optional</code><span>connect<wbr/>Timeout<wbr/>Ms</span><a href="#connecttimeoutms" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">connectTimeoutMs</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>Connection timeout in milliseconds. Defaults to DEFAULT_CONNECT_TIMEOUT_MS.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/d4b4972f20c95318aa3246c1bb5d7139b720bde1/src/core/config.ts#L71">src/core/config.ts:71</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/6659118b221a5c804f22f4b9093a989db7be50d5/src/core/config.ts#L71">src/core/config.ts:71</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="customca"><code class="tsd-tag">Optional</code><span>custom<wbr/>Ca</span><a href="#customca" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">customCa</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>PEM-encoded custom CA certificate, for self-signed/dev environments (§6).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/d4b4972f20c95318aa3246c1bb5d7139b720bde1/src/core/config.ts#L53">src/core/config.ts:53</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/6659118b221a5c804f22f4b9093a989db7be50d5/src/core/config.ts#L53">src/core/config.ts:53</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="orgid"><code class="tsd-tag">Optional</code><span>org<wbr/>Id</span><a href="#orgid" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">orgId</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
@@ -98,7 +98,7 @@ is decoded from the authenticated session's access-token <code>org_id</code> cla
 after the first successful login. Mutually exclusive with <a href="#orgslug" class="tsd-kind-property">orgSlug</a>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/d4b4972f20c95318aa3246c1bb5d7139b720bde1/src/core/config.ts#L51">src/core/config.ts:51</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/6659118b221a5c804f22f4b9093a989db7be50d5/src/core/config.ts#L51">src/core/config.ts:51</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="orgslug"><code class="tsd-tag">Optional</code><span>org<wbr/>Slug</span><a href="#orgslug" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">orgSlug</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
@@ -111,28 +111,28 @@ slug is only unique <em>within</em> an organization — so a client that omits b
 resolve).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/d4b4972f20c95318aa3246c1bb5d7139b720bde1/src/core/config.ts#L43">src/core/config.ts:43</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/6659118b221a5c804f22f4b9093a989db7be50d5/src/core/config.ts#L43">src/core/config.ts:43</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="requesttimeoutms"><code class="tsd-tag">Optional</code><span>request<wbr/>Timeout<wbr/>Ms</span><a href="#requesttimeoutms" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">requestTimeoutMs</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>Request timeout in milliseconds. Defaults to DEFAULT_REQUEST_TIMEOUT_MS.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/d4b4972f20c95318aa3246c1bb5d7139b720bde1/src/core/config.ts#L73">src/core/config.ts:73</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/6659118b221a5c804f22f4b9093a989db7be50d5/src/core/config.ts#L73">src/core/config.ts:73</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="tenantid"><code class="tsd-tag">Optional</code><span>tenant<wbr/>Id</span><a href="#tenantid" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">tenantId</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Tenant UUID. At least one of tenantSlug/tenantId is required at runtime.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/d4b4972f20c95318aa3246c1bb5d7139b720bde1/src/core/config.ts#L33">src/core/config.ts:33</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/6659118b221a5c804f22f4b9093a989db7be50d5/src/core/config.ts#L33">src/core/config.ts:33</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="tenantslug"><code class="tsd-tag">Optional</code><span>tenant<wbr/>Slug</span><a href="#tenantslug" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">tenantSlug</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Human-readable tenant identifier. At least one of tenantSlug/tenantId is required at runtime.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/d4b4972f20c95318aa3246c1bb5d7139b720bde1/src/core/config.ts#L31">src/core/config.ts:31</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/6659118b221a5c804f22f4b9093a989db7be50d5/src/core/config.ts#L31">src/core/config.ts:31</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
