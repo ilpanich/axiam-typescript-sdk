@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-alpha18] - 2026-07-24
+
+### Changed
+
+- Bump github/codeql-action from 3 to 4 (#19)
+- Bump actions/checkout from 7.0.0 to 7.0.1 (#20)
+- Bump actions/setup-node from 6.4.0 to 7.0.0 (#21)
+- Ratchet vitest thresholds toward current levels (#23)
+
 ## [1.0.0-alpha16] - 2026-07-22
 
 ### Added
