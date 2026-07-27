@@ -8,7 +8,13 @@
 // core stays dependency-free — grpc/ imports the numeric codes from core
 // rather than the other way around.
 
-import { AuthError, AuthzError, NetworkError, type AxiamError } from './errors.js';
+import {
+  AuthError,
+  AuthzError,
+  NetworkError,
+  OAuthProtocolError,
+  type AxiamError,
+} from './errors.js';
 
 /** gRPC status codes referenced by CONTRACT.md §2 (subset of the full grpc.status enum). */
 export const GrpcStatus = {
@@ -24,6 +30,14 @@ export interface HttpErrorContext {
   action?: string;
   resourceId?: string;
   cause?: unknown;
+  /**
+   * The request URL (absolute or path-only) the error came from, when
+   * available. Load-bearing for the two **endpoint-qualified** rows of §2's
+   * HTTP table (added by contract 1.4): a `400`/`401` carrying an
+   * `OAuth2ErrorResponse` body maps to `OAuthProtocolError` only when it came
+   * from an `/oauth2/*` endpoint. Omitting it simply keeps the generic rows.
+   */
+  url?: string;
   /**
    * The parsed JSON response body (when available). For a 403/409
    * authorization-denied response the server shapes this as
@@ -49,6 +63,59 @@ function extractAuthzFieldsFromBody(body: unknown): { action?: string; resourceI
   const action = typeof record.action === 'string' ? record.action : undefined;
   const resourceId = typeof record.resource_id === 'string' ? record.resource_id : undefined;
   return { action, resourceId };
+}
+
+/**
+ * The RFC 6749 error body shape (`OAuth2ErrorResponse` in `openapi.json`)
+ * returned by AXIAM's `/oauth2/*` endpoints. Both fields are required by the
+ * schema.
+ */
+export interface OAuth2ErrorResponseWire {
+  /** RFC 6749 error code, e.g. `invalid_grant`. */
+  error: string;
+  /** Human-readable description of the failure. */
+  error_description: string;
+}
+
+/**
+ * Path prefix identifying AXIAM's OAuth2 endpoint family (`/oauth2/token`,
+ * `/oauth2/introspect`, `/oauth2/revoke`, …). The two endpoint-qualified §2
+ * rows apply only to URLs whose path starts with it.
+ */
+const OAUTH2_PATH_PREFIX = '/oauth2/';
+
+/**
+ * Whether `url` targets an `/oauth2/*` endpoint. Accepts both an absolute URL
+ * (as taken from the discovery document) and a bare path (as axios request
+ * configs carry), and never throws on a malformed value — an unparseable URL
+ * simply falls back to a substring test, so a mis-shaped URL can only ever
+ * *fail* to qualify for the OAuth2 rows, never wrongly qualify for them.
+ */
+export function isOAuth2EndpointUrl(url: string | undefined): boolean {
+  if (!url) {
+    return false;
+  }
+  try {
+    // A relative path has no base here, so `URL` throws and we fall through.
+    return new URL(url).pathname.startsWith(OAUTH2_PATH_PREFIX);
+  } catch {
+    return url.startsWith(OAUTH2_PATH_PREFIX) || url.includes(OAUTH2_PATH_PREFIX);
+  }
+}
+
+/**
+ * Narrow a parsed response body to {@link OAuth2ErrorResponseWire}. Both
+ * `error` and `error_description` must be present and string-typed — a body
+ * that carries only one of them is NOT an `OAuth2ErrorResponse` and keeps the
+ * generic §2 mapping (better a generic error than a fabricated
+ * `error_description`).
+ */
+export function isOAuth2ErrorBody(body: unknown): body is OAuth2ErrorResponseWire {
+  if (body === null || typeof body !== 'object') {
+    return false;
+  }
+  const record = body as Record<string, unknown>;
+  return typeof record.error === 'string' && typeof record.error_description === 'string';
 }
 
 /**
@@ -125,12 +192,20 @@ export function sanitizeAxiosError(err: unknown): unknown {
  * | Status    | Type         |
  * |-----------|--------------|
  * | 400       | NetworkError |
+ * | 400 from `/oauth2/*` with an `OAuth2ErrorResponse` body | OAuthProtocolError |
  * | 401       | AuthError    |
+ * | 401 from `/oauth2/*` with an `OAuth2ErrorResponse` body | OAuthProtocolError |
  * | 403       | AuthzError   |
  * | 408, 429  | NetworkError |
  * | 409       | AuthzError   |
  * | 5xx       | NetworkError |
  * | other     | NetworkError |
+ *
+ * Where two rows match the same response the more specific
+ * (endpoint- and body-qualified) row wins, per §2 — so the two
+ * `OAuthProtocolError` rows are evaluated first. They require BOTH an
+ * `/oauth2/*` `ctx.url` AND an `OAuth2ErrorResponse`-shaped `ctx.body`;
+ * anything else keeps the generic mapping.
  *
  * NetworkError's `cause` (when provided via `ctx.cause`) is always passed
  * through `sanitizeAxiosError` first (CR-04) — this is the single choke
@@ -147,6 +222,12 @@ export function mapHttpStatusToError(
   message: string,
   ctx?: HttpErrorContext,
 ): AxiamError {
+  // Endpoint-qualified rows first (§2 "the more specific row wins",
+  // §12.3 rule 3). `message` is deliberately ignored here: the contract fixes
+  // OAuthProtocolError's message to "<error>: <error_description>".
+  if ((status === 400 || status === 401) && isOAuth2EndpointUrl(ctx?.url) && isOAuth2ErrorBody(ctx?.body)) {
+    return new OAuthProtocolError(ctx.body.error, ctx.body.error_description);
+  }
   if (status === 401) {
     return new AuthError(message);
   }

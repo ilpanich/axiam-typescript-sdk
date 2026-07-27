@@ -9,7 +9,63 @@
 
 export { createNodeClient, createNodeSession, NodeSession } from './session.js';
 export { TokenManager } from './tokenManager.js';
-export { createVerifier, type Verifier, type AxiamClaims, JWKS_PATH } from './jwks.js';
+export {
+  createVerifier,
+  createJwksVerifier,
+  type Verifier,
+  type IdTokenVerifier,
+  type JwksVerifier,
+  type AxiamClaims,
+  JWKS_PATH,
+} from './jwks.js';
+// OIDC / SSO relying-party helpers (CONTRACT.md §12). Node-only: PKCE needs
+// node:crypto and ID-token validation needs jose, so these deliberately do
+// NOT hang off the browser-safe AxiamClient (see src/node/oidc.ts's header).
+export {
+  createOidcClient,
+  normalizeOrigin,
+  OidcClient,
+  type OidcClientOptions,
+  DISCOVERY_PATH,
+  MIN_DISCOVERY_TTL_MS,
+  SSO_CALLBACK_PATH,
+  SSO_START_PATH,
+} from './oidc.js';
+export type {
+  AuthorizationRequest,
+  IntrospectionResult,
+  IntrospectParams,
+  LoginClientCredentialsParams,
+  OidcBeginParams,
+  OidcConfiguration,
+  OidcExchangeParams,
+  OidcRefreshParams,
+  OidcTokenSet,
+  RevokeParams,
+  SsoCompleteParams,
+  SsoCompleteResult,
+  SsoStartParams,
+  SsoStartResult,
+} from './oidcTypes.js';
+export {
+  MemoryOidcStateStore,
+  OIDC_STATE_TTL_MS,
+  type OidcStateEntry,
+  type OidcStateStore,
+} from './oidcState.js';
+export {
+  CODE_CHALLENGE_METHOD_S256,
+  computeCodeChallenge,
+  CSPRNG_BYTES,
+  generateCodeVerifier,
+  randomUrlSafeToken,
+} from './oidcPkce.js';
+export {
+  ID_TOKEN_ALG,
+  MAX_CLOCK_SKEW_SEC,
+  type IdTokenClaims,
+  type IdTokenExpectations,
+} from './oidcIdToken.js';
 export {
   createJar,
   wrapAxios,

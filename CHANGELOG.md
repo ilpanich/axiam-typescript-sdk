@@ -58,6 +58,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- OIDC / SSO relying-party helpers (CONTRACT.md §12, adopting contract 1.4): nine new
+  operations on a Node-only `OidcClient` reachable from the `axiam-sdk/node` subpath —
+  `oidcDiscover`, `oidcBegin`, `oidcExchange`, `oidcRefresh`, `loginClientCredentials`,
+  `introspect`, `revoke`, `ssoStart`, `ssoComplete` — giving a backend everything it needs
+  to offer "Login with AXIAM" (authorization code + PKCE), to authenticate itself as a
+  service account, to introspect/revoke tokens, and to drive the server's upstream-IdP
+  federation endpoints. PKCE is **S256-only** (`plain` is not implemented) with the RFC 7636
+  Appendix B vector covered by a unit test; `state`/`nonce` are 256-bit CSPRNG values; the
+  discovery document is cached per normalized origin (TTL ≥ 5 min) with concurrent callers
+  sharing a single in-flight fetch. Every returned `id_token` is validated in full before an
+  `OidcTokenSet` is constructed (`EdDSA` only, `kid`-selected Ed25519 signature against the
+  document's `jwks_uri`, exact-match `iss`, `aud`/`azp`, ≤ 60 s clock skew, constant-time
+  `nonce`), and any failure raises `AuthError` with a stable `reason` code while discarding
+  the whole token set. `oidcRefresh` runs under the existing single-flight refresh guard
+  (CONTRACT.md §9) and stays distinct from the cookie-session `refresh()`; `ssoComplete`
+  goes through the §4 cookie jar, since its session arrives as `Set-Cookie`. They reuse the
+  existing transport, error mapper, `Sensitive<T>` wrapper and JWKS verifier — no new runtime
+  dependency (`node:crypto` covers CSPRNG, SHA-256 and base64url).
+- `OidcStateStore` interface plus an opt-in `MemoryOidcStateStore` reference implementation
+  (10-minute TTL, single-use `consume(state)`, mirroring the server's `federation_login_state`
+  semantics). The core operations remain fully usable without one: `oidcBegin`/`oidcExchange`
+  never store `state`, `nonce` or `code_verifier` inside the SDK — the caller owns that state
+  (CONTRACT.md §12.3 rule 1).
+- "Login with AXIAM" framework glue on the `axiam-sdk/middleware` subpath:
+  `oidcLoginHandlers(options)` returning `{ login, callback }` Express handlers, and
+  `oidcLoginPlugin(options)` registering the same two routes in Fastify. Both are thin
+  adapters over one shared `beginOidcLogin`/`completeOidcLogin` core, with identical failure
+  mapping (400 malformed callback, 401 authentication failure, 503 AXIAM unreachable — never
+  a silent success).
+- `OAuthProtocolError`, an `AuthError` **sub-type** carrying `error` and `errorDescription`
+  with `message` set to `"<error>: <error_description>"`, raised for an `OAuth2ErrorResponse`
+  body from `/oauth2/*` (a `400` from the token endpoint, or a `401` from
+  introspect/revoke). Both endpoint-qualified rows are transcribed in the central error
+  mapper. `instanceof AuthError` keeps matching it, so this is additive, not breaking. A
+  `401` from `/oauth2/*` no longer enters the single-flight refresh guard — a
+  client-credential failure is not a session expiry (CONTRACT.md §12.3 rule 3).
+- The CONTRACT.md §2 error taxonomy (`AxiamError`, `AuthError`, `AuthzError`,
+  `NetworkError`, `OAuthProtocolError`) and the `Sensitive<T>` wrapper are now exported from
+  the root/`axiam-sdk/rest` entry, so `catch (e) { e instanceof AuthError }` works without
+  reaching into a subpath (previously they were reachable only via `axiam-sdk/amqp`).
+- `createJwksVerifier(jwksUri)` alongside the existing `createVerifier(baseUrl)`, and a
+  `verifyIdToken` method on the verifier both share: one verifier, one cached remote key set,
+  serving both the §10 middleware's access-token path and the §12.4 ID-token path.
+- Runnable `examples/express-oidc-login.ts` and a README section covering all nine
+  operations, the caller-owns-state contract, and the ID-token checklist.
+
+### Changed
+
+- Vendored `CONTRACT.md` re-synced to contract version 1.4 (§12 OIDC/SSO relying-party
+  helpers, the `OAuthProtocolError` taxonomy sub-type, and the two endpoint-qualified
+  HTTP-status rows). Conformance statement updated to §1–§12.
+
 - gRPC `getUserInfo` operation (CONTRACT.md §1.1, adopting contract 1.3): new
   `UserInfoGrpcClient.getUserInfo()` on the `axiam-sdk/grpc` subpath, calling
   `axiam.v1.UserInfoService/GetUserInfo` (vendored `proto/axiam/v1/userinfo.proto`).

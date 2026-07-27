@@ -14,9 +14,33 @@ export const REDACTED = '[SENSITIVE]';
 
 const NODE_INSPECT_CUSTOM = Symbol.for('nodejs.util.inspect.custom');
 
+/**
+ * A redaction wrapper for token and secret material (CONTRACT.md §7).
+ *
+ * @remarks
+ * The wrapped value is held in a private class field, so it cannot be reached
+ * through any public property. All three JavaScript stringification surfaces
+ * redact it to `"[SENSITIVE]"`: `toString()`, `JSON.stringify()` and
+ * `console.log`/`util.inspect`. The raw value is available only via the
+ * documented-`@internal` `expose()` accessor, which SDK-internal code calls at
+ * the point of handing the value to the transport.
+ *
+ * Every field CONTRACT.md §12.5 names — `access_token`, `refresh_token`,
+ * `id_token`, `client_secret`, `code_verifier` — is wrapped in this class. By
+ * contrast `state` and `nonce` are **not** secrets (§12.3 rule 2) and stay
+ * plain strings.
+ *
+ * @example
+ * ```ts
+ * const tokens = await oidc.oidcExchange({ code, codeVerifier, nonce, redirectUri });
+ * console.log(tokens.accessToken);            // [SENSITIVE]
+ * JSON.stringify(tokens);                     // {"accessToken":"[SENSITIVE]",…}
+ * ```
+ */
 export class Sensitive<T> {
   readonly #value: T;
 
+  /** Wrap `value` so it can never be logged or serialized by accident. */
   constructor(value: T) {
     this.#value = value;
   }
@@ -26,14 +50,17 @@ export class Sensitive<T> {
     return this.#value;
   }
 
+  /** Returns the `"[SENSITIVE]"` placeholder — never the wrapped value. */
   toString(): string {
     return REDACTED;
   }
 
+  /** Makes `JSON.stringify()` emit the `"[SENSITIVE]"` placeholder. */
   toJSON(): string {
     return REDACTED;
   }
 
+  /** Makes `console.log`/`util.inspect` print the `"[SENSITIVE]"` placeholder. */
   [NODE_INSPECT_CUSTOM](): string {
     return REDACTED;
   }

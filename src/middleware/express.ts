@@ -21,6 +21,12 @@ import {
   type ResourceSpec,
 } from './authzCore.js';
 import { CSRF_HEADER_NAME, extractCredential, isCsrfValid, isSafeMethod } from './cookieHeader.js';
+import {
+  beginOidcLogin,
+  completeOidcLogin,
+  type OidcLoginOptions,
+  type OidcLoginOutcome,
+} from './oidcLoginCore.js';
 import { authenticateRequest, type AxiamIdentity, type VerifiableSession } from './verifyCore.js';
 
 /** An Express `Request` augmented with the AXIAM identity that `axiamMiddleware` injects after §10 verification. */
@@ -196,4 +202,89 @@ export function requireRole(session: VerifiableSession, ...roles: string[]): Req
     }
     next();
   };
+}
+
+// ---------------------------------------------------------------------------
+// "Login with AXIAM" route handlers (CONTRACT.md §12)
+// ---------------------------------------------------------------------------
+
+/** Apply an {@link OidcLoginOutcome} to an Express response. */
+function sendOidcOutcome(res: Response, outcome: OidcLoginOutcome): void {
+  if (outcome.kind === 'redirect') {
+    res.redirect(outcome.url);
+    return;
+  }
+  if (outcome.kind === 'json') {
+    res.status(200).json(outcome.body);
+    return;
+  }
+  res.status(outcome.status).json(outcome.body);
+}
+
+/**
+ * `oidcLoginHandlers(options)` (CONTRACT.md §12) — the two Express route
+ * handlers an application needs for "Login with AXIAM": a `login` handler that
+ * redirects the browser to AXIAM's authorization endpoint, and a `callback`
+ * handler that consumes the returned `state`, exchanges the code, and
+ * validates the ID token.
+ *
+ * @remarks
+ * Both handlers are thin adapters over {@link beginOidcLogin} /
+ * {@link completeOidcLogin}, which the Fastify variant
+ * (`oidcLoginPlugin`) also uses — so the two frameworks cannot drift on flow
+ * semantics or error mapping.
+ *
+ * The `login` handler reads an optional `?returnTo=` query parameter and
+ * stores it with the login state, so the callback can send the user back where
+ * they started. **Validate or allowlist that value in your own application if
+ * you accept it from user input** — an unchecked `returnTo` is an open-redirect
+ * vector, and the SDK cannot know which destinations your app considers safe.
+ *
+ * Establishing your application's own session is the `onSuccess` hook's job:
+ * the SDK validates the login and hands you the token set, but what a session
+ * means (a signed cookie, a database row, a JWT of your own) is your decision.
+ *
+ * @example
+ * ```ts
+ * const store = new MemoryOidcStateStore();
+ * const oidc = createOidcClient(session, { clientId, clientSecret });
+ * const { login, callback } = oidcLoginHandlers({
+ *   client: oidc,
+ *   store,
+ *   redirectUri: 'https://app.example.com/auth/callback',
+ *   scope: 'openid profile email',
+ *   onSuccess: (tokens) => { myAppSession.establish(tokens.idClaims!.sub); },
+ * });
+ *
+ * app.get('/auth/login', login);
+ * app.get('/auth/callback', callback);
+ * ```
+ */
+export function oidcLoginHandlers(options: OidcLoginOptions): {
+  /** `GET` handler that redirects the browser to the AXIAM authorization endpoint. */
+  login: RequestHandler;
+  /** `GET` handler for the redirect URI: consumes `state`, exchanges `code`, validates the ID token. */
+  callback: RequestHandler;
+} {
+  const login: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+    const returnTo = typeof req.query.returnTo === 'string' ? req.query.returnTo : undefined;
+    sendOidcOutcome(res, await beginOidcLogin(options, returnTo));
+  };
+
+  const callback: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+    const query = req.query as Record<string, unknown>;
+    sendOidcOutcome(
+      res,
+      await completeOidcLogin(options, {
+        ...(typeof query.state === 'string' ? { state: query.state } : {}),
+        ...(typeof query.code === 'string' ? { code: query.code } : {}),
+        ...(typeof query.error === 'string' ? { error: query.error } : {}),
+        ...(typeof query.error_description === 'string'
+          ? { error_description: query.error_description }
+          : {}),
+      }),
+    );
+  };
+
+  return { login, callback };
 }

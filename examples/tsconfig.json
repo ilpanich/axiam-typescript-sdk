@@ -21,6 +21,7 @@
       "axiam-sdk": ["../src/index.ts"],
       "axiam-sdk/rest": ["../src/rest/index.ts"],
       "axiam-sdk/grpc": ["../src/grpc/index.ts"],
+      "axiam-sdk/node": ["../src/node/index.ts"],
       "axiam-sdk/amqp": ["../src/amqp/index.ts"],
       "axiam-sdk/middleware": ["../src/middleware/index.ts"],
       "axiam-sdk/nestjs": ["../src/nestjs/index.ts"]

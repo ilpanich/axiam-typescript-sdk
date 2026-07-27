@@ -19,6 +19,12 @@ import {
   type ResourceSpec,
 } from './authzCore.js';
 import { CSRF_HEADER_NAME, extractCredential, isCsrfValid, isSafeMethod } from './cookieHeader.js';
+import {
+  beginOidcLogin,
+  completeOidcLogin,
+  type OidcLoginOptions,
+  type OidcLoginOutcome,
+} from './oidcLoginCore.js';
 import { authenticateRequest, type AxiamIdentity, type VerifiableSession } from './verifyCore.js';
 
 /** A Fastify `FastifyRequest` augmented with the AXIAM identity that `axiamPlugin` injects after §10 verification. */
@@ -209,3 +215,91 @@ export function requireRoleHook(session: VerifiableSession, ...roles: string[]):
     }
   };
 }
+
+// ---------------------------------------------------------------------------
+// "Login with AXIAM" routes (CONTRACT.md §12)
+// ---------------------------------------------------------------------------
+
+/** Apply an {@link OidcLoginOutcome} to a Fastify reply. */
+async function sendOidcOutcome(reply: FastifyReply, outcome: OidcLoginOutcome): Promise<void> {
+  if (outcome.kind === 'redirect') {
+    // 302 + Location, written directly rather than via @fastify/redirect — the
+    // SDK adds no new dependency for a two-line response.
+    await reply.code(302).header('location', outcome.url).send();
+    return;
+  }
+  if (outcome.kind === 'json') {
+    await reply.code(200).send(outcome.body);
+    return;
+  }
+  await reply.code(outcome.status).send(outcome.body);
+}
+
+/** Route paths the {@link oidcLoginPlugin} registers, relative to where it is registered. */
+export interface OidcLoginRoutePaths {
+  /** Path of the login-redirect route. Defaults to `/auth/login`. */
+  loginPath?: string;
+  /** Path of the callback route — must match the public URL in `redirectUri`. Defaults to `/auth/callback`. */
+  callbackPath?: string;
+}
+
+/**
+ * `oidcLoginPlugin(options)` (CONTRACT.md §12) — a `FastifyPluginAsync`
+ * registering the two "Login with AXIAM" routes: a login-redirect route and
+ * the callback route that consumes `state`, exchanges the code, and validates
+ * the ID token.
+ *
+ * @remarks
+ * The Fastify counterpart of Express's `oidcLoginHandlers`, built on the same
+ * {@link beginOidcLogin} / {@link completeOidcLogin} core, so the two
+ * frameworks cannot drift on flow semantics or error mapping. See
+ * `oidcLoginHandlers` for the `returnTo` open-redirect caveat and the
+ * `onSuccess` session-establishment contract, which apply identically here.
+ *
+ * Unlike `axiamPlugin` this plugin is deliberately **encapsulated** (no
+ * `skip-override` marker): it registers routes rather than a hook, so there is
+ * nothing that needs to escape its own context.
+ *
+ * @example
+ * ```ts
+ * await fastify.register(oidcLoginPlugin({
+ *   client: oidc,
+ *   store: new MemoryOidcStateStore(),
+ *   redirectUri: 'https://app.example.com/auth/callback',
+ *   onSuccess: (tokens) => { myAppSession.establish(tokens.idClaims!.sub); },
+ * }));
+ * ```
+ */
+export const oidcLoginPlugin: (
+  options: OidcLoginOptions & OidcLoginRoutePaths,
+) => FastifyPluginAsync = (options) => {
+  const loginPath = options.loginPath ?? '/auth/login';
+  const callbackPath = options.callbackPath ?? '/auth/callback';
+
+  const plugin: FastifyPluginAsync = async (fastify) => {
+    fastify.get(loginPath, async (request: FastifyRequest, reply: FastifyReply) => {
+      const query = request.query as Record<string, unknown>;
+      const returnTo = typeof query.returnTo === 'string' ? query.returnTo : undefined;
+      await sendOidcOutcome(reply, await beginOidcLogin(options, returnTo));
+    });
+
+    fastify.get(callbackPath, async (request: FastifyRequest, reply: FastifyReply) => {
+      const query = request.query as Record<string, unknown>;
+      await sendOidcOutcome(
+        reply,
+        await completeOidcLogin(options, {
+          ...(typeof query.state === 'string' ? { state: query.state } : {}),
+          ...(typeof query.code === 'string' ? { code: query.code } : {}),
+          ...(typeof query.error === 'string' ? { error: query.error } : {}),
+          ...(typeof query.error_description === 'string'
+            ? { error_description: query.error_description }
+            : {}),
+        }),
+      );
+    });
+  };
+
+  (plugin as unknown as Record<symbol, unknown>)[Symbol.for('fastify.display-name')] =
+    'axiam-oidc-login';
+  return plugin;
+};

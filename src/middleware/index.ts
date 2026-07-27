@@ -6,6 +6,7 @@
 
 export {
   axiamMiddleware,
+  oidcLoginHandlers,
   requireAccess,
   requireAuth,
   requireRole,
@@ -13,18 +14,63 @@ export {
 } from './express.js';
 export {
   axiamPlugin,
+  oidcLoginPlugin,
   requireAccessHook,
   requireAuthHook,
   requireRoleHook,
   type AxiamFastifyRequest,
+  type OidcLoginRoutePaths,
   type PreHandlerHook,
 } from './fastify.js';
+// The §12 "Login with AXIAM" core both framework adapters above are built on.
+export {
+  beginOidcLogin,
+  completeOidcLogin,
+  type OidcCallbackQuery,
+  type OidcLoginOptions,
+  type OidcLoginOutcome,
+  type OidcLoginSuccessBody,
+} from './oidcLoginCore.js';
 export { authenticateRequest, type AxiamIdentity, type VerifiableSession } from './verifyCore.js';
 // Re-exported so the middleware entry point's own generated docs can resolve
 // `VerifiableSession.jwksVerifier`'s `Verifier` type (and the `AxiamClaims` it
 // returns) without a dangling cross-module link (`node/jwks.ts` is not itself
 // a TypeDoc entry point) — single source of truth stays node/jwks.ts.
 export type { Verifier, AxiamClaims } from '../node/jwks.js';
+// Same rationale for the §12 types the login glue's own signatures reference
+// (`OidcLoginOptions.client`/`.store`, `onSuccess`'s arguments): re-exported so
+// this entry point's generated docs resolve them without a dangling
+// cross-module link. Single source of truth stays under `src/node/`, and the
+// `axiam-sdk/node` subpath is where a consumer normally imports them from.
+export {
+  createOidcClient,
+  MIN_DISCOVERY_TTL_MS,
+  OidcClient,
+  type OidcClientOptions,
+} from '../node/oidc.js';
+export type {
+  AuthorizationRequest,
+  IntrospectParams,
+  IntrospectionResult,
+  LoginClientCredentialsParams,
+  OidcBeginParams,
+  OidcConfiguration,
+  OidcExchangeParams,
+  OidcRefreshParams,
+  OidcTokenSet,
+  RevokeParams,
+  SsoCompleteParams,
+  SsoCompleteResult,
+  SsoStartParams,
+  SsoStartResult,
+} from '../node/oidcTypes.js';
+export type { IdTokenClaims } from '../node/oidcIdToken.js';
+export {
+  MemoryOidcStateStore,
+  OIDC_STATE_TTL_MS,
+  type OidcStateEntry,
+  type OidcStateStore,
+} from '../node/oidcState.js';
 export {
   assertAuthzClient,
   evaluateAccess,

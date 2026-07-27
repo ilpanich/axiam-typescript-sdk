@@ -17,7 +17,8 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to CONTRACT.md §1–§11 (including §6.1 mTLS client certificates).
+This SDK conforms to CONTRACT.md §1–§12 (including §6.1 mTLS client certificates and the §12
+OIDC/SSO relying-party helpers).
 
 See [`CONTRACT.md`](./CONTRACT.md) for the full cross-language behavioral contract.
 
@@ -39,7 +40,8 @@ never contains `@grpc/grpc-js` or `amqplib`):
 | `axiam-sdk` / `axiam-sdk/rest` | Browser + Node, REST-only  | `AxiamClient`: `login`/`verifyMfa`/`refresh`/`logout`, `can`/`batchCheck` over the FND-04 REST authz endpoint |
 | `axiam-sdk/grpc`        | Node only                   | Everything in `/rest` plus `AuthzGrpcClient.checkAccess`/`batchCheck` and `UserInfoGrpcClient.getUserInfo` over gRPC, the Node persona (`createNodeSession`), and the local-JWKS verifier |
 | `axiam-sdk/amqp`        | Node only                   | `consume()` — HMAC-verified AMQP audit/authz event consumer (CONTRACT.md §8) |
-| `axiam-sdk/middleware`  | Node only                   | `axiamMiddleware` (Express) / `axiamPlugin` (Fastify) — shared local-JWKS verify core (CONTRACT.md §10) — plus `requireAuth`/`requireAccess`/`requireRole` declarative route guards (CONTRACT.md §11) |
+| `axiam-sdk/node`        | Node only                   | The Node persona (`createNodeSession`/`createNodeClient`, cookie jar + local-JWKS verifier) plus the **OIDC/SSO relying-party helpers** — `OidcClient`, `MemoryOidcStateStore`, PKCE primitives (CONTRACT.md §12) |
+| `axiam-sdk/middleware`  | Node only                   | `axiamMiddleware` (Express) / `axiamPlugin` (Fastify) — shared local-JWKS verify core (CONTRACT.md §10) — plus `requireAuth`/`requireAccess`/`requireRole` declarative route guards (CONTRACT.md §11) and the `oidcLoginHandlers`/`oidcLoginPlugin` "Login with AXIAM" routes (CONTRACT.md §12) |
 | `axiam-sdk/nestjs`      | Node only, optional         | `@RequireAccess`/`@RequireAuth`/`@RequireRole` metadata decorators + `AxiamGuard` (CONTRACT.md §11, Tier 2) |
 
 **Browser code should only ever import from `axiam-sdk` or `axiam-sdk/rest`.** Importing
@@ -343,10 +345,145 @@ See `examples/nestjs-app.ts` for a complete, compiling example (including the
 More runnable examples (all compiling under `tsc --noEmit -p examples/tsconfig.json`) live
 in `examples/` at the package root.
 
+## OIDC / SSO relying-party helpers (`axiam-sdk/node`, CONTRACT.md §12)
+
+Everything a backend needs to offer **"Login with AXIAM"** — authorization code + PKCE
+against AXIAM's own OIDC provider — plus service-account M2M login, token
+introspection/revocation, and the upstream-IdP federation endpoints. Node-only: PKCE uses
+`node:crypto` and ID-token validation uses `jose`, so these deliberately do not hang off the
+browser-safe `AxiamClient` (a `/rest` browser bundle stays free of Node code, proven by CI).
+
+```typescript
+import { createNodeSession, createOidcClient, MemoryOidcStateStore } from 'axiam-sdk/node';
+
+// One session carries the cookie jar (§4), TLS config (§6) and refresh guard (§9)
+// that the OIDC client reuses rather than duplicating.
+const session = createNodeSession({ baseUrl: 'https://iam.example.com', tenantId, orgId });
+
+const oidc = createOidcClient(session, {
+  clientId: 'my-web-app',
+  clientSecret: process.env.AXIAM_CLIENT_SECRET, // omit for a public client
+});
+```
+
+### The nine operations
+
+| Operation | Wire call | Notes |
+|-----------|-----------|-------|
+| `oidcDiscover()` | `GET /.well-known/openid-configuration` | Cached per origin, TTL ≥ 5 min, concurrent calls share one fetch |
+| `oidcBegin({ configuration, redirectUri, scope?, extraParams? })` | *none — pure local computation* | CSPRNG `state`/`nonce` (256-bit) + PKCE **S256** challenge; returns `{ url, state, nonce, codeVerifier }` |
+| `oidcExchange({ code, codeVerifier, nonce, redirectUri, tenantId?, configuration? })` | `POST /oauth2/token?tenant_id=…` | `grant_type=authorization_code`; validates the ID token in full before returning |
+| `oidcRefresh({ refreshToken, scope?, tenantId?, configuration? })` | `POST /oauth2/token?tenant_id=…` | `grant_type=refresh_token`, under the §9 single-flight guard. **Distinct from `AxiamClient.refresh()`**, which drives the cookie-session path |
+| `loginClientCredentials({ scope?, tenantId?, adoptAsCredential?, configuration? })` | `POST /oauth2/token?tenant_id=…` | Service-account M2M login; no `openid` scope, no ID token. `adoptAsCredential: true` uses the token as the session's bearer credential |
+| `introspect({ token, tokenTypeHint?, tenantId?, configuration? })` | `POST /oauth2/introspect?tenant_id=…` | RFC 7662; requires a `clientSecret` |
+| `revoke({ token, tokenTypeHint?, tenantId?, configuration? })` | `POST /oauth2/revoke?tenant_id=…` | RFC 7009; returns `void` and is **idempotent** — a `200` for an unknown token is success |
+| `ssoStart({ federationConfigId, redirectUri, tenantId?/tenantSlug?, orgId?/orgSlug? })` | `POST /api/v1/auth/federation/oidc/start` | Upstream-IdP SSO step 1; returns `{ authorizeUrl, state, expiresInSecs }` |
+| `ssoComplete({ state, code })` | `POST /api/v1/auth/federation/oidc/callback` | Step 2; the session arrives as `Set-Cookie`, so it needs the cookie-jar-backed Node session |
+
+Wire details worth knowing: the token/introspection/revocation endpoints are
+**form-encoded** (not JSON) and take `tenant_id` as a **required query parameter** in **UUID**
+form — a slug-only client raises `AuthError` client-side rather than sending a slug. Client
+authentication is `client_secret_post` (never HTTP Basic). Endpoint URLs always come from the
+discovery document, never hardcoded.
+
+### The caller owns the login state
+
+`oidcBegin` and `oidcExchange` store **nothing** — no `state`, `nonce` or `code_verifier` in
+the SDK, in process-global state, or in any implicit cache. You keep them (typically in your
+own HTTP session) and pass `nonce` + `codeVerifier` back into `oidcExchange`:
+
+```typescript
+// 1. login route
+const configuration = await oidc.oidcDiscover();
+const request = oidc.oidcBegin({ configuration, redirectUri, scope: 'openid profile email' });
+req.session.oidc = { state: request.state, nonce: request.nonce, verifier: request.codeVerifier };
+res.redirect(request.url);
+
+// 2. callback route — check the returned `state` matches, then exchange
+const tokens = await oidc.oidcExchange({
+  code: String(req.query.code),
+  codeVerifier: req.session.oidc.verifier,
+  nonce: req.session.oidc.nonce,
+  redirectUri,
+});
+console.log(tokens.idClaims?.sub);   // validated ID-token subject
+```
+
+`MemoryOidcStateStore` is an optional, opt-in reference store for that bookkeeping (10-minute
+TTL, single-use `consume(state)` — mirroring the server's own `federation_login_state`
+semantics). It is single-process; use a shared store (Redis, a database) behind a load
+balancer by implementing `OidcStateStore` yourself. The core operations never require one.
+
+### Framework glue
+
+```typescript
+import { oidcLoginHandlers } from 'axiam-sdk/middleware';
+
+const { login, callback } = oidcLoginHandlers({
+  client: oidc,
+  store: new MemoryOidcStateStore(),
+  redirectUri: 'https://app.example.com/auth/callback',
+  scope: 'openid profile email',
+  // Establishing YOUR app session is your decision — the SDK validates the login
+  // and hands you the token set.
+  onSuccess: (tokens) => establishMySession(String(tokens.idClaims?.sub)),
+});
+
+app.get('/auth/login', login);       // 302 -> AXIAM /oauth2/authorize
+app.get('/auth/callback', callback); // consume state -> exchange -> validate ID token
+```
+
+Fastify gets the same flow as a plugin: `fastify.register(oidcLoginPlugin({ …, loginPath,
+callbackPath }))`. Both are thin adapters over the shared `beginOidcLogin`/`completeOidcLogin`
+core, so they cannot drift. Failure mapping is identical: `400` malformed callback, `401`
+authentication failure (unknown/expired/replayed state, IdP error, ID-token failure, OAuth2
+protocol error), `503` when AXIAM is unreachable — never a silent success.
+
+The login handler reads an optional `?returnTo=` and stores it with the login state.
+**Validate or allowlist that value in your application** if you accept it from user input —
+an unchecked redirect target is an open-redirect vector, and the SDK cannot know which
+destinations your app considers safe.
+
+### ID-token validation (always on)
+
+Every ID token is validated before `oidcExchange` returns, per CONTRACT.md §12.4:
+`alg` must be exactly `EdDSA` (`none` and everything else rejected, checked from the header
+*before* any signature work); the Ed25519 signature must verify against the key selected by
+`kid` from the document's `jwks_uri` (one JWKS re-fetch on an unknown `kid`, then fail);
+`iss` must equal the discovery document's `issuer` by exact string comparison; `aud` must
+contain the `client_id` (with `azp` required when there are multiple audiences); `exp`/`iat`/
+`nbf` must hold within at most 60 s of clock skew; and the `nonce` claim must match the
+`oidcBegin` nonce (constant-time). Any failure raises `AuthError` with a stable
+`reason` code — `invalid_alg`, `unknown_kid`, `invalid_signature`, `invalid_issuer`,
+`invalid_audience`, `token_expired`, `nonce_mismatch` — and **discards the entire token set**;
+the access and refresh tokens from that response never reach the caller. There is no option
+to disable or skip this.
+
+```typescript
+try {
+  const tokens = await oidc.oidcExchange({ code, codeVerifier, nonce, redirectUri });
+} catch (err) {
+  if (err instanceof OAuthProtocolError) {
+    console.error(err.error, err.errorDescription);   // e.g. "invalid_grant", "code expired"
+  } else if (err instanceof AuthError) {
+    console.error(err.reason);                        // e.g. "nonce_mismatch"
+  }
+}
+```
+
+`access_token`, `refresh_token`, `id_token`, `client_secret` and `code_verifier` are all
+`Sensitive<T>` (CONTRACT.md §12.5) — they redact to `[SENSITIVE]` in `toString()`,
+`JSON.stringify()` and `console.log`. `state` and `nonce` are not secrets and stay plain
+strings.
+
+See `examples/express-oidc-login.ts` for a complete, runnable example.
+
 ## Error handling
 
-Every persona throws exactly the three CONTRACT.md §2 error types — `AuthError`,
-`AuthzError`, `NetworkError`:
+Every persona throws the three CONTRACT.md §2 error types — `AuthError`, `AuthzError`,
+`NetworkError` — plus one `AuthError` **sub-type**, `OAuthProtocolError`, for RFC 6749
+protocol errors from `/oauth2/*` (its `message` is always `"<error>: <error_description>"`,
+and `instanceof AuthError` still matches it):
 
 ```typescript
 import { AuthError, AuthzError, NetworkError } from 'axiam-sdk';
@@ -362,6 +499,17 @@ try {
     // transport-level failure
   }
 }
+
+// OAuth2 protocol errors are AuthError sub-types (CONTRACT.md §2, §12.3 rule 3)
+import { OAuthProtocolError } from 'axiam-sdk';
+
+try {
+  await oidc.oidcRefresh({ refreshToken });
+} catch (err) {
+  if (err instanceof OAuthProtocolError && err.error === 'invalid_grant') {
+    // the refresh token was revoked or already used — re-authenticate
+  }
+}
 ```
 
 ## Security notes
@@ -375,6 +523,9 @@ try {
   presented on both REST and gRPC without ever relaxing server verification (CONTRACT.md §6.1).
 - AMQP messages are HMAC-SHA256 verified before your handler ever sees them; verification
   failures are nacked without requeue (CONTRACT.md §8).
+- The OIDC relying-party flow is PKCE **S256**-only (`plain` is not implemented), ID tokens are
+  `EdDSA`-only and validated on every exchange with no opt-out, and login state
+  (`state`/`nonce`/`code_verifier`) is never stored inside the SDK (CONTRACT.md §12).
 
 ## Release / versioning
 
