@@ -22,3 +22,18 @@ export type {
 // since it's SDK-internal cross-transport wiring, not something consumers
 // invoke directly).
 export type { AxiamClientOptions } from '../core/index.js';
+// The CONTRACT.md §2 error taxonomy every persona throws, plus the §7/§12.5
+// redaction wrapper the token-carrying result types use. Exported from the
+// root/`/rest` entry so `catch (e) { e instanceof AuthError }` works for
+// consumers of any subpath (they all funnel through these classes) — including
+// the §12 `OAuthProtocolError` sub-type, whose `error`/`error_description`
+// fields §12.3 rule 3 requires to be publicly accessible.
+export {
+  AuthError,
+  AuthzError,
+  AxiamError,
+  NetworkError,
+  OAuthProtocolError,
+  Sensitive,
+  type IdTokenFailureReason,
+} from '../core/index.js';

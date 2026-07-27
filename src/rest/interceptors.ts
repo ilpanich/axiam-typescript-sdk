@@ -9,11 +9,27 @@ import { csrfHeaderForMethod, mapHttpStatusToError } from '../core/index.js';
 import type { SharedSession } from './session.js';
 
 /**
- * Endpoints that must never trigger a silent refresh, to avoid infinite
- * refresh loops (§9.3): the refresh endpoint itself, plus login/logout which
- * are not authenticated-session-continuation calls.
+ * Endpoints that must never trigger a silent refresh (§9.3, §12.3 rule 3).
+ *
+ * Two groups:
+ * - the refresh endpoint itself plus login/logout — not
+ *   authenticated-session-continuation calls, so refreshing would only build
+ *   an infinite loop;
+ * - the `/oauth2/*` endpoints — they authenticate the *client* with
+ *   `client_id`/`client_secret`, not the user session. A `401` there is a
+ *   client-credential failure, not a session expiry, so retrying after a
+ *   session refresh cannot help and MUST NOT enter the §9 guard
+ *   (CONTRACT.md §12.3 rule 3). `oidcRefresh` reaches the §9 guard through
+ *   its own explicit call path instead (`OidcClient.oidcRefresh`).
  */
-export const SKIP_REFRESH = ['/api/v1/auth/refresh', '/api/v1/auth/login', '/api/v1/auth/logout'];
+export const SKIP_REFRESH = [
+  '/api/v1/auth/refresh',
+  '/api/v1/auth/login',
+  '/api/v1/auth/logout',
+  '/oauth2/token',
+  '/oauth2/introspect',
+  '/oauth2/revoke',
+];
 
 type RetryableRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
@@ -88,7 +104,17 @@ export function installRefreshInterceptor(axiosInstance: AxiosInstance, session:
       }
 
       if (status === 401 && isSkipRefresh) {
-        return Promise.reject(mapHttpStatusToError(401, 'authentication failed'));
+        // url + body are forwarded so the mapper can apply the
+        // endpoint-qualified §2 row: a 401 from /oauth2/introspect or
+        // /oauth2/revoke carrying an OAuth2ErrorResponse body becomes an
+        // OAuthProtocolError rather than a bare AuthError (§12.3 rule 3).
+        return Promise.reject(
+          mapHttpStatusToError(401, 'authentication failed', {
+            url,
+            body: error.response.data,
+            cause: error,
+          }),
+        );
       }
 
       return Promise.reject(error);
