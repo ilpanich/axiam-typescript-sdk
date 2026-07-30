@@ -1,0 +1,78 @@
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>oidcLoginHandlers | AXIAM TypeScript SDK</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK</a>
+<div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
+<ul role="listbox" id="tsd-search-results"></ul>
+<div id="tsd-search-status" aria-live="polite" aria-atomic="true">
+<div>Preparing search index...</div></div></dialog><a href="#" class="tsd-widget menu" id="tsd-toolbar-menu-trigger" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-menu"></use></svg></a></div></header>
+<div class="container container-main">
+<div class="col-content">
+<div class="tsd-page-title">
+<ul class="tsd-breadcrumb" aria-label="Breadcrumb">
+<li><a href="../modules/middleware.html">middleware</a></li>
+<li><a href="" aria-current="page">oidcLoginHandlers</a></li></ul>
+<h1>Function oidcLoginHandlers</h1></div>
+<section class="tsd-panel">
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="oidcloginhandlers"><span class="tsd-kind-call-signature">oidcLoginHandlers</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/middleware.OidcLoginOptions.html" class="tsd-signature-type tsd-kind-interface">OidcLoginOptions</a><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">callback</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">RequestHandler</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">login</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">RequestHandler</span> <span class="tsd-signature-symbol">}</span><a href="#oidcloginhandlers" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p><code>oidcLoginHandlers(options)</code> (<a href="http://CONTRACT.md">CONTRACT.md</a> §12) — the two Express route
+handlers an application needs for &quot;Login with AXIAM&quot;: a <code>login</code> handler that
+redirects the browser to AXIAM's authorization endpoint, and a <code>callback</code>
+handler that consumes the returned <code>state</code>, exchanges the code, and
+validates the ID token.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">options</span>: <a href="../interfaces/middleware.OidcLoginOptions.html" class="tsd-signature-type tsd-kind-interface">OidcLoginOptions</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">callback</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">RequestHandler</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">login</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">RequestHandler</span> <span class="tsd-signature-symbol">}</span></h4>
+<ul class="tsd-parameters">
+<li class="tsd-parameter">
+<h5><span class="tsd-kind-property">callback</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">RequestHandler</span></h5>
+<div class="tsd-comment tsd-typography"><p><code>GET</code> handler for the redirect URI: consumes <code>state</code>, exchanges <code>code</code>, validates the ID token.</p>
+</div></li>
+<li class="tsd-parameter">
+<h5><span class="tsd-kind-property">login</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">RequestHandler</span></h5>
+<div class="tsd-comment tsd-typography"><p><code>GET</code> handler that redirects the browser to the AXIAM authorization endpoint.</p>
+</div></li></ul>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-remarks">
+<h4 class="tsd-anchor-link" id="remarks">Remarks<a href="#remarks" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Both handlers are thin adapters over <a href="middleware.beginOidcLogin.html" class="tsd-kind-function">beginOidcLogin</a> /
+<a href="middleware.completeOidcLogin.html" class="tsd-kind-function">completeOidcLogin</a>, which the Fastify variant
+(<code>oidcLoginPlugin</code>) also uses — so the two frameworks cannot drift on flow
+semantics or error mapping.</p>
+<p>The <code>login</code> handler reads an optional <code>?returnTo=</code> query parameter and
+stores it with the login state, so the callback can send the user back where
+they started. <strong>Validate or allowlist that value in your own application if
+you accept it from user input</strong> — an unchecked <code>returnTo</code> is an open-redirect
+vector, and the SDK cannot know which destinations your app considers safe.</p>
+<p>Establishing your application's own session is the <code>onSuccess</code> hook's job:
+the SDK validates the login and hands you the token set, but what a session
+means (a signed cookie, a database row, a JWT of your own) is your decision.</p>
+</div>
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="ts"><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">store</span><span class="hl-1"> = </span><span class="hl-5">new</span><span class="hl-1"> </span><span class="hl-0">MemoryOidcStateStore</span><span class="hl-1">();</span><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">oidc</span><span class="hl-1"> = </span><span class="hl-0">createOidcClient</span><span class="hl-1">(</span><span class="hl-4">session</span><span class="hl-1">, { </span><span class="hl-4">clientId</span><span class="hl-1">, </span><span class="hl-4">clientSecret</span><span class="hl-1"> });</span><br/><span class="hl-5">const</span><span class="hl-1"> { </span><span class="hl-6">login</span><span class="hl-1">, </span><span class="hl-6">callback</span><span class="hl-1"> } = </span><span class="hl-0">oidcLoginHandlers</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-4">client:</span><span class="hl-1"> </span><span class="hl-4">oidc</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">store</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">redirectUri:</span><span class="hl-1"> </span><span class="hl-2">&#39;https://app.example.com/auth/callback&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">scope:</span><span class="hl-1"> </span><span class="hl-2">&#39;openid profile email&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-0">onSuccess</span><span class="hl-4">:</span><span class="hl-1"> (</span><span class="hl-4">tokens</span><span class="hl-1">) </span><span class="hl-5">=&gt;</span><span class="hl-1"> { </span><span class="hl-4">myAppSession</span><span class="hl-1">.</span><span class="hl-0">establish</span><span class="hl-1">(</span><span class="hl-4">tokens</span><span class="hl-1">.</span><span class="hl-4">idClaims</span><span class="hl-1">!.</span><span class="hl-4">sub</span><span class="hl-1">); },</span><br/><span class="hl-1">});</span><br/><br/><span class="hl-4">app</span><span class="hl-1">.</span><span class="hl-0">get</span><span class="hl-1">(</span><span class="hl-2">&#39;/auth/login&#39;</span><span class="hl-1">, </span><span class="hl-4">login</span><span class="hl-1">);</span><br/><span class="hl-4">app</span><span class="hl-1">.</span><span class="hl-0">get</span><span class="hl-1">(</span><span class="hl-2">&#39;/auth/callback&#39;</span><span class="hl-1">, </span><span class="hl-4">callback</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+</div></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0d7f707e910dca0f2b9f975512b72ab82d85ac27/src/middleware/express.ts#L263">src/middleware/express.ts:263</a></li></ul></aside></div></li></ul></section></div>
+<div class="col-sidebar">
+<div class="page-menu">
+<div class="tsd-navigation settings">
+<details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>Settings</h3></summary>
+<div class="tsd-accordion-details">
+<div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span>
+<ul id="tsd-filter-options">
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></div>
+<div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div></div>
+<div class="site-menu">
+<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK</a>
+<ul class="tsd-small-nested-navigation" id="tsd-nav-container">
+<li>Loading...</li></ul></nav></div></div></div><footer>
+<p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>
+<div class="overlay"></div></body></html>

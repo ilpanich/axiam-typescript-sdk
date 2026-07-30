@@ -12,12 +12,22 @@
 <li><a href="" aria-current="page">SKIP_REFRESH</a></li></ul>
 <h1>Variable SKIP_REFRESH<code class="tsd-tag">Const</code></h1></div>
 <div class="tsd-signature"><span class="tsd-kind-variable">SKIP_REFRESH</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol"> = ...</span></div>
-<div class="tsd-comment tsd-typography"><p>Endpoints that must never trigger a silent refresh, to avoid infinite
-refresh loops (§9.3): the refresh endpoint itself, plus login/logout which
-are not authenticated-session-continuation calls.</p>
+<div class="tsd-comment tsd-typography"><p>Endpoints that must never trigger a silent refresh (§9.3, §12.3 rule 3).</p>
+<p>Two groups:</p>
+<ul>
+<li>the refresh endpoint itself plus login/logout — not
+authenticated-session-continuation calls, so refreshing would only build
+an infinite loop;</li>
+<li>the <code>/oauth2/*</code> endpoints — they authenticate the <em>client</em> with
+<code>client_id</code>/<code>client_secret</code>, not the user session. A <code>401</code> there is a
+client-credential failure, not a session expiry, so retrying after a
+session refresh cannot help and MUST NOT enter the §9 guard
+(<a href="http://CONTRACT.md">CONTRACT.md</a> §12.3 rule 3). <code>oidcRefresh</code> reaches the §9 guard through
+its own explicit call path instead (<code>OidcClient.oidcRefresh</code>).</li>
+</ul>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/785b19f7738129dbc7b0e1bc6076cbcfe642a705/src/rest/interceptors.ts#L16">src/rest/interceptors.ts:16</a></li></ul></aside></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0d7f707e910dca0f2b9f975512b72ab82d85ac27/src/rest/interceptors.ts#L25">src/rest/interceptors.ts:25</a></li></ul></aside></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

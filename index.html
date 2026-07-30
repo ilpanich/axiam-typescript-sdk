@@ -23,7 +23,8 @@
 <li><strong>License:</strong> Apache-2.0</li>
 </ul>
 <h2 id="contract-conformance" class="tsd-anchor-link">Contract conformance<a href="#contract-conformance" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
-<p>This SDK conforms to <a href="http://CONTRACT.md">CONTRACT.md</a> §1–§11 (including §6.1 mTLS client certificates).</p>
+<p>This SDK conforms to <a href="http://CONTRACT.md">CONTRACT.md</a> §1–§12 (including §6.1 mTLS client certificates and the §12
+OIDC/SSO relying-party helpers).</p>
 <p>See <a href="media/CONTRACT.md"><code>CONTRACT.md</code></a> for the full cross-language behavioral contract.</p>
 <h2 id="install" class="tsd-anchor-link">Install<a href="#install" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <pre><code class="bash"><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">install</span><span class="hl-1"> </span><span class="hl-2">axiam-sdk</span>
@@ -59,9 +60,14 @@ never contains <code>@grpc/grpc-js</code> or <code>amqplib</code>):</p>
 <td><code>consume()</code> — HMAC-verified AMQP audit/authz event consumer (<a href="http://CONTRACT.md">CONTRACT.md</a> §8)</td>
 </tr>
 <tr>
+<td><code>axiam-sdk/node</code></td>
+<td>Node only</td>
+<td>The Node persona (<code>createNodeSession</code>/<code>createNodeClient</code>, cookie jar + local-JWKS verifier) plus the <strong>OIDC/SSO relying-party helpers</strong> — <code>OidcClient</code>, <code>MemoryOidcStateStore</code>, PKCE primitives (<a href="http://CONTRACT.md">CONTRACT.md</a> §12)</td>
+</tr>
+<tr>
 <td><code>axiam-sdk/middleware</code></td>
 <td>Node only</td>
-<td><code>axiamMiddleware</code> (Express) / <code>axiamPlugin</code> (Fastify) — shared local-JWKS verify core (<a href="http://CONTRACT.md">CONTRACT.md</a> §10) — plus <code>requireAuth</code>/<code>requireAccess</code>/<code>requireRole</code> declarative route guards (<a href="http://CONTRACT.md">CONTRACT.md</a> §11)</td>
+<td><code>axiamMiddleware</code> (Express) / <code>axiamPlugin</code> (Fastify) — shared local-JWKS verify core (<a href="http://CONTRACT.md">CONTRACT.md</a> §10) — plus <code>requireAuth</code>/<code>requireAccess</code>/<code>requireRole</code> declarative route guards (<a href="http://CONTRACT.md">CONTRACT.md</a> §11) and the <code>oidcLoginHandlers</code>/<code>oidcLoginPlugin</code> &quot;Login with AXIAM&quot; routes (<a href="http://CONTRACT.md">CONTRACT.md</a> §12)</td>
 </tr>
 <tr>
 <td><code>axiam-sdk/nestjs</code></td>
@@ -175,10 +181,127 @@ Express or Fastify) so <code>request.axiamUser</code> is already set:</p>
 <code>axiamMiddleware</code> wiring <code>AxiamGuard</code> depends on).</p>
 <p>More runnable examples (all compiling under <code>tsc --noEmit -p examples/tsconfig.json</code>) live
 in <code>examples/</code> at the package root.</p>
+<h2 id="oidc-sso-relying-party-helpers--contractmd-§12" class="tsd-anchor-link">OIDC / SSO relying-party helpers (<code>axiam-sdk/node</code>, <a href="http://CONTRACT.md">CONTRACT.md</a> §12)<a href="#oidc-sso-relying-party-helpers--contractmd-§12" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Everything a backend needs to offer <strong>&quot;Login with AXIAM&quot;</strong> — authorization code + PKCE
+against AXIAM's own OIDC provider — plus service-account M2M login, token
+introspection/revocation, and the upstream-IdP federation endpoints. Node-only: PKCE uses
+<code>node:crypto</code> and ID-token validation uses <code>jose</code>, so these deliberately do not hang off the
+browser-safe <code>AxiamClient</code> (a <code>/rest</code> browser bundle stays free of Node code, proven by CI).</p>
+<pre><code class="typescript"><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">createNodeSession</span><span class="hl-1">, </span><span class="hl-4">createOidcClient</span><span class="hl-1">, </span><span class="hl-4">MemoryOidcStateStore</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;axiam-sdk/node&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-7">// One session carries the cookie jar (§4), TLS config (§6) and refresh guard (§9)</span><br/><span class="hl-7">// that the OIDC client reuses rather than duplicating.</span><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">session</span><span class="hl-1"> = </span><span class="hl-0">createNodeSession</span><span class="hl-1">({ </span><span class="hl-4">baseUrl:</span><span class="hl-1"> </span><span class="hl-2">&#39;https://iam.example.com&#39;</span><span class="hl-1">, </span><span class="hl-4">tenantId</span><span class="hl-1">, </span><span class="hl-4">orgId</span><span class="hl-1"> });</span><br/><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">oidc</span><span class="hl-1"> = </span><span class="hl-0">createOidcClient</span><span class="hl-1">(</span><span class="hl-4">session</span><span class="hl-1">, {</span><br/><span class="hl-1">  </span><span class="hl-4">clientId:</span><span class="hl-1"> </span><span class="hl-2">&#39;my-web-app&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">clientSecret:</span><span class="hl-1"> </span><span class="hl-4">process</span><span class="hl-1">.</span><span class="hl-4">env</span><span class="hl-1">.</span><span class="hl-6">AXIAM_CLIENT_SECRET</span><span class="hl-1">, </span><span class="hl-7">// omit for a public client</span><br/><span class="hl-1">});</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="the-nine-operations" class="tsd-anchor-link">The nine operations<a href="#the-nine-operations" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Wire call</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>oidcDiscover()</code></td>
+<td><code>GET /.well-known/openid-configuration</code></td>
+<td>Cached per origin, TTL ≥ 5 min, concurrent calls share one fetch</td>
+</tr>
+<tr>
+<td><code>oidcBegin({ configuration, redirectUri, scope?, extraParams? })</code></td>
+<td><em>none — pure local computation</em></td>
+<td>CSPRNG <code>state</code>/<code>nonce</code> (256-bit) + PKCE <strong>S256</strong> challenge; returns <code>{ url, state, nonce, codeVerifier }</code></td>
+</tr>
+<tr>
+<td><code>oidcExchange({ code, codeVerifier, nonce, redirectUri, tenantId?, configuration? })</code></td>
+<td><code>POST /oauth2/token?tenant_id=…</code></td>
+<td><code>grant_type=authorization_code</code>; validates the ID token in full before returning</td>
+</tr>
+<tr>
+<td><code>oidcRefresh({ refreshToken, scope?, tenantId?, configuration? })</code></td>
+<td><code>POST /oauth2/token?tenant_id=…</code></td>
+<td><code>grant_type=refresh_token</code>, under the §9 single-flight guard. <strong>Distinct from <code>AxiamClient.refresh()</code></strong>, which drives the cookie-session path</td>
+</tr>
+<tr>
+<td><code>loginClientCredentials({ scope?, tenantId?, adoptAsCredential?, configuration? })</code></td>
+<td><code>POST /oauth2/token?tenant_id=…</code></td>
+<td>Service-account M2M login; no <code>openid</code> scope, no ID token. <code>adoptAsCredential: true</code> uses the token as the session's bearer credential</td>
+</tr>
+<tr>
+<td><code>introspect({ token, tokenTypeHint?, tenantId?, configuration? })</code></td>
+<td><code>POST /oauth2/introspect?tenant_id=…</code></td>
+<td>RFC 7662; requires a <code>clientSecret</code></td>
+</tr>
+<tr>
+<td><code>revoke({ token, tokenTypeHint?, tenantId?, configuration? })</code></td>
+<td><code>POST /oauth2/revoke?tenant_id=…</code></td>
+<td>RFC 7009; returns <code>void</code> and is <strong>idempotent</strong> — a <code>200</code> for an unknown token is success</td>
+</tr>
+<tr>
+<td><code>ssoStart({ federationConfigId, redirectUri, tenantId?/tenantSlug?, orgId?/orgSlug? })</code></td>
+<td><code>POST /api/v1/auth/federation/oidc/start</code></td>
+<td>Upstream-IdP SSO step 1; returns <code>{ authorizeUrl, state, expiresInSecs }</code></td>
+</tr>
+<tr>
+<td><code>ssoComplete({ state, code })</code></td>
+<td><code>POST /api/v1/auth/federation/oidc/callback</code></td>
+<td>Step 2; the session arrives as <code>Set-Cookie</code>, so it needs the cookie-jar-backed Node session</td>
+</tr>
+</tbody>
+</table>
+<p>Wire details worth knowing: the token/introspection/revocation endpoints are
+<strong>form-encoded</strong> (not JSON) and take <code>tenant_id</code> as a <strong>required query parameter</strong> in <strong>UUID</strong>
+form — a slug-only client raises <code>AuthError</code> client-side rather than sending a slug. Client
+authentication is <code>client_secret_post</code> (never HTTP Basic). Endpoint URLs always come from the
+discovery document, never hardcoded.</p>
+<h3 id="the-caller-owns-the-login-state" class="tsd-anchor-link">The caller owns the login state<a href="#the-caller-owns-the-login-state" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p><code>oidcBegin</code> and <code>oidcExchange</code> store <strong>nothing</strong> — no <code>state</code>, <code>nonce</code> or <code>code_verifier</code> in
+the SDK, in process-global state, or in any implicit cache. You keep them (typically in your
+own HTTP session) and pass <code>nonce</code> + <code>codeVerifier</code> back into <code>oidcExchange</code>:</p>
+<pre><code class="typescript"><span class="hl-7">// 1. login route</span><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">configuration</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">oidc</span><span class="hl-1">.</span><span class="hl-0">oidcDiscover</span><span class="hl-1">();</span><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">request</span><span class="hl-1"> = </span><span class="hl-4">oidc</span><span class="hl-1">.</span><span class="hl-0">oidcBegin</span><span class="hl-1">({ </span><span class="hl-4">configuration</span><span class="hl-1">, </span><span class="hl-4">redirectUri</span><span class="hl-1">, </span><span class="hl-4">scope:</span><span class="hl-1"> </span><span class="hl-2">&#39;openid profile email&#39;</span><span class="hl-1"> });</span><br/><span class="hl-4">req</span><span class="hl-1">.</span><span class="hl-4">session</span><span class="hl-1">.</span><span class="hl-4">oidc</span><span class="hl-1"> = { </span><span class="hl-4">state:</span><span class="hl-1"> </span><span class="hl-4">request</span><span class="hl-1">.</span><span class="hl-4">state</span><span class="hl-1">, </span><span class="hl-4">nonce:</span><span class="hl-1"> </span><span class="hl-4">request</span><span class="hl-1">.</span><span class="hl-4">nonce</span><span class="hl-1">, </span><span class="hl-4">verifier:</span><span class="hl-1"> </span><span class="hl-4">request</span><span class="hl-1">.</span><span class="hl-4">codeVerifier</span><span class="hl-1"> };</span><br/><span class="hl-4">res</span><span class="hl-1">.</span><span class="hl-0">redirect</span><span class="hl-1">(</span><span class="hl-4">request</span><span class="hl-1">.</span><span class="hl-4">url</span><span class="hl-1">);</span><br/><br/><span class="hl-7">// 2. callback route — check the returned `state` matches, then exchange</span><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">tokens</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">oidc</span><span class="hl-1">.</span><span class="hl-0">oidcExchange</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-4">code:</span><span class="hl-1"> </span><span class="hl-0">String</span><span class="hl-1">(</span><span class="hl-4">req</span><span class="hl-1">.</span><span class="hl-4">query</span><span class="hl-1">.</span><span class="hl-4">code</span><span class="hl-1">),</span><br/><span class="hl-1">  </span><span class="hl-4">codeVerifier:</span><span class="hl-1"> </span><span class="hl-4">req</span><span class="hl-1">.</span><span class="hl-4">session</span><span class="hl-1">.</span><span class="hl-4">oidc</span><span class="hl-1">.</span><span class="hl-4">verifier</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">nonce:</span><span class="hl-1"> </span><span class="hl-4">req</span><span class="hl-1">.</span><span class="hl-4">session</span><span class="hl-1">.</span><span class="hl-4">oidc</span><span class="hl-1">.</span><span class="hl-4">nonce</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">redirectUri</span><span class="hl-1">,</span><br/><span class="hl-1">});</span><br/><span class="hl-4">console</span><span class="hl-1">.</span><span class="hl-0">log</span><span class="hl-1">(</span><span class="hl-4">tokens</span><span class="hl-1">.</span><span class="hl-4">idClaims</span><span class="hl-1">?.</span><span class="hl-4">sub</span><span class="hl-1">);   </span><span class="hl-7">// validated ID-token subject</span>
+</code><button type="button">Copy</button></pre>
+
+<p><code>MemoryOidcStateStore</code> is an optional, opt-in reference store for that bookkeeping (10-minute
+TTL, single-use <code>consume(state)</code> — mirroring the server's own <code>federation_login_state</code>
+semantics). It is single-process; use a shared store (Redis, a database) behind a load
+balancer by implementing <code>OidcStateStore</code> yourself. The core operations never require one.</p>
+<h3 id="framework-glue" class="tsd-anchor-link">Framework glue<a href="#framework-glue" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<pre><code class="typescript"><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">oidcLoginHandlers</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;axiam-sdk/middleware&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-5">const</span><span class="hl-1"> { </span><span class="hl-6">login</span><span class="hl-1">, </span><span class="hl-6">callback</span><span class="hl-1"> } = </span><span class="hl-0">oidcLoginHandlers</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-4">client:</span><span class="hl-1"> </span><span class="hl-4">oidc</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">store:</span><span class="hl-1"> </span><span class="hl-5">new</span><span class="hl-1"> </span><span class="hl-0">MemoryOidcStateStore</span><span class="hl-1">(),</span><br/><span class="hl-1">  </span><span class="hl-4">redirectUri:</span><span class="hl-1"> </span><span class="hl-2">&#39;https://app.example.com/auth/callback&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">scope:</span><span class="hl-1"> </span><span class="hl-2">&#39;openid profile email&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-7">// Establishing YOUR app session is your decision — the SDK validates the login</span><br/><span class="hl-1">  </span><span class="hl-7">// and hands you the token set.</span><br/><span class="hl-1">  </span><span class="hl-0">onSuccess</span><span class="hl-4">:</span><span class="hl-1"> (</span><span class="hl-4">tokens</span><span class="hl-1">) </span><span class="hl-5">=&gt;</span><span class="hl-1"> </span><span class="hl-0">establishMySession</span><span class="hl-1">(</span><span class="hl-0">String</span><span class="hl-1">(</span><span class="hl-4">tokens</span><span class="hl-1">.</span><span class="hl-4">idClaims</span><span class="hl-1">?.</span><span class="hl-4">sub</span><span class="hl-1">)),</span><br/><span class="hl-1">});</span><br/><br/><span class="hl-4">app</span><span class="hl-1">.</span><span class="hl-0">get</span><span class="hl-1">(</span><span class="hl-2">&#39;/auth/login&#39;</span><span class="hl-1">, </span><span class="hl-4">login</span><span class="hl-1">);       </span><span class="hl-7">// 302 -&gt; AXIAM /oauth2/authorize</span><br/><span class="hl-4">app</span><span class="hl-1">.</span><span class="hl-0">get</span><span class="hl-1">(</span><span class="hl-2">&#39;/auth/callback&#39;</span><span class="hl-1">, </span><span class="hl-4">callback</span><span class="hl-1">); </span><span class="hl-7">// consume state -&gt; exchange -&gt; validate ID token</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Fastify gets the same flow as a plugin: <code>fastify.register(oidcLoginPlugin({ …, loginPath, callbackPath }))</code>. Both are thin adapters over the shared <code>beginOidcLogin</code>/<code>completeOidcLogin</code>
+core, so they cannot drift. Failure mapping is identical: <code>400</code> malformed callback, <code>401</code>
+authentication failure (unknown/expired/replayed state, IdP error, ID-token failure, OAuth2
+protocol error), <code>503</code> when AXIAM is unreachable — never a silent success.</p>
+<p>The login handler reads an optional <code>?returnTo=</code> and stores it with the login state.
+<strong>Validate or allowlist that value in your application</strong> if you accept it from user input —
+an unchecked redirect target is an open-redirect vector, and the SDK cannot know which
+destinations your app considers safe.</p>
+<h3 id="id-token-validation-always-on" class="tsd-anchor-link">ID-token validation (always on)<a href="#id-token-validation-always-on" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>Every ID token is validated before <code>oidcExchange</code> returns, per <a href="http://CONTRACT.md">CONTRACT.md</a> §12.4:
+<code>alg</code> must be exactly <code>EdDSA</code> (<code>none</code> and everything else rejected, checked from the header
+<em>before</em> any signature work); the Ed25519 signature must verify against the key selected by
+<code>kid</code> from the document's <code>jwks_uri</code> (one JWKS re-fetch on an unknown <code>kid</code>, then fail);
+<code>iss</code> must equal the discovery document's <code>issuer</code> by exact string comparison; <code>aud</code> must
+contain the <code>client_id</code> (with <code>azp</code> required when there are multiple audiences); <code>exp</code>/<code>iat</code>/
+<code>nbf</code> must hold within at most 60 s of clock skew; and the <code>nonce</code> claim must match the
+<code>oidcBegin</code> nonce (constant-time). Any failure raises <code>AuthError</code> with a stable
+<code>reason</code> code — <code>invalid_alg</code>, <code>unknown_kid</code>, <code>invalid_signature</code>, <code>invalid_issuer</code>,
+<code>invalid_audience</code>, <code>token_expired</code>, <code>nonce_mismatch</code> — and <strong>discards the entire token set</strong>;
+the access and refresh tokens from that response never reach the caller. There is no option
+to disable or skip this.</p>
+<pre><code class="typescript"><span class="hl-3">try</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">tokens</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">oidc</span><span class="hl-1">.</span><span class="hl-0">oidcExchange</span><span class="hl-1">({ </span><span class="hl-4">code</span><span class="hl-1">, </span><span class="hl-4">codeVerifier</span><span class="hl-1">, </span><span class="hl-4">nonce</span><span class="hl-1">, </span><span class="hl-4">redirectUri</span><span class="hl-1"> });</span><br/><span class="hl-1">} </span><span class="hl-3">catch</span><span class="hl-1"> (</span><span class="hl-4">err</span><span class="hl-1">) {</span><br/><span class="hl-1">  </span><span class="hl-3">if</span><span class="hl-1"> (</span><span class="hl-4">err</span><span class="hl-1"> </span><span class="hl-5">instanceof</span><span class="hl-1"> </span><span class="hl-9">OAuthProtocolError</span><span class="hl-1">) {</span><br/><span class="hl-1">    </span><span class="hl-4">console</span><span class="hl-1">.</span><span class="hl-0">error</span><span class="hl-1">(</span><span class="hl-4">err</span><span class="hl-1">.</span><span class="hl-4">error</span><span class="hl-1">, </span><span class="hl-4">err</span><span class="hl-1">.</span><span class="hl-4">errorDescription</span><span class="hl-1">);   </span><span class="hl-7">// e.g. &quot;invalid_grant&quot;, &quot;code expired&quot;</span><br/><span class="hl-1">  } </span><span class="hl-3">else</span><span class="hl-1"> </span><span class="hl-3">if</span><span class="hl-1"> (</span><span class="hl-4">err</span><span class="hl-1"> </span><span class="hl-5">instanceof</span><span class="hl-1"> </span><span class="hl-9">AuthError</span><span class="hl-1">) {</span><br/><span class="hl-1">    </span><span class="hl-4">console</span><span class="hl-1">.</span><span class="hl-0">error</span><span class="hl-1">(</span><span class="hl-4">err</span><span class="hl-1">.</span><span class="hl-4">reason</span><span class="hl-1">);                        </span><span class="hl-7">// e.g. &quot;nonce_mismatch&quot;</span><br/><span class="hl-1">  }</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<p><code>access_token</code>, <code>refresh_token</code>, <code>id_token</code>, <code>client_secret</code> and <code>code_verifier</code> are all
+<code>Sensitive&lt;T&gt;</code> (<a href="http://CONTRACT.md">CONTRACT.md</a> §12.5) — they redact to <code>[SENSITIVE]</code> in <code>toString()</code>,
+<code>JSON.stringify()</code> and <code>console.log</code>. <code>state</code> and <code>nonce</code> are not secrets and stay plain
+strings.</p>
+<p>See <code>examples/express-oidc-login.ts</code> for a complete, runnable example.</p>
 <h2 id="error-handling" class="tsd-anchor-link">Error handling<a href="#error-handling" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
-<p>Every persona throws exactly the three <a href="http://CONTRACT.md">CONTRACT.md</a> §2 error types — <code>AuthError</code>,
-<code>AuthzError</code>, <code>NetworkError</code>:</p>
-<pre><code class="typescript"><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">AuthError</span><span class="hl-1">, </span><span class="hl-4">AuthzError</span><span class="hl-1">, </span><span class="hl-4">NetworkError</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;axiam-sdk&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-3">try</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-0">can</span><span class="hl-1">(</span><span class="hl-2">&#39;read&#39;</span><span class="hl-1">, </span><span class="hl-2">&#39;doc:1&#39;</span><span class="hl-1">);</span><br/><span class="hl-1">} </span><span class="hl-3">catch</span><span class="hl-1"> (</span><span class="hl-4">err</span><span class="hl-1">) {</span><br/><span class="hl-1">  </span><span class="hl-3">if</span><span class="hl-1"> (</span><span class="hl-4">err</span><span class="hl-1"> </span><span class="hl-5">instanceof</span><span class="hl-1"> </span><span class="hl-9">AuthError</span><span class="hl-1">) {</span><br/><span class="hl-1">    </span><span class="hl-7">// re-authenticate</span><br/><span class="hl-1">  } </span><span class="hl-3">else</span><span class="hl-1"> </span><span class="hl-3">if</span><span class="hl-1"> (</span><span class="hl-4">err</span><span class="hl-1"> </span><span class="hl-5">instanceof</span><span class="hl-1"> </span><span class="hl-9">AuthzError</span><span class="hl-1">) {</span><br/><span class="hl-1">    </span><span class="hl-7">// caller lacks permission</span><br/><span class="hl-1">  } </span><span class="hl-3">else</span><span class="hl-1"> </span><span class="hl-3">if</span><span class="hl-1"> (</span><span class="hl-4">err</span><span class="hl-1"> </span><span class="hl-5">instanceof</span><span class="hl-1"> </span><span class="hl-9">NetworkError</span><span class="hl-1">) {</span><br/><span class="hl-1">    </span><span class="hl-7">// transport-level failure</span><br/><span class="hl-1">  }</span><br/><span class="hl-1">}</span>
+<p>Every persona throws the three <a href="http://CONTRACT.md">CONTRACT.md</a> §2 error types — <code>AuthError</code>, <code>AuthzError</code>,
+<code>NetworkError</code> — plus one <code>AuthError</code> <strong>sub-type</strong>, <code>OAuthProtocolError</code>, for RFC 6749
+protocol errors from <code>/oauth2/*</code> (its <code>message</code> is always <code>&quot;&lt;error&gt;: &lt;error_description&gt;&quot;</code>,
+and <code>instanceof AuthError</code> still matches it):</p>
+<pre><code class="typescript"><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">AuthError</span><span class="hl-1">, </span><span class="hl-4">AuthzError</span><span class="hl-1">, </span><span class="hl-4">NetworkError</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;axiam-sdk&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-3">try</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-0">can</span><span class="hl-1">(</span><span class="hl-2">&#39;read&#39;</span><span class="hl-1">, </span><span class="hl-2">&#39;doc:1&#39;</span><span class="hl-1">);</span><br/><span class="hl-1">} </span><span class="hl-3">catch</span><span class="hl-1"> (</span><span class="hl-4">err</span><span class="hl-1">) {</span><br/><span class="hl-1">  </span><span class="hl-3">if</span><span class="hl-1"> (</span><span class="hl-4">err</span><span class="hl-1"> </span><span class="hl-5">instanceof</span><span class="hl-1"> </span><span class="hl-9">AuthError</span><span class="hl-1">) {</span><br/><span class="hl-1">    </span><span class="hl-7">// re-authenticate</span><br/><span class="hl-1">  } </span><span class="hl-3">else</span><span class="hl-1"> </span><span class="hl-3">if</span><span class="hl-1"> (</span><span class="hl-4">err</span><span class="hl-1"> </span><span class="hl-5">instanceof</span><span class="hl-1"> </span><span class="hl-9">AuthzError</span><span class="hl-1">) {</span><br/><span class="hl-1">    </span><span class="hl-7">// caller lacks permission</span><br/><span class="hl-1">  } </span><span class="hl-3">else</span><span class="hl-1"> </span><span class="hl-3">if</span><span class="hl-1"> (</span><span class="hl-4">err</span><span class="hl-1"> </span><span class="hl-5">instanceof</span><span class="hl-1"> </span><span class="hl-9">NetworkError</span><span class="hl-1">) {</span><br/><span class="hl-1">    </span><span class="hl-7">// transport-level failure</span><br/><span class="hl-1">  }</span><br/><span class="hl-1">}</span><br/><br/><span class="hl-7">// OAuth2 protocol errors are AuthError sub-types (CONTRACT.md §2, §12.3 rule 3)</span><br/><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">OAuthProtocolError</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;axiam-sdk&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-3">try</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">oidc</span><span class="hl-1">.</span><span class="hl-0">oidcRefresh</span><span class="hl-1">({ </span><span class="hl-4">refreshToken</span><span class="hl-1"> });</span><br/><span class="hl-1">} </span><span class="hl-3">catch</span><span class="hl-1"> (</span><span class="hl-4">err</span><span class="hl-1">) {</span><br/><span class="hl-1">  </span><span class="hl-3">if</span><span class="hl-1"> (</span><span class="hl-4">err</span><span class="hl-1"> </span><span class="hl-5">instanceof</span><span class="hl-1"> </span><span class="hl-9">OAuthProtocolError</span><span class="hl-1"> &amp;&amp; </span><span class="hl-4">err</span><span class="hl-1">.</span><span class="hl-4">error</span><span class="hl-1"> === </span><span class="hl-2">&#39;invalid_grant&#39;</span><span class="hl-1">) {</span><br/><span class="hl-1">    </span><span class="hl-7">// the refresh token was revoked or already used — re-authenticate</span><br/><span class="hl-1">  }</span><br/><span class="hl-1">}</span>
 </code><button type="button">Copy</button></pre>
 
 <h2 id="security-notes" class="tsd-anchor-link">Security notes<a href="#security-notes" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
@@ -192,6 +315,9 @@ constructor's <code>customCa</code> option for self-signed development environme
 presented on both REST and gRPC without ever relaxing server verification (<a href="http://CONTRACT.md">CONTRACT.md</a> §6.1).</li>
 <li>AMQP messages are HMAC-SHA256 verified before your handler ever sees them; verification
 failures are nacked without requeue (<a href="http://CONTRACT.md">CONTRACT.md</a> §8).</li>
+<li>The OIDC relying-party flow is PKCE <strong>S256</strong>-only (<code>plain</code> is not implemented), ID tokens are
+<code>EdDSA</code>-only and validated on every exchange with no opt-out, and login state
+(<code>state</code>/<code>nonce</code>/<code>code_verifier</code>) is never stored inside the SDK (<a href="http://CONTRACT.md">CONTRACT.md</a> §12).</li>
 </ul>
 <h2 id="release-versioning" class="tsd-anchor-link">Release / versioning<a href="#release-versioning" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>Tagged releases follow the plain <code>vX.Y.Z</code> convention (e.g. <code>v1.0.0</code>). CI runs the full
@@ -249,6 +375,13 @@ the TypeDoc API reference to this repo's GitHub Pages site.</p>
 <li>
 <ul>
 <li><a href="#nestjs-optional"><span>Nest<wbr/>JS (, optional)</span></a></li></ul></li></ul></li>
+<li><a href="#oidc-sso-relying-party-helpers--contractmd-§12"><span>OIDC / <wbr/>SSO relying-<wbr/>party helpers (, <wbr/>CONTRACT.md §12)</span></a></li>
+<li>
+<ul>
+<li><a href="#the-nine-operations"><span>The nine operations</span></a></li>
+<li><a href="#the-caller-owns-the-login-state"><span>The caller owns the login state</span></a></li>
+<li><a href="#framework-glue"><span>Framework glue</span></a></li>
+<li><a href="#id-token-validation-always-on"><span>ID-<wbr/>token validation (always on)</span></a></li></ul></li>
 <li><a href="#error-handling"><span>Error handling</span></a></li>
 <li><a href="#security-notes"><span>Security notes</span></a></li>
 <li><a href="#release-versioning"><span>Release / versioning</span></a></li>
