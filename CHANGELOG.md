@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-alpha21] - 2026-07-30
+
+### Added
+
+- Add OIDC/SSO relying-party helpers (CONTRACT §12)
+
+### Changed
+
+- Re-sync vendored CONTRACT.md to contract 1.6
+- Add regression coverage for CSRF resync after refresh (05b9b8f)
+- Bump bufbuild/buf-action from 1.4.0 to 1.5.0
+- Bump coverallsapp/github-action from 2.3.6 to 2.3.8
+- Bump jsdom from 29.1.1 to 30.0.0
+- Bump the minor-patch group with 2 updates
+- Re-sync vendored CONTRACT.md to contract 1.5
+
+### Fixed
+
+- Resync CSRF token after refresh, both explicit and reactive (H8 SDK bench)
+
 ## [1.0.0-alpha19] - 2026-07-25
 
 ### Changed
