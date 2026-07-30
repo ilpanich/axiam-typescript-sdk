@@ -90,6 +90,12 @@ export function installRefreshInterceptor(axiosInstance: AxiosInstance, session:
         try {
           await session.refreshGuard(async () => {
             await session.axios.post('/api/v1/auth/refresh', session.buildRefreshBody());
+            // H8 fix: resync the Node persona's cached access token + CSRF
+            // token after a reactive refresh too — see the matching fix
+            // and comment on rest/auth.ts's explicit refresh(). Without
+            // this the replayed request below (and every request after it)
+            // echoes a stale X-CSRF-Token and 403s.
+            await session.onAuthenticated?.();
           });
           return axiosInstance(originalRequest);
         } catch (refreshError) {

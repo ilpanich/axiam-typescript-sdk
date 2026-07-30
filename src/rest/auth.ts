@@ -124,6 +124,19 @@ export async function verifyMfa(client: AxiamClient, mfaToken: string, code: str
 export async function refresh(client: AxiamClient): Promise<void> {
   try {
     await client.session.axios.post<RefreshSuccessResponseWire>(REFRESH_PATH, client.session.buildRefreshBody());
+    // H8 fix (SDK bench harness validation): a successful refresh rotates
+    // the `axiam_csrf` cookie (new random token, CONTRACT.md §3) the same
+    // way login does, but — unlike login/verifyMfa just below, which both
+    // call `onAuthenticated?.()` — this path never resynced the Node
+    // persona's in-memory `session.csrfToken` (only NodeSession.doRefresh
+    // did that, and doRefresh is wired to gRPC's callWithRefresh only, never
+    // to this REST path). Every REST call after the FIRST refresh() then
+    // echoed a now-stale X-CSRF-Token and failed with 403 "CSRF validation
+    // failed" — refresh() effectively broke the session after one use.
+    // `onAuthenticated` is exactly the right hook to reuse: same
+    // access/csrf resync as login, it's a no-op on the browser persona
+    // (undefined there), and Node's implementation is idempotent.
+    await client.session.onAuthenticated?.();
   } catch (err) {
     const status = extractAxiosStatus(err);
     if (status !== undefined) {
