@@ -15,7 +15,7 @@
 
 import type { CookieJar } from 'tough-cookie';
 import type { AxiamClientOptions } from '../core/index.js';
-import { createSession, SharedSession } from '../rest/session.js';
+import { createSession, resolveNodeTlsOptions, SharedSession } from '../rest/session.js';
 import { AxiamClient } from '../rest/client.js';
 import { CSRF_COOKIE, createJar, extractCookieValue, wrapAxios } from './cookieJar.js';
 import { TokenManager } from './tokenManager.js';
@@ -105,7 +105,11 @@ export class NodeSession extends SharedSession {
 export function createNodeSession(options: AxiamClientOptions): NodeSession {
   const base = createSession(options);
   const jar = createJar();
-  wrapAxios(base.axios, jar);
+  // Hand the §6/§6.1 TLS material to the jar-aware agent. createSession's own
+  // `https.Agent` is unusable here — a cookie agent must own the socket — so
+  // this is the ONLY place a customCa or client certificate reaches the wire
+  // under the Node persona. See wrapAxios' doc comment.
+  wrapAxios(base.axios, jar, resolveNodeTlsOptions(options));
 
   const tokenManager = new TokenManager(jar, options.baseUrl, base.tenantHeaderValue);
   const jwksVerifier = createVerifier(options.baseUrl);

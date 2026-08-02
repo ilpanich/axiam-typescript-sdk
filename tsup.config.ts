@@ -36,7 +36,12 @@ export default defineConfig({
     'axios',
     'jose',
     'tough-cookie',
-    'axios-cookiejar-support',
+    // The Node persona builds its jar-aware agents from this package directly
+    // (see src/node/cookieJar.ts) instead of going through
+    // axios-cookiejar-support's wrapper, whose interceptor rejects any
+    // externally-supplied http(s).Agent and so made customCa/clientCert
+    // unusable under createNodeClient.
+    'http-cookie-agent',
     'express',
     'fastify',
     '@nestjs/common',

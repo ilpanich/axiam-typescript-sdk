@@ -19,6 +19,7 @@ import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AxiamClient } from '../../src/rest/client.js';
+import { createNodeClient } from '../../src/node/session.js';
 import { NetworkError } from '../../src/core/index.js';
 
 interface Pki {
@@ -141,5 +142,64 @@ describe('mutual TLS end-to-end (§6.1, Node only)', () => {
     await expect(client.login('device-1@axiam.test', 'irrelevant')).rejects.toBeInstanceOf(
       NetworkError,
     );
+  });
+
+  // The two cases above exercise the BROWSER persona (`new AxiamClient(...)`,
+  // no cookie jar) — which is not the persona anyone actually uses under Node,
+  // and not the one that was broken. `createNodeClient` swaps in a jar-aware
+  // agent, and until this was fixed that swap either threw
+  // ("axios-cookiejar-support does not support for use with other
+  // http(s).Agent") or silently discarded the TLS material, so customCa and
+  // §6.1 client certificates were unusable in the Node persona while these
+  // browser-persona tests stayed green. Cover the persona that ships.
+  it('the NODE persona presents its certificate and completes the request (200)', async () => {
+    const client = createNodeClient({
+      baseUrl,
+      tenantSlug: 'acme',
+      customCa: pki.caCert,
+      clientCert: pki.clientCert,
+      clientKey: pki.clientKey,
+    });
+
+    const result = await client.login('device-1@axiam.test', 'irrelevant');
+    expect(result.status).toBe('authenticated');
+  });
+
+  it('the NODE persona WITHOUT a client certificate fails the handshake', async () => {
+    const client = createNodeClient({
+      baseUrl,
+      tenantSlug: 'acme',
+      customCa: pki.caCert,
+      // no clientCert/clientKey — the server requires one
+    });
+
+    await expect(client.login('device-1@axiam.test', 'irrelevant')).rejects.toBeInstanceOf(
+      NetworkError,
+    );
+  });
+
+  it('the NODE persona still trusts customCa alone when the server asks for no cert', async () => {
+    // Guards the other half of the same fix: customCa (§6, no client identity)
+    // has to survive the jar-aware agent swap too.
+    const plainServer = createServer(
+      { key: pki.serverKey, cert: pki.serverCert },
+      (_req, res) => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(LOGIN_SUCCESS_BODY);
+      },
+    );
+    await new Promise<void>((resolve) => plainServer.listen(0, '127.0.0.1', resolve));
+    const port = (plainServer.address() as AddressInfo).port;
+    try {
+      const client = createNodeClient({
+        baseUrl: `https://127.0.0.1:${port}`,
+        tenantSlug: 'acme',
+        customCa: pki.caCert,
+      });
+      const result = await client.login('device-1@axiam.test', 'irrelevant');
+      expect(result.status).toBe('authenticated');
+    } finally {
+      plainServer.close();
+    }
   });
 });
