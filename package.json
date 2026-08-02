@@ -115,7 +115,7 @@
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.4",
-    "amqplib": "^2.0.1",
+    "amqplib": "^0.10.9",
     "axios": "^1.18.1",
     "http-cookie-agent": "^8.0.0",
     "jose": "^6.2.3",
