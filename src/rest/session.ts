@@ -192,10 +192,65 @@ export function resolveTenantHeaderValue(options: AxiamClientOptions): string {
  * exposed from its {@link ClientIdentity} `Sensitive` wrapper only here, at the
  * point of handing it to the TLS stack, and is not retained anywhere else.
  */
-function maybeBuildHttpsAgent(
+function loadNodeHttps(): typeof import('node:https') {
+  // Node >= 20.16 / >= 22.3: `process.getBuiltinModule` loads a builtin
+  // SYNCHRONOUSLY with no module system involved — no `import`, no `require`,
+  // nothing for a bundler to rewrite. That is the whole point here: this file
+  // is shared with the browser-safe `.`/`/rest` entries, so it must never
+  // statically reference a Node builtin, yet the Node persona needs one
+  // synchronously (buildSession is called from a constructor).
+  //
+  // The previous `require('node:https')` satisfied the first constraint but
+  // not the second: tsup rewrites a bare `require` in ESM output into a shim
+  // that throws `Dynamic require of "https" is not supported`, so under
+  // genuine Node ESM — which is what `axiam-sdk/node`'s `import` condition
+  // resolves to — EVERY call needing customCa or a client certificate failed
+  // before the TLS handshake. It is reached off `process`, which the caller
+  // has already capability-guarded, so a browser bundle never evaluates it.
+  const getBuiltinModule = (
+    process as unknown as { getBuiltinModule?: (id: string) => unknown }
+  ).getBuiltinModule;
+  if (typeof getBuiltinModule === 'function') {
+    return getBuiltinModule.call(process, 'node:https') as typeof import('node:https');
+  }
+  // Older Node (the package still declares engines.node >= 18). `require` is
+  // real in the CJS build, so this keeps working there; in the ESM build it is
+  // the throwing shim, and the catch turns that into an error that says what
+  // to actually do instead of leaking a bundler implementation detail.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('node:https') as typeof import('node:https');
+  } catch {
+    throw new Error(
+      `customCa and clientCert require Node's https module, which this ESM build cannot load on Node ${process.version}: ` +
+        'process.getBuiltinModule is unavailable (added in Node 20.16 / 22.3) and `require` does not exist in an ES module. ' +
+        'Upgrade Node to >= 20.16, or load the CommonJS build (CONTRACT.md §6 / §6.1).',
+    );
+  }
+}
+
+export interface NodeTlsOptions {
+  /** §6 server-trust PEM bundle. */
+  ca?: string;
+  /** §6.1 client-certificate chain (PEM). */
+  cert?: string;
+  /** §6.1 private key (PEM). Secret material — never logged or retained. */
+  key?: string;
+}
+
+/**
+ * The TLS material for a Node agent, or `undefined` when there is nothing to
+ * configure. `rejectUnauthorized` is deliberately absent: strict server
+ * verification stays at its secure default and this object never carries a
+ * TLS-bypass switch (§6).
+ *
+ * Split out from {@link maybeBuildHttpsAgent} because the Node persona cannot
+ * use a plain `https.Agent` at all — see {@link resolveNodeTlsOptions}.
+ */
+function tlsOptionsFrom(
   customCa: string | undefined,
   identity: ClientIdentity | undefined,
-): unknown {
+): NodeTlsOptions | undefined {
   if (!customCa) {
     // Still short-circuit only when there is nothing to configure at all.
     if (!identity) {
@@ -206,20 +261,50 @@ function maybeBuildHttpsAgent(
       'customCa must be a PEM-encoded certificate (expected to contain "-----BEGIN CERTIFICATE-----") (CONTRACT.md §6).',
     );
   }
+  return {
+    ...(customCa ? { ca: customCa } : {}),
+    ...(identity ? { cert: identity.cert, key: identity.key.expose() } : {}),
+  };
+}
+
+/**
+ * Re-derive the Node TLS options from client options, for a persona that must
+ * build its own agent rather than use the one {@link createSession} attaches.
+ *
+ * The Node persona is exactly that case. `axios-cookiejar-support`'s request
+ * interceptor THROWS ("does not support for use with other http(s).Agent")
+ * when it finds an `httpsAgent` it did not create, and otherwise overwrites
+ * the agent with a bare `HttpsCookieAgent` — so under `createNodeClient` a
+ * customCa or client certificate was either fatal or silently discarded,
+ * independently of the ESM/require problem in {@link loadNodeHttps}. The Node
+ * persona therefore constructs ONE agent that is both jar-aware and
+ * TLS-configured (see `src/node/cookieJar.ts`), using these options.
+ *
+ * Not exported from the package barrel: the returned object holds the private
+ * key (§6.1 rule 3 / §7), and its only legitimate consumer is the agent
+ * construction inside this SDK.
+ */
+export function resolveNodeTlsOptions(options: AxiamClientOptions): NodeTlsOptions | undefined {
+  return tlsOptionsFrom(options.customCa, resolveClientIdentity(options));
+}
+
+function maybeBuildHttpsAgent(
+  customCa: string | undefined,
+  identity: ClientIdentity | undefined,
+): unknown {
+  const tls = tlsOptionsFrom(customCa, identity);
+  if (!tls) {
+    return undefined;
+  }
   if (typeof process === 'undefined') {
     // Browser: platform manages TLS; customCa and the client cert have no
     // effect there (a browser cannot present a client certificate from JS).
     return undefined;
   }
-  // Node capability guard — require lazily so this branch never executes
-  // (and never needs to resolve) in a browser bundle.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const https = require('node:https') as typeof import('node:https');
-  return new https.Agent({
-    ...(customCa ? { ca: customCa } : {}),
-    // rejectUnauthorized is intentionally left at its secure default (true).
-    ...(identity ? { cert: identity.cert, key: identity.key.expose() } : {}),
-  });
+  // Node capability guard — resolved lazily (see loadNodeHttps) so this
+  // branch never executes, and never needs to resolve, in a browser bundle.
+  const https = loadNodeHttps();
+  return new https.Agent(tls);
 }
 
 /** Build the axios instance + SharedSession for an AxiamClient (D-13/D-25). */

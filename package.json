@@ -117,7 +117,7 @@
     "@grpc/grpc-js": "^1.14.4",
     "amqplib": "^2.0.1",
     "axios": "^1.18.1",
-    "axios-cookiejar-support": "^7.0.0",
+    "http-cookie-agent": "^8.0.0",
     "jose": "^6.2.3",
     "tough-cookie": "^6.0.2"
   },

@@ -11,8 +11,9 @@
 // Rust SDK (the Rust SDK's src/token/manager.rs).
 
 import { CookieJar } from 'tough-cookie';
-import { wrapper } from 'axios-cookiejar-support';
+import { HttpCookieAgent, HttpsCookieAgent } from 'http-cookie-agent/http';
 import type { AxiosInstance } from 'axios';
+import type { NodeTlsOptions } from '../rest/session.js';
 
 /** The `axiam_access` cookie name (httpOnly, path `/`). */
 export const ACCESS_COOKIE = 'axiam_access';
@@ -27,15 +28,50 @@ export function createJar(): CookieJar {
 }
 
 /**
- * Wrap an axios instance with `axios-cookiejar-support` so the jar persists
+ * Attach jar-aware agents to an axios instance so the jar persists
  * `Set-Cookie` responses across requests and replays them on subsequent
  * requests to the same origin/path (§4). Mutates and returns the same
- * instance (matches `axios-cookiejar-support`'s documented in-place wrap).
+ * instance.
+ *
+ * The agents are constructed HERE rather than via `axios-cookiejar-support`'s
+ * `wrapper()`, which used to do it. That wrapper is a thin convenience layer:
+ * all cookie handling lives in `http-cookie-agent`'s agents, which it builds
+ * for you inside a request interceptor — and that interceptor is hostile to
+ * any other agent. It THROWS
+ *
+ *     axios-cookiejar-support does not support for use with other http(s).Agent.
+ *
+ * when it finds an `httpsAgent` it did not create, and otherwise replaces it.
+ * Since `createSession` attaches an `https.Agent` whenever `customCa` or a
+ * §6.1 client certificate is configured, the Node persona could never use
+ * either: with TLS material configured every request threw, and there was no
+ * seam to pass CA/cert/key through the wrapper's own agent construction.
+ *
+ * Building the agent ourselves closes that: ONE `HttpsCookieAgent` that is
+ * both jar-aware and TLS-configured. Cookie behaviour is unchanged — it is
+ * the same agent class the wrapper was constructing, just with the TLS
+ * options merged in.
+ *
+ * @param tls §6/§6.1 TLS material, or undefined for the default trust store.
+ *            Never carries `rejectUnauthorized`: strict server verification
+ *            is not negotiable (§6).
  */
-export function wrapAxios(instance: AxiosInstance, jar: CookieJar): AxiosInstance {
-  const wrapped = wrapper(instance);
-  wrapped.defaults.jar = jar;
-  return wrapped;
+export function wrapAxios(
+  instance: AxiosInstance,
+  jar: CookieJar,
+  tls?: NodeTlsOptions,
+): AxiosInstance {
+  // `http-cookie-agent`'s .d.ts resolves tough-cookie through the CJS
+  // condition while this file resolves it through the ESM one, so TypeScript
+  // sees two structurally identical CookieJar declarations with separate
+  // private fields and refuses the assignment. It is the same class at
+  // runtime (one tough-cookie install, one instance). Narrow the cast to the
+  // jar itself rather than loosening either signature.
+  type AgentCookieOptions = NonNullable<ConstructorParameters<typeof HttpCookieAgent>[0]['cookies']>;
+  const cookies = { jar } as unknown as AgentCookieOptions;
+  instance.defaults.httpAgent = new HttpCookieAgent({ cookies });
+  instance.defaults.httpsAgent = new HttpsCookieAgent({ cookies, ...(tls ?? {}) });
+  return instance;
 }
 
 /**
