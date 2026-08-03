@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Slug-vs-UUID tenant comparand now diagnoses itself (§13.4 observation 6).**
+  AXIAM access tokens carry the tenant **UUID** in `tenant_id`, but this SDK's
+  client is commonly configured with a tenant **slug**. A guard handed that slug
+  rejects 100% of traffic — fail-closed and safe, but it presents as "every token
+  is invalid" with nothing pointing at the cause. `assertTenantClaim` now emits a
+  single `console.warn` naming the real problem. It fires **once per process**,
+  only when the configured value is not UUID-shaped while the claim is, and
+  strictly *after* the rejection is decided — so it cannot be used as a log-flood
+  lever and does not alter the verification outcome. A genuine cross-tenant
+  rejection (UUID vs UUID) stays silent.
+
 ### Security — BREAKING
 
 - **The §10 route guard now applies the complete CONTRACT §10.1 "minimum

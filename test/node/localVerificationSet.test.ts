@@ -12,9 +12,14 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { exportJWK, generateKeyPair, SignJWT, type JWTPayload } from 'jose';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AuthError } from '../../src/core/index.js';
-import { CLOCK_SKEW_LEEWAY_SEC, createVerifier, JWKS_PATH } from '../../src/node/jwks.js';
+import {
+  CLOCK_SKEW_LEEWAY_SEC,
+  createVerifier,
+  JWKS_PATH,
+  resetTenantComparandWarningForTests,
+} from '../../src/node/jwks.js';
 import { authenticateRequest, type VerifiableSession } from '../../src/middleware/verifyCore.js';
 
 const BASE_URL = 'https://axiam-101.test';
@@ -275,3 +280,86 @@ describe('CONTRACT.md §10.1 minimum local-verification set', () => {
     });
   });
 });
+
+// §13.4 observation 6 — slug-vs-UUID tenant comparand.
+//
+// AXIAM tokens carry the tenant UUID in `tenant_id`, but this SDK's client is
+// commonly configured with a tenant slug. A guard handed that slug rejects 100%
+// of traffic — fail-closed and safe, but it presents as "every token is
+// invalid" with nothing pointing at the cause.
+describe('§13.4 observation 6 — slug-vs-UUID comparand diagnostic', () => {
+  const UUID_TENANT = '11111111-2222-3333-4444-555555555555';
+
+  beforeEach(() => resetTenantComparandWarningForTests());
+
+  /** Capture `console.warn` for the duration of `body`. */
+  async function warningsFrom(body: () => Promise<void>): Promise<string[]> {
+    const seen: string[] = [];
+    const original = console.warn;
+    console.warn = (...args: unknown[]) => void seen.push(args.map(String).join(' '));
+    try {
+      await body();
+    } finally {
+      console.warn = original;
+    }
+    return seen;
+  }
+
+  it('names the actual cause when the guard is configured with a slug', async () => {
+    const key = await serveJwks();
+    const token = await sign(key, { ...goodPayload(), tenant_id: UUID_TENANT });
+
+    const warnings = await warningsFrom(async () => {
+      await expect(
+        authenticateRequest(session({ tenantHeaderValue: 'acme-tenant' }), token),
+      ).rejects.toBeInstanceOf(AuthError);
+    });
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('acme-tenant');
+    expect(warnings[0]).toContain('not a UUID');
+  });
+
+  it('warns once per process, so bad tokens are not a log-flood lever', async () => {
+    const key = await serveJwks();
+    const token = await sign(key, { ...goodPayload(), tenant_id: UUID_TENANT });
+    const s = session({ tenantHeaderValue: 'acme-tenant' });
+
+    const warnings = await warningsFrom(async () => {
+      for (let i = 0; i < 5; i += 1) {
+        await expect(authenticateRequest(s, token)).rejects.toBeInstanceOf(AuthError);
+      }
+    });
+
+    expect(warnings).toHaveLength(1);
+  });
+
+  it('stays silent on a genuine cross-tenant rejection', async () => {
+    const key = await serveJwks();
+    const token = await sign(key, { ...goodPayload(), tenant_id: UUID_TENANT });
+
+    const warnings = await warningsFrom(async () => {
+      await expect(
+        authenticateRequest(
+          session({ tenantHeaderValue: '99999999-8888-7777-6666-555555555555' }),
+          token,
+        ),
+      ).rejects.toBeInstanceOf(AuthError);
+    });
+
+    expect(warnings).toEqual([]);
+  });
+
+  it('does not change the verification outcome', async () => {
+    const key = await serveJwks();
+    const token = await sign(key, { ...goodPayload(), tenant_id: UUID_TENANT });
+
+    const warnings = await warningsFrom(async () => {
+      const claims = await authenticateRequest(session({ tenantHeaderValue: UUID_TENANT }), token);
+      expect(claims.tenantId).toBe(UUID_TENANT);
+    });
+
+    expect(warnings).toEqual([]);
+  });
+});
+

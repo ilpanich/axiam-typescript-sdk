@@ -353,8 +353,58 @@ export function assertTenantClaim(claim: unknown, expected: string | undefined):
     throw new AuthError('invalid tenant_id claim');
   }
   if (claim !== expected) {
+    warnOnceIfComparandLooksLikeASlug(claim, expected);
     throw new AuthError('token tenant_id does not match configured tenant');
   }
+}
+
+/** Canonical 8-4-4-4-12 hex UUID shape. Shape only — no version/variant check. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Latches {@link warnOnceIfComparandLooksLikeASlug} to one emission per process. */
+let slugComparandWarned = false;
+
+/**
+ * Test seam: reset the once-per-process latch so each test observes its own
+ * behaviour rather than a previous test's.
+ *
+ * @internal
+ */
+export function resetTenantComparandWarningForTests(): void {
+  slugComparandWarned = false;
+}
+
+/**
+ * Name the slug-vs-UUID misconfiguration explicitly (§13.4 observation 6).
+ *
+ * AXIAM access tokens carry the tenant **UUID** in `tenant_id`, but this SDK's
+ * client is commonly configured with a tenant **slug**. A guard handed that slug
+ * rejects 100% of traffic — fail-closed and safe, but it presents as "every
+ * token is invalid" with nothing pointing at the cause, which is a miserable
+ * thing to debug.
+ *
+ * Deliberately: emitted **once per process**, so it is a configuration
+ * diagnostic and not a log-flood sink an attacker can drive with bad tokens;
+ * keyed on the **shape of the operator-configured value**, never on anything a
+ * caller supplies, so it cannot be triggered on demand; and emitted **after**
+ * the rejection is decided, so it only ever explains a failure and the
+ * verification outcome is byte-for-byte unchanged.
+ *
+ * A UUID-vs-UUID mismatch is a genuine cross-tenant rejection and stays silent.
+ */
+function warnOnceIfComparandLooksLikeASlug(claim: string, expected: string): void {
+  if (slugComparandWarned) return;
+  if (!UUID_RE.test(claim) || UUID_RE.test(expected)) return;
+
+  slugComparandWarned = true;
+  // eslint-disable-next-line no-console
+  console.warn(
+    `AXIAM: the tenant this guard was configured with ("${expected}") is not a UUID, ` +
+      'but access tokens carry the tenant UUID in their `tenant_id` claim, so this guard ' +
+      'will reject every request. Configure it with the tenant UUID, not the slug. ' +
+      '(CONTRACT.md §10.1 rule 4; logged once per process, and it does not affect the ' +
+      'rejection itself.)',
+  );
 }
 
 /**
