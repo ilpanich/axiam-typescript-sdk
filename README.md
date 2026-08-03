@@ -17,8 +17,8 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to CONTRACT.md §1–§12 (including §6.1 mTLS client certificates and the §12
-OIDC/SSO relying-party helpers).
+This SDK conforms to CONTRACT.md §1–§13 (including §6.1 mTLS client certificates, the §12
+OIDC/SSO relying-party helpers, and the §13 `verifyWebhook` signature verifier).
 
 See [`CONTRACT.md`](./CONTRACT.md) for the full cross-language behavioral contract.
 
@@ -477,6 +477,68 @@ try {
 strings.
 
 See `examples/express-oidc-login.ts` for a complete, runnable example.
+
+## Webhook signature verification (`axiam-sdk/node`, CONTRACT.md §13)
+
+AXIAM signs every webhook delivery with a Stripe-style signed timestamp:
+
+```
+X-Axiam-Signature: t=<unix_seconds>,v1=<hex_lowercase_hmac>
+```
+
+where `v1 = HMAC-SHA256(secret_utf8_bytes, "<timestamp>.<raw_body>")`. `verifyWebhook`
+recomputes and checks that signature — in constant time, with a two-sided freshness window —
+so integrators never hand-roll (or skip) the comparison.
+
+```typescript
+import { verifyWebhook, WebhookVerifyError, Sensitive } from 'axiam-sdk/node';
+
+const secret = new Sensitive(process.env.AXIAM_WEBHOOK_SECRET!);
+
+try {
+  const { event, id } = verifyWebhook(secret, req.header('X-Axiam-Signature')!, req.rawBody);
+  // `event`/`id` come from the verified body's own `event`/`id` fields; `X-Axiam-Delivery`
+  // is the at-least-once dedup key — keep a short-lived seen-set, since a retry replays a
+  // validly-signed request inside the freshness window.
+  console.log('verified webhook:', event, id);
+} catch (err) {
+  if (err instanceof WebhookVerifyError) {
+    res.status(400).end();   // err.reason is a stable code; err.message never
+                              // contains the secret or the expected signature
+  }
+}
+```
+
+**The raw body is load-bearing.** `verifyWebhook` MUST receive the *exact* bytes AXIAM sent —
+`Buffer`, `Uint8Array`, or the identical raw string — never a `JSON.stringify` of the parsed
+body. Re-serializing changes key order/whitespace and silently breaks the MAC; this is the
+single most common integration mistake. Most JSON body-parsing middleware discards the raw
+bytes by default, so capture them explicitly on the webhook route. With Express,
+`express.json()` alone does **not** keep them — use its `verify` callback, or mount
+`express.raw({ type: 'application/json' })` on that one route instead:
+
+```typescript
+import express from 'express';
+
+app.post(
+  '/webhooks/axiam',
+  express.json({
+    verify: (req, _res, buf) => {
+      (req as express.Request & { rawBody: Buffer }).rawBody = buf;
+    },
+  }),
+  (req, res) => {
+    const { rawBody } = req as express.Request & { rawBody: Buffer };
+    const event = verifyWebhook(secret, req.header('X-Axiam-Signature')!, rawBody);
+    // ...
+  },
+);
+```
+
+The freshness window defaults to 300 s and is two-sided — a future-dated `t=` is rejected just
+like a stale one — and accepts a `tolerance` override plus a `now` injection seam for tests. A
+failure always raises the typed `WebhookVerifyError` (never a generic exception whose message
+could leak the expected signature).
 
 ## Error handling
 

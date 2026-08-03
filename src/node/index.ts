@@ -74,3 +74,18 @@ export {
   REFRESH_COOKIE,
   CSRF_COOKIE,
 } from './cookieJar.js';
+// Webhook signature verification (CONTRACT.md §13, T-145). Node-only: needs
+// node:crypto for the HMAC/constant-time compare, so — like the OIDC helpers
+// above — it deliberately does not hang off the browser-safe AxiamClient.
+export {
+  verifyWebhook,
+  WebhookVerifyError,
+  DEFAULT_WEBHOOK_TOLERANCE_SEC,
+  type VerifiedWebhookEvent,
+  type VerifyWebhookOptions,
+  type WebhookVerifyFailureReason,
+} from './webhook.js';
+// Re-exported here (mirroring amqp/index.ts) so `verifyWebhook`'s required
+// `Sensitive<string>` secret can be constructed from this same subpath
+// import, without a second import from the root entry.
+export { Sensitive } from '../core/index.js';

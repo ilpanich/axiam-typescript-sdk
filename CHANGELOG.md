@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Add `verifyWebhook` webhook-signature verifier (CONTRACT.md §13, T-145), reachable from the
+  Node-only `axiam-sdk/node` subpath. Verifies the server's Stripe-style signed-timestamp
+  `X-Axiam-Signature: t=<unix>,v1=<hex>` scheme — HMAC-SHA256 over `<timestamp>.<raw_body>`,
+  compared in **constant time** (`crypto.timingSafeEqual` over the decoded MAC bytes, never `==`
+  on hex strings), with a two-sided 300s-default freshness window (rejects a future-dated `t=` as
+  well as a stale one) and a `now` injection seam for tests. Accepts the raw body as
+  `Buffer`/`Uint8Array`/string only — re-serializing parsed JSON before verifying breaks the MAC,
+  documented in the README alongside the Express `express.raw()`/`verify`-callback workaround.
+  Failures raise a typed `WebhookVerifyError` with a stable `reason` code that never surfaces the
+  expected or computed signature.
+
+### Fixed
+
+- Repin `amqplib` from the mis-pinned `^2.0.1` to `^0.10.9`, matching the vendored
+  `@types/amqplib` range (SEC-078, an SDK-Q06 regression). Add a `npm ls amqplib` CI gate so a
+  future pin that can't resolve, or that drifts out of the range the bundled types are built
+  against, fails the build instead of surfacing later as a silent install or type mismatch.
+
 ## [1.0.0-alpha23] - 2026-08-02
 
 ### Fixed

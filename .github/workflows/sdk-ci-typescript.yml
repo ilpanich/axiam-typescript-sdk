@@ -32,6 +32,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # SEC-078: `npm ci` alone can mask a bad dependency pin if a stale
+      # lockfile entry still satisfies the package.json range at install
+      # time. Fail loudly and explicitly instead: `npm ls <pkg>` exits
+      # non-zero whenever the resolved tree doesn't match what package.json
+      # declares (missing, invalid, or extraneous), so a future repin that
+      # can't resolve — or that drifts out of the range @types/amqplib is
+      # built against (^0.10.x) — breaks the build here rather than
+      # surfacing later as a silent runtime/type mismatch downstream.
+      - name: Dependency resolution gate — amqplib pin resolves (SEC-078)
+        run: npm ls amqplib
+
       # src/gen stays gitignored (Phase 15 D-01); buf generate runs here as the
       # CI-time codegen step (buf.gen.yaml targets src/gen from the local
       # proto/ module with outputServices=grpc-js).
