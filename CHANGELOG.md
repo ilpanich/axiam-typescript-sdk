@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **CONTRACT §10.1 rule-8 regression tests (§15.3.1).** Rule 8 — "the decision is
+  about the caller's credential and no other" — was enforced only by inspection
+  here. SEC-085 satisfied rules 1–7 and was still an authentication bypass, so
+  the absence of a guardrail is the condition that let it survive three reviews.
+
+  This SDK is structurally safe from that shape: `VerifiableSession` carries a
+  verifier and a tenant, **not a logged-in session**, so there is no second
+  credential in scope for the guard to substitute. The new tests pin that
+  property rather than assume it — one asserts the verifier is invoked with the
+  caller's token and nothing else, the other asserts the guard's input exposes
+  no `session`/`client`/`refresh`/`accessToken` surface. They fail if anyone
+  ever threads a stateful client session into the guard's inputs, which is
+  precisely how the PHP bug became reachable.
+
 ### Fixed
 
 - **Slug-vs-UUID tenant comparand now diagnoses itself (§13.4 observation 6).**
