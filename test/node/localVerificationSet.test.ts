@@ -363,3 +363,49 @@ describe('§13.4 observation 6 — slug-vs-UUID comparand diagnostic', () => {
   });
 });
 
+// CONTRACT.md §10.1 rule 8 — "subject of the decision" (§15.3.1).
+//
+// Rules 1-7 ask whether the token is good; rule 8 asks whether it is the token
+// the decision is about. SEC-085 satisfied all seven and was still an
+// authentication bypass, because the PHP guard routed a failed verification
+// into a second, successful one against the application's own session.
+//
+// This SDK is structurally safe from that shape — `VerifiableSession` carries a
+// verifier and a tenant, not a logged-in session, so there is no second
+// credential in scope for the guard to substitute. These tests pin that
+// property rather than assume it, which is the guardrail §15.3.1 asks for: they
+// fail if anyone ever threads a client session into the guard's inputs.
+describe('CONTRACT.md §10.1 rule 8 — the decision is about the caller token', () => {
+  it('rejects a failed caller token and consults no other credential', async () => {
+    const key = await serveJwks();
+    const good = await sign(key, goodPayload());
+    const expired = await sign(key, { ...goodPayload(), exp: now() - 3600 });
+
+    // A verifier that would happily succeed for a DIFFERENT token. If the guard
+    // ever fell back to another credential, this is what it would reach for.
+    const seen: string[] = [];
+    const recording = {
+      async verifyAccessToken(token: string, expectations: unknown) {
+        seen.push(token);
+        return createVerifier(BASE_URL).verifyAccessToken(token, expectations as never);
+      },
+    };
+
+    await expect(
+      authenticateRequest({ ...session(), jwksVerifier: recording as never }, expired),
+    ).rejects.toBeInstanceOf(AuthError);
+
+    expect(seen).toEqual([expired]);
+    expect(seen).not.toContain(good);
+  });
+
+  it('exposes no session or refresh surface on the guard input', () => {
+    // The shape of the bug: PHP's guard could reach a stateful session through
+    // the client it held. Keep the guard's input free of anything like that.
+    const keys = Object.keys(session());
+    for (const forbidden of ['session', 'tokenManager', 'refresh', 'accessToken', 'client']) {
+      expect(keys).not.toContain(forbidden);
+    }
+  });
+});
+
