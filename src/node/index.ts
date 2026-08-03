@@ -12,6 +12,9 @@ export { TokenManager } from './tokenManager.js';
 export {
   createVerifier,
   createJwksVerifier,
+  assertTenantClaim,
+  CLOCK_SKEW_LEEWAY_SEC,
+  type AccessTokenExpectations,
   type Verifier,
   type IdTokenVerifier,
   type JwksVerifier,
