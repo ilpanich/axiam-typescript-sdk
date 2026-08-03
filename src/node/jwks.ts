@@ -19,7 +19,7 @@
 // module-load time — this keeps `require('axiam-sdk/grpc')` (or any other
 // CJS entry that reaches this module) from throwing at import time.
 
-import type { AuthError } from '../core/index.js';
+import { AuthError } from '../core/index.js';
 import {
   assertIdTokenAlg,
   checkIdTokenClaims,
@@ -58,10 +58,80 @@ export const JWKS_PATH = '/oauth2/jwks';
 const COOLDOWN_DURATION_MS = 60_000;
 const TIMEOUT_DURATION_MS = 5_000;
 
+/**
+ * Clock-skew leeway applied to the `exp` and `nbf` checks (CONTRACT.md §10.1
+ * rule 7).
+ *
+ * A **named, bounded, non-configurable** constant, fixed at the contract's
+ * RECOMMENDED 60 seconds. Rule 7 forbids both an inline literal and an
+ * operator-settable value that could be widened without bound, so there is
+ * deliberately no option to override it — widening the window is a source
+ * change, reviewable as such.
+ */
+export const CLOCK_SKEW_LEEWAY_SEC = 60;
+
+/**
+ * The verification policy {@link Verifier.verifyAccessToken} enforces, per
+ * CONTRACT.md §10.1.
+ *
+ * `expectedTenantId` is **required** (rule 4): the `/oauth2/jwks` trust
+ * anchor is organization-wide, so a valid signature proves only "some tenant
+ * in this organization". `expectedIssuer` and `expectedAudience` are
+ * **conditional** (rules 5 and 6) — omitted means the check is not performed,
+ * and the SDK never assumes a default issuer.
+ */
+export interface AccessTokenExpectations {
+  /**
+   * §10.1 rule 4 — the tenant this resource server is configured for. The
+   * token's `tenant_id` claim MUST equal it; an absent claim, an empty
+   * expectation, or a mismatch all reject (fail closed).
+   */
+  expectedTenantId: string;
+  /** §10.1 rule 5 — expected `iss`. Omit for no issuer check. */
+  expectedIssuer?: string;
+  /**
+   * §10.1 rule 6 — expected `aud`. Omit for no audience check. A resource
+   * server guarding user-facing routes SHOULD pass `"axiam:user"`.
+   */
+  expectedAudience?: string;
+}
+
 /** Verifies an AXIAM access token's EdDSA signature against the org-wide remote JWKS. */
 export interface Verifier {
-  /** Verify `token` against the cached JWKS (EdDSA only) and return its claims; rejects any invalid/expired/wrong-algorithm token. */
-  verifyAccessToken(token: string): Promise<AxiamClaims>;
+  /**
+   * Verify `token` against the **complete** CONTRACT.md §10.1 minimum
+   * local-verification set and return its claims.
+   *
+   * | § | rule | how it is enforced |
+   * |---|---|---|
+   * | 1 | signature | `algorithms: ['EdDSA']` is checked by `jose` against the JWS header *before* the remote key set function is invoked, so `alg: none` and an HS-signed token bearing an EdDSA `kid` are rejected without a key lookup. |
+   * | 2 | `exp` | `requiredClaims: ['exp']` — `jose` only checks `exp` *if present* by default, so an absent `exp` (a permanent credential) would otherwise sail through. A non-numeric `exp` is rejected by `jose`'s own type check. |
+   * | 3 | `nbf` | honoured by `jose` when present, bounded by {@link CLOCK_SKEW_LEEWAY_SEC}. |
+   * | 4 | `tenant_id` | asserted against {@link AccessTokenExpectations.expectedTenantId}; absent claim, absent expectation, or mismatch all reject. |
+   * | 5 | `iss` | checked only when `expectedIssuer` is supplied. |
+   * | 6 | `aud` | checked only when `expectedAudience` is supplied. |
+   * | 7 | clock skew | {@link CLOCK_SKEW_LEEWAY_SEC}, passed as `clockTolerance`. |
+   *
+   * Rejects with the underlying error on any failed rule; the §10 middleware
+   * wraps that into an `AuthError`.
+   */
+  verifyAccessToken(token: string, expectations: AccessTokenExpectations): Promise<AxiamClaims>;
+
+  /**
+   * Verify **only** the EdDSA signature of `token` — CONTRACT.md §10.1's
+   * "raw signature-only primitive".
+   *
+   * @remarks
+   * **This is not a guard.** It performs no `exp`, `nbf`, `tenant_id`, `iss`
+   * or `aud` check whatsoever: an expired token, a not-yet-valid token, and a
+   * token minted for a *different tenant* in the same organization all pass.
+   * It exists only for integrators deliberately implementing their own
+   * policy on top of the signature — the `Unchecked` suffix is there to make
+   * that omission obvious at the call site. Anything guarding a route MUST
+   * use {@link Verifier.verifyAccessToken} (or, better, the §10 middleware
+   * built on it).
+   */
+  verifySignatureOnlyUnchecked(token: string): Promise<AxiamClaims>;
 }
 
 /**
@@ -153,11 +223,64 @@ export function createJwksVerifier(jwksUri: string): JwksVerifier {
   }
 
   return {
-    async verifyAccessToken(token: string): Promise<AxiamClaims> {
+    async verifyAccessToken(
+      token: string,
+      expectations: AccessTokenExpectations,
+    ): Promise<AxiamClaims> {
       const { jwtVerify } = await import('jose');
       const jwks = await getJwks();
-      // Explicit algorithm allowlist — never trust the token's own `alg`
-      // header; defense against algorithm-confusion attacks (T-17-14).
+      // §10.1 rule 1: explicit algorithm allowlist — never trust the token's
+      // own `alg` header; defense against algorithm-confusion attacks
+      // (T-17-14). jose checks this against the JWS protected header BEFORE
+      // it calls the remote-key-set resolver, so `alg: none` and an HS256
+      // token carrying our EdDSA `kid` both die without a key lookup.
+      //
+      // §10.1 rule 2: `requiredClaims: ['exp']` is load-bearing and NOT a
+      // jose default — jose validates `exp` only `if (payload.exp !==
+      // undefined)`, so a token minted with no `exp` at all (a permanent
+      // credential) would otherwise verify. This is precisely the SEC-080
+      // defect. A present-but-non-numeric `exp` is rejected by jose's own
+      // `"exp" claim must be a number` check.
+      //
+      // §10.1 rules 5/6: `issuer`/`audience` are passed ONLY when configured
+      // — supplying them also makes jose require the corresponding claim to
+      // be present, which is the intended fail-closed behaviour; omitting
+      // them means no check, per the conditional wording of the rules.
+      //
+      // §10.1 rules 3/7: jose honours `nbf` when present; `clockTolerance`
+      // bounds both the `exp` and the `nbf` comparison.
+      const { payload } = await jwtVerify(token, jwks, {
+        algorithms: ['EdDSA'],
+        requiredClaims: ['exp'],
+        clockTolerance: CLOCK_SKEW_LEEWAY_SEC,
+        ...(expectations.expectedIssuer !== undefined
+          ? { issuer: expectations.expectedIssuer }
+          : {}),
+        ...(expectations.expectedAudience !== undefined
+          ? { audience: expectations.expectedAudience }
+          : {}),
+      });
+
+      // §10.1 rule 4 — the tenant assertion, which no JWT library can do for
+      // us: `tenant_id` is an AXIAM claim, and the JWKS trust anchor is
+      // organization-wide. Fails closed on all three failure shapes: no
+      // configured tenant, an absent/ill-typed claim, and a mismatch.
+      // "Nothing to compare against, so nothing to check" is the SEC-080
+      // defect, not a pass.
+      assertTenantClaim(payload.tenant_id, expectations.expectedTenantId);
+
+      return payload as unknown as AxiamClaims;
+    },
+
+    async verifySignatureOnlyUnchecked(token: string): Promise<AxiamClaims> {
+      const { jwtVerify } = await import('jose');
+      const jwks = await getJwks();
+      // Signature + algorithm pinning ONLY — see the interface docs. No
+      // `requiredClaims`, no `clockTolerance`, and deliberately no tenant
+      // assertion. `jose` still refuses an *expired* token here because its
+      // `exp` check is unconditional when the claim is present; a token with
+      // no `exp` at all is accepted, which is exactly why this entry point
+      // must never guard a route.
       const { payload } = await jwtVerify(token, jwks, { algorithms: ['EdDSA'] });
       return payload as unknown as AxiamClaims;
     },
@@ -204,6 +327,34 @@ export function createJwksVerifier(jwksUri: string): JwksVerifier {
       return checkIdTokenClaims(claims, { ...expectations, clockSkewSec: skew });
     },
   };
+}
+
+/**
+ * CONTRACT.md §10.1 rule 4 — assert the token's `tenant_id` claim against the
+ * tenant the relying party is configured for.
+ *
+ * Exported so the §10 middleware can re-assert it on the guard side, where it
+ * cannot be bypassed by a caller-supplied {@link Verifier} implementation
+ * that ignores its expectations.
+ *
+ * @param claim - the raw `tenant_id` claim value off the verified payload.
+ * @param expected - the configured tenant.
+ * @throws AuthError when no tenant is configured, when the claim is absent or
+ * not a non-empty string, or when the two differ.
+ */
+export function assertTenantClaim(claim: unknown, expected: string | undefined): void {
+  if (typeof expected !== 'string' || expected === '') {
+    throw new AuthError(
+      'no configured tenant to verify the token against; refusing the request ' +
+        '(CONTRACT.md §10.1 rule 4 fails closed)',
+    );
+  }
+  if (typeof claim !== 'string' || claim === '') {
+    throw new AuthError('invalid tenant_id claim');
+  }
+  if (claim !== expected) {
+    throw new AuthError('token tenant_id does not match configured tenant');
+  }
 }
 
 /**

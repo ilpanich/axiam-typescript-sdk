@@ -36,7 +36,7 @@ describe('jwks verifier', () => {
       .sign(privateKey);
 
     const verifier = createVerifier(BASE_URL);
-    const claims = await verifier.verifyAccessToken(token);
+    const claims = await verifier.verifyAccessToken(token, { expectedTenantId: 't-1' });
 
     expect(requestedPath).toBe(JWKS_PATH);
     expect(claims.sub).toBe('user-1');
@@ -62,7 +62,7 @@ describe('jwks verifier', () => {
       .sign(privateKey);
 
     const verifier = createVerifier(BASE_URL);
-    const claims = await verifier.verifyAccessToken(token);
+    const claims = await verifier.verifyAccessToken(token, { expectedTenantId: 'tenant-abc' });
 
     expect(claims.sub).toBe('user-42');
     expect(claims.tenant_id).toBe('tenant-abc');
@@ -106,7 +106,7 @@ describe('jwks verifier', () => {
       // Fire 8 genuinely concurrent verifyAccessToken() calls against the
       // cold cache; none is individually awaited before the rest start.
       const results = await Promise.all(
-        Array.from({ length: 8 }, () => verifier.verifyAccessToken(token)),
+        Array.from({ length: 8 }, () => verifier.verifyAccessToken(token, { expectedTenantId: 't-burst' })),
       );
 
       expect(fetchCallCount).toBe(1);
@@ -116,7 +116,7 @@ describe('jwks verifier', () => {
       }
 
       // A subsequent verify reuses the already-resolved keyset — no extra fetch.
-      await verifier.verifyAccessToken(token);
+      await verifier.verifyAccessToken(token, { expectedTenantId: 't-burst' });
       expect(fetchCallCount).toBe(1);
     } finally {
       globalThis.fetch = originalFetch;
@@ -147,6 +147,8 @@ describe('jwks verifier', () => {
 
     const verifier = createVerifier(BASE_URL);
     void privateKey; // unused in this branch — key pair generated for JWKS shape parity only
-    await expect(verifier.verifyAccessToken(hsToken)).rejects.toThrow();
+    await expect(
+      verifier.verifyAccessToken(hsToken, { expectedTenantId: 'tenant-abc' }),
+    ).rejects.toThrow();
   });
 });

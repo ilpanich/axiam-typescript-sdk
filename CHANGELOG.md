@@ -7,6 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security — BREAKING
+
+- **The §10 route guard now applies the complete CONTRACT §10.1 "minimum
+  local-verification set".** §10.1 is a new normative section written because
+  `SEC-071` and `SEC-080` were the same defect found independently in two SDKs:
+  each verified a *different subset* of the token, and each subset looked
+  complete in isolation. This SDK was audited against the stated complete set
+  for the first time; two rules were missing and are now enforced. Every §10 /
+  §11 surface routes through one call — `axiamMiddleware` (Express),
+  `axiamPlugin` (Fastify), `requireAuth`/`requireAccess`/`requireRole`, and the
+  NestJS `AxiamGuard` all consume the identity `authenticateRequest` injects,
+  and none verifies anything itself.
+
+  This **tightens acceptance** and is therefore breaking, as §10.1 requires it
+  to be called out. A token minted by the AXIAM server is unaffected — it
+  always carries `exp` and never a future `nbf` — but a guard fed tokens from
+  another signer sharing the organization JWKS may start rejecting what it used
+  to accept. That is the intent.
+
+  - **`exp` is now REQUIRED (rule 2).** `jose` validates `exp` only
+    `if (payload.exp !== undefined)`, so a token minted with **no** `exp` at
+    all — a permanent credential — previously verified. `requiredClaims:
+    ['exp']` is now passed explicitly. (A present-but-non-numeric `exp` was
+    already rejected by `jose`'s own type check.) This is precisely the
+    SEC-080 shape.
+  - **Clock skew is now a named, bounded constant (rule 7).** `jose` defaults
+    `clockTolerance` to `0`; the guard now passes the exported
+    `CLOCK_SKEW_LEEWAY_SEC` at the contract's RECOMMENDED 60 seconds, applied
+    to both `exp` and `nbf`. It is deliberately not operator-configurable, so
+    it can never be widened to an unbounded value. Note this makes the `exp`
+    check 60 s *more* tolerant than before.
+  - `Verifier.verifyAccessToken(token)` gains a **required second argument**,
+    `AccessTokenExpectations`, carrying the tenant it must assert (rule 4) plus
+    the optional issuer/audience expectations. Callers that invoked the
+    verifier directly must pass it; consumers using `axiamMiddleware` /
+    `axiamPlugin` are unaffected, since the middleware builds it from the
+    session.
+  - `nbf` (rule 3), the `alg`-pinned signature check (rule 1) and the
+    `tenant_id` assertion (rule 4) were already correct and are unchanged:
+    `jose` honours `nbf` when present; `algorithms: ['EdDSA']` is checked
+    against the JWS protected header *before* `jose` invokes the remote key-set
+    resolver, so `alg: none` and an HS-signed token bearing an EdDSA `kid` are
+    both rejected without a key lookup; and `authenticateRequest` already
+    compared `tenant_id` against the session's configured tenant. Rule 4 is now
+    additionally enforced inside `verifyAccessToken` itself, so a
+    caller-supplied `Verifier` implementation cannot be the only thing standing
+    between a cross-tenant token and the application.
+
+### Added
+
+- **Conditional issuer/audience expectations (CONTRACT §10.1 rules 5 and 6).**
+  New `AxiamClientOptions.expectedIssuer` and
+  `AxiamClientOptions.expectedAudience`, surfaced on `SharedSession` /
+  `VerifiableSession` and consumed by the §10 guard. Both are optional and
+  unset by default — the rules are explicitly conditional on configuration, and
+  the SDK never hardcodes an expected issuer. When set, a mismatch is rejected,
+  and the corresponding claim additionally becomes required (an absent `aud`
+  does not "contain" the expected audience).
+- **`Verifier.verifySignatureOnlyUnchecked(token)`** — the §10.1 raw
+  signature-only primitive, for integrators deliberately implementing their own
+  policy. No `exp` requirement, no `nbf`/`tenant_id`/`iss`/`aud` check. The
+  `Unchecked` suffix is the contract's reference spelling, chosen so the
+  omission is obvious at the call site. It is not, and must not become, the
+  documented guard entry point.
+- `assertTenantClaim` and `CLOCK_SKEW_LEEWAY_SEC` are exported from
+  `axiam-sdk/node` and `axiam-sdk/middleware`, so a consumer writing their own
+  guard on top of `Verifier` applies the same policy the middleware does.
+- `test/node/localVerificationSet.test.ts` — the complete §10.1 required
+  negative-test set, asserted against **both** local-verification entry points
+  (the verifier and the middleware guard): expired; no `exp`; non-numeric
+  `exp`; future `nbf`; different tenant; no `tenant_id`; no configured tenant;
+  `alg: none`; HS-signed token bearing the EdDSA `kid`; foreign signature; plus
+  issuer-mismatch and audience-mismatch cases for the newly-configurable
+  expectations, and proof that the raw primitive waves through exactly what the
+  guard rejects.
+- CONTRACT.md in this repository is re-synced with the upstream
+  `ilpanich/axiam` copy: §10.1 is vendored verbatim.
+
 ### Added
 
 - Add `verifyWebhook` webhook-signature verifier (CONTRACT.md §13, T-145), reachable from the

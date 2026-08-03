@@ -36,7 +36,11 @@ export { authenticateRequest, type AxiamIdentity, type VerifiableSession } from 
 // `VerifiableSession.jwksVerifier`'s `Verifier` type (and the `AxiamClaims` it
 // returns) without a dangling cross-module link (`node/jwks.ts` is not itself
 // a TypeDoc entry point) — single source of truth stays node/jwks.ts.
-export type { Verifier, AxiamClaims } from '../node/jwks.js';
+export type { Verifier, AxiamClaims, AccessTokenExpectations } from '../node/jwks.js';
+// CONTRACT.md §10.1 rule 7's named clock-skew bound and rule 4's tenant
+// assertion, re-exported so a consumer writing their own guard on top of
+// `Verifier` applies the same policy the middleware does.
+export { assertTenantClaim, CLOCK_SKEW_LEEWAY_SEC } from '../node/jwks.js';
 // Same rationale for the §12 types the login glue's own signatures reference
 // (`OidcLoginOptions.client`/`.store`, `onSuccess`'s arguments): re-exported so
 // this entry point's generated docs resolve them without a dangling

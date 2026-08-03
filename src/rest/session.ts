@@ -40,6 +40,10 @@ export class SharedSession {
   readonly orgId: string | undefined;
   /** Configured organization slug (`AxiamClientOptions.orgSlug`), if supplied (§5). */
   readonly orgSlug: string | undefined;
+  /** Expected `iss` for locally-verified access tokens (§10.1 rule 5), if configured; `undefined` means no issuer check. */
+  readonly expectedIssuer: string | undefined;
+  /** Expected `aud` for locally-verified access tokens (§10.1 rule 6), if configured; `undefined` means no audience check. */
+  readonly expectedAudience: string | undefined;
   /**
    * Resolved tenant UUID used to build the `refresh` body (`RefreshRequest`
    * requires the UUID form, not a slug). Seeded from `orgId`/`tenantId` config
@@ -78,6 +82,8 @@ export class SharedSession {
     this.tenantSlug = options.tenantSlug;
     this.orgId = options.orgId;
     this.orgSlug = options.orgSlug;
+    this.expectedIssuer = options.expectedIssuer;
+    this.expectedAudience = options.expectedAudience;
     // Seed the resolved UUIDs from any UUID-form config so the browser persona
     // (which cannot decode the httpOnly access token) can still build a valid
     // refresh body. The Node persona later overwrites these from the

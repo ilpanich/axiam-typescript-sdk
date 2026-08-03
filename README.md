@@ -17,8 +17,37 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to CONTRACT.md §1–§13 (including §6.1 mTLS client certificates, the §12
-OIDC/SSO relying-party helpers, and the §13 `verifyWebhook` signature verifier).
+This SDK conforms to CONTRACT.md §1–§13 (including §6.1 mTLS client certificates, the
+§10.1 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
+`verifyWebhook` signature verifier).
+
+### §10.1 minimum local-verification set
+
+`axiamMiddleware` / `axiamPlugin` (and the `requireAuth` / `requireAccess` / `requireRole`
+helpers built on them) funnel through `authenticateRequest`, which applies **every** §10.1
+rule on every inbound token: EdDSA `alg` pinned before the JWKS is consulted, a REQUIRED
+`exp` (`jose` only checks `exp` *if present*, so `requiredClaims: ['exp']` is passed
+explicitly), `nbf` honoured when present, `tenant_id` asserted against the session's
+configured tenant, `iss`/`aud` checked when configured, all under a named 60-second
+`CLOCK_SKEW_LEEWAY_SEC`.
+
+Because the `/oauth2/jwks` trust anchor is **organization-wide**, the session guarding a
+resource server must be configured with the tenant **UUID** (`tenantId`), since that is
+what the `tenant_id` claim carries. `expectedIssuer` / `expectedAudience` are optional and
+unset by default:
+
+```ts
+const client = createNodeClient({
+  baseUrl: 'https://iam.example.com',
+  tenantId: '…-uuid-…',        // §10.1 rule 4 — compared against the tenant_id claim
+  expectedAudience: 'axiam:user', // §10.1 rule 6 — optional, recommended
+});
+app.use(axiamMiddleware(client.session));
+```
+
+`verifier.verifySignatureOnlyUnchecked(token)` is the §10.1 raw signature-only primitive,
+for integrators implementing their own policy. It checks the signature and nothing else —
+never use it to guard a route.
 
 See [`CONTRACT.md`](./CONTRACT.md) for the full cross-language behavioral contract.
 

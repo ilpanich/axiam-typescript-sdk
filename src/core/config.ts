@@ -67,6 +67,21 @@ export interface AxiamClientOptions {
    * Node only — ignored in the browser.
    */
   clientKey?: string;
+  /**
+   * Expected `iss` claim for locally-verified access tokens (CONTRACT.md
+   * §10.1 rule 5). Optional and unset by default — the rule is conditional on
+   * configuration, and the SDK never hardcodes an issuer. When set, the §10
+   * middleware rejects a token whose `iss` differs.
+   */
+  expectedIssuer?: string;
+  /**
+   * Expected `aud` claim for locally-verified access tokens (CONTRACT.md
+   * §10.1 rule 6). Optional and unset by default. A resource server guarding
+   * user-facing routes SHOULD set `"axiam:user"`; a machine-to-machine one
+   * `"axiam:m2m"`. When set, the §10 middleware rejects a token whose `aud`
+   * does not contain it.
+   */
+  expectedAudience?: string;
   /** Connection timeout in milliseconds. Defaults to DEFAULT_CONNECT_TIMEOUT_MS. */
   connectTimeoutMs?: number;
   /** Request timeout in milliseconds. Defaults to DEFAULT_REQUEST_TIMEOUT_MS. */
