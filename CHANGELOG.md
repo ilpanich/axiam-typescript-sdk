@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-alpha24] - 2026-08-04
+
+### Added
+
+- Enforce the full CONTRACT §10.1 local-verification set
+
+### Changed
+
+- Bump fast-uri
+- Device (mTLS) tokens now carry aud=axiam:m2m (#44)
+- Service accounts can use login_client_credentials (#43)
+- Bump github/codeql-action from 4 to 4.37.4
+- Bump amqplib from 0.10.9 to 2.0.1
+- Bump the minor-patch group with 4 updates
+- Pin CONTRACT §10.1 rule 8 against regression (§15.3.1) (#39)
+- Bump postcss from 8.5.17 to 8.5.25
+- Bump find-my-way from 9.6.0 to 9.7.0
+
+### Fixed
+
+- Diagnose the slug-vs-UUID tenant comparand (§13.4 observation 6) (#36)
+- Repin amqplib to real 0.10.x + add verifyWebhook helper (SEC-078, T-145)
+
 ## [Unreleased]
 
 ### Added
