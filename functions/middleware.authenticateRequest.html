@@ -21,8 +21,17 @@ verified claims to the identity shape injected by both middleware
 modules. Roles are derived from the <code>scope</code> claim (space-separated) —
 AXIAM's access token carries no dedicated <code>roles</code> claim server-side
 (mirrors the Rust SDK's src/middleware/actix.rs).</p>
+<p>This is the SDK's <strong>documented §10 guard entry point</strong> for TypeScript, and
+it applies the complete <a href="http://CONTRACT.md">CONTRACT.md</a> §10.1 minimum local-verification set:
+rules 1/2/3/5/6/7 inside <code>verifyAccessToken</code> (EdDSA <code>alg</code> pinned before key
+lookup, REQUIRED numeric <code>exp</code>, <code>nbf</code> when present, conditional <code>iss</code>/<code>aud</code>,
+a named bounded clock skew) and rule 4 — the <code>tenant_id</code> assertion — both
+there and again here, so a caller-supplied <code>Verifier</code> implementation that
+ignores its expectations still cannot get a cross-tenant token past the
+middleware.</p>
 <p>Throws <code>AuthError</code> on any verification failure (missing/invalid/expired
-token, or a malformed sub/tenant_id claim).</p>
+token, a token with no <code>exp</code>, a not-yet-valid <code>nbf</code>, or a malformed /
+mismatched sub/tenant_id claim).</p>
 </div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
@@ -31,7 +40,7 @@ token, or a malformed sub/tenant_id claim).</p>
 <li><span><span class="tsd-kind-parameter">token</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/middleware.AxiamIdentity.html" class="tsd-signature-type tsd-kind-interface">AxiamIdentity</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/f4d32370a3fcbd0cc2cbeef0cb409e49a6bdb256/src/middleware/verifyCore.ts#L46">src/middleware/verifyCore.ts:46</a></li></ul></aside></div></li></ul></section></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/middleware/verifyCore.ts#L80">src/middleware/verifyCore.ts:80</a></li></ul></aside></div></li></ul></section></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

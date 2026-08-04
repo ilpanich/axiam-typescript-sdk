@@ -33,12 +33,12 @@ value or public property anywhere on this class: they arrive exclusively
 via <code>httpOnly</code> cookies set by the server.</p>
 </div>
 <div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="ts"><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">client</span><span class="hl-1"> = </span><span class="hl-5">new</span><span class="hl-1"> </span><span class="hl-0">AxiamClient</span><span class="hl-1">({ </span><span class="hl-4">baseUrl:</span><span class="hl-1"> </span><span class="hl-2">&#39;https://iam.example.com&#39;</span><span class="hl-1">, </span><span class="hl-4">tenantSlug:</span><span class="hl-1"> </span><span class="hl-2">&#39;acme&#39;</span><span class="hl-1"> });</span><br/><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">result</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-0">login</span><span class="hl-1">(</span><span class="hl-2">&#39;user@example.com&#39;</span><span class="hl-1">, </span><span class="hl-2">&#39;hunter2&#39;</span><span class="hl-1">);</span><br/><span class="hl-3">if</span><span class="hl-1"> (</span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">status</span><span class="hl-1"> === </span><span class="hl-2">&#39;mfa_required&#39;</span><span class="hl-1">) {</span><br/><span class="hl-1">  </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-0">verifyMfa</span><span class="hl-1">(</span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">mfaToken</span><span class="hl-1">, </span><span class="hl-2">&#39;123456&#39;</span><span class="hl-1">);</span><br/><span class="hl-1">}</span><br/><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">decision</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-0">checkAccess</span><span class="hl-1">({ </span><span class="hl-4">action:</span><span class="hl-1"> </span><span class="hl-2">&#39;read&#39;</span><span class="hl-1">, </span><span class="hl-4">resourceId:</span><span class="hl-1"> </span><span class="hl-2">&#39;document:42&#39;</span><span class="hl-1"> });</span><br/><span class="hl-3">if</span><span class="hl-1"> (!</span><span class="hl-4">decision</span><span class="hl-1">.</span><span class="hl-4">allowed</span><span class="hl-1">) {</span><br/><span class="hl-1">  </span><span class="hl-3">throw</span><span class="hl-1"> </span><span class="hl-5">new</span><span class="hl-1"> </span><span class="hl-0">Error</span><span class="hl-1">(</span><span class="hl-4">decision</span><span class="hl-1">.</span><span class="hl-4">reason</span><span class="hl-1"> ?? </span><span class="hl-2">&#39;access denied&#39;</span><span class="hl-1">);</span><br/><span class="hl-1">}</span>
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="ts"><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">client</span><span class="hl-1"> = </span><span class="hl-0">new</span><span class="hl-1"> </span><span class="hl-3">AxiamClient</span><span class="hl-1">({ </span><span class="hl-4">baseUrl:</span><span class="hl-1"> </span><span class="hl-5">&#39;https://iam.example.com&#39;</span><span class="hl-1">, </span><span class="hl-4">tenantSlug:</span><span class="hl-1"> </span><span class="hl-5">&#39;acme&#39;</span><span class="hl-1"> });</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">result</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">login</span><span class="hl-1">(</span><span class="hl-5">&#39;user@example.com&#39;</span><span class="hl-1">, </span><span class="hl-5">&#39;hunter2&#39;</span><span class="hl-1">);</span><br/><span class="hl-7">if</span><span class="hl-1"> (</span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">status</span><span class="hl-1"> === </span><span class="hl-5">&#39;mfa_required&#39;</span><span class="hl-1">) {</span><br/><span class="hl-1">  </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">verifyMfa</span><span class="hl-1">(</span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">mfaToken</span><span class="hl-1">, </span><span class="hl-5">&#39;123456&#39;</span><span class="hl-1">);</span><br/><span class="hl-1">}</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">decision</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">checkAccess</span><span class="hl-1">({ </span><span class="hl-4">action:</span><span class="hl-1"> </span><span class="hl-5">&#39;read&#39;</span><span class="hl-1">, </span><span class="hl-4">resourceId:</span><span class="hl-1"> </span><span class="hl-5">&#39;document:42&#39;</span><span class="hl-1"> });</span><br/><span class="hl-7">if</span><span class="hl-1"> (!</span><span class="hl-4">decision</span><span class="hl-1">.</span><span class="hl-4">allowed</span><span class="hl-1">) {</span><br/><span class="hl-1">  </span><span class="hl-7">throw</span><span class="hl-1"> </span><span class="hl-0">new</span><span class="hl-1"> </span><span class="hl-3">Error</span><span class="hl-1">(</span><span class="hl-4">decision</span><span class="hl-1">.</span><span class="hl-4">reason</span><span class="hl-1"> ?? </span><span class="hl-5">&#39;access denied&#39;</span><span class="hl-1">);</span><br/><span class="hl-1">}</span>
 </code><button type="button">Copy</button></pre>
 
 </div></div></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/f4d32370a3fcbd0cc2cbeef0cb409e49a6bdb256/src/rest/client.ts#L52">src/rest/client.ts:52</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/rest/client.ts#L52">src/rest/client.ts:52</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -86,7 +86,7 @@ browser bundle keeps pulling zero Node dependencies (SC#1).</p>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">AxiamClient</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/f4d32370a3fcbd0cc2cbeef0cb409e49a6bdb256/src/rest/client.ts#L68">src/rest/client.ts:68</a></li></ul></aside></div></li></ul></section></section></details>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/rest/client.ts#L68">src/rest/client.ts:68</a></li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -104,7 +104,7 @@ browser bundle keeps pulling zero Node dependencies (SC#1).</p>
 <li><span><span class="tsd-kind-parameter">checks</span>: <a href="../interfaces/index.AccessCheck.html" class="tsd-signature-type tsd-kind-interface">AccessCheck</a><span class="tsd-signature-symbol">[]</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.AccessDecision.html" class="tsd-signature-type tsd-kind-interface">AccessDecision</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/f4d32370a3fcbd0cc2cbeef0cb409e49a6bdb256/src/rest/client.ts#L104">src/rest/client.ts:104</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/rest/client.ts#L104">src/rest/client.ts:104</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="can"><span>can</span><a href="#can" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -121,7 +121,7 @@ browser bundle keeps pulling zero Node dependencies (SC#1).</p>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">scope</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/f4d32370a3fcbd0cc2cbeef0cb409e49a6bdb256/src/rest/client.ts#L99">src/rest/client.ts:99</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/rest/client.ts#L99">src/rest/client.ts:99</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="checkaccess"><span>check<wbr/>Access</span><a href="#checkaccess" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -136,7 +136,7 @@ browser bundle keeps pulling zero Node dependencies (SC#1).</p>
 <li><span><span class="tsd-kind-parameter">check</span>: <a href="../interfaces/index.AccessCheck.html" class="tsd-signature-type tsd-kind-interface">AccessCheck</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.AccessDecision.html" class="tsd-signature-type tsd-kind-interface">AccessDecision</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/f4d32370a3fcbd0cc2cbeef0cb409e49a6bdb256/src/rest/client.ts#L94">src/rest/client.ts:94</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/rest/client.ts#L94">src/rest/client.ts:94</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="login"><span>login</span><a href="#login" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -152,7 +152,7 @@ browser bundle keeps pulling zero Node dependencies (SC#1).</p>
 <li><span><span class="tsd-kind-parameter">password</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.LoginResult.html" class="tsd-signature-type tsd-kind-type-alias">LoginResult</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/f4d32370a3fcbd0cc2cbeef0cb409e49a6bdb256/src/rest/client.ts#L74">src/rest/client.ts:74</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/rest/client.ts#L74">src/rest/client.ts:74</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="logout"><span>logout</span><a href="#logout" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -163,7 +163,7 @@ browser bundle keeps pulling zero Node dependencies (SC#1).</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/f4d32370a3fcbd0cc2cbeef0cb409e49a6bdb256/src/rest/client.ts#L89">src/rest/client.ts:89</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/rest/client.ts#L89">src/rest/client.ts:89</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="refresh"><span>refresh</span><a href="#refresh" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -174,7 +174,7 @@ browser bundle keeps pulling zero Node dependencies (SC#1).</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/f4d32370a3fcbd0cc2cbeef0cb409e49a6bdb256/src/rest/client.ts#L84">src/rest/client.ts:84</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/rest/client.ts#L84">src/rest/client.ts:84</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="verifymfa"><span>verify<wbr/>Mfa</span><a href="#verifymfa" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -190,7 +190,7 @@ browser bundle keeps pulling zero Node dependencies (SC#1).</p>
 <li><span><span class="tsd-kind-parameter">code</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.LoginResult.html" class="tsd-signature-type tsd-kind-type-alias">LoginResult</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/f4d32370a3fcbd0cc2cbeef0cb409e49a6bdb256/src/rest/client.ts#L79">src/rest/client.ts:79</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/rest/client.ts#L79">src/rest/client.ts:79</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

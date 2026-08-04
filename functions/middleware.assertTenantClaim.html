@@ -1,4 +1,4 @@
-<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>beginOidcLogin | AXIAM TypeScript SDK</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>assertTenantClaim | AXIAM TypeScript SDK</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
 <div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK</a>
 <div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
 <ul role="listbox" id="tsd-search-results"></ul>
@@ -9,33 +9,36 @@
 <div class="tsd-page-title">
 <ul class="tsd-breadcrumb" aria-label="Breadcrumb">
 <li><a href="../modules/middleware.html">middleware</a></li>
-<li><a href="" aria-current="page">beginOidcLogin</a></li></ul>
-<h1>Function beginOidcLogin</h1></div>
+<li><a href="" aria-current="page">assertTenantClaim</a></li></ul>
+<h1>Function assertTenantClaim</h1></div>
 <section class="tsd-panel">
 <ul class="tsd-signatures">
 <li class="">
-<div class="tsd-signature tsd-anchor-link" id="beginoidclogin"><span class="tsd-kind-call-signature">beginOidcLogin</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/middleware.OidcLoginOptions.html" class="tsd-signature-type tsd-kind-interface">OidcLoginOptions</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">returnTo</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/middleware.OidcLoginOutcome.html" class="tsd-signature-type tsd-kind-type-alias">OidcLoginOutcome</a><span class="tsd-signature-symbol">&gt;</span><a href="#beginoidclogin" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-signature tsd-anchor-link" id="asserttenantclaim"><span class="tsd-kind-call-signature">assertTenantClaim</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">claim</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">unknown</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">expected</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#asserttenantclaim" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
-<div class="tsd-comment tsd-typography"><p>Step 1 — build the authorization request, park its state, and hand back the
-redirect (<a href="http://CONTRACT.md">CONTRACT.md</a> §12.1 <code>oidc_begin</code>).</p>
-<p>Discovery is fetched through <code>oidcDiscover</code>, so its per-origin cache and
-single-flight de-duplication apply and a busy login route does not hammer
-the discovery endpoint (§12.3 rule 6).</p>
+<div class="tsd-comment tsd-typography"><p><a href="http://CONTRACT.md">CONTRACT.md</a> §10.1 rule 4 — assert the token's <code>tenant_id</code> claim against the
+tenant the relying party is configured for.</p>
+<p>Exported so the §10 middleware can re-assert it on the guard side, where it
+cannot be bypassed by a caller-supplied <a href="../interfaces/middleware.Verifier.html" class="tsd-kind-interface">Verifier</a> implementation
+that ignores its expectations.</p>
 </div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">options</span>: <a href="../interfaces/middleware.OidcLoginOptions.html" class="tsd-signature-type tsd-kind-interface">OidcLoginOptions</a></span>
-<div class="tsd-comment tsd-typography"><p>the shared login configuration.</p>
+<li><span><span class="tsd-kind-parameter">claim</span>: <span class="tsd-signature-type">unknown</span></span>
+<div class="tsd-comment tsd-typography"><p>the raw <code>tenant_id</code> claim value off the verified payload.</p>
 </div></li>
-<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">returnTo</span>: <span class="tsd-signature-type">string</span></span>
-<div class="tsd-comment tsd-typography"><p>optional application destination to restore after login;
-stored with the state entry and used as the post-login redirect when
-<code>successRedirect</code> is unset.</p>
+<li><span><span class="tsd-kind-parameter">expected</span>: <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span></span>
+<div class="tsd-comment tsd-typography"><p>the configured tenant.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/middleware.OidcLoginOutcome.html" class="tsd-signature-type tsd-kind-type-alias">OidcLoginOutcome</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-throws">
+<h4 class="tsd-anchor-link" id="throws">Throws<a href="#throws" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>AuthError when no tenant is configured, when the claim is absent or
+not a non-empty string, or when the two differ.</p>
+</div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/middleware/oidcLoginCore.ts#L132">src/middleware/oidcLoginCore.ts:132</a></li></ul></aside></div></li></ul></section></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/node/jwks.ts#L345">src/node/jwks.ts:345</a></li></ul></aside></div></li></ul></section></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

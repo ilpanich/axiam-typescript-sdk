@@ -728,6 +728,74 @@ Per-framework expectations:
 - The middleware MUST NOT cache session verification results longer than the token's remaining TTL.
 - The middleware MUST surface `AuthError` as HTTP 401 and `AuthzError` as HTTP 403 to the end-user with a standardized JSON error body.
 
+### §10.1 Minimum local-verification set (normative)
+
+Wherever an SDK verifies an AXIAM access token **locally** — a route guard, a
+middleware, a `§10` authenticator, or any helper that turns a token into an
+identity without asking the server — it MUST apply **every** rule below. This
+section exists because the same defect recurred independently in two SDKs
+(`SEC-071`, `SEC-080`): each verified a *different subset* of the token, and
+each subset looked complete in isolation. A guard that checks the signature and
+stops is not a weaker guard, it is not a guard.
+
+`§10` verification is a **relying-party** control. The server enforces its own
+side; these rules are what stops an SDK from accepting something the server
+would never have honoured.
+
+| # | Claim | Rule |
+|---|---|---|
+| 1 | signature | Verify against the org JWKS with `alg` **pinned to EdDSA before key lookup**. `alg: none` and HS-family confusion MUST be rejected without consulting a key. |
+| 2 | `exp` | **REQUIRED.** A token with no `exp`, or a non-numeric `exp`, MUST be rejected. An absent `exp` is a *permanent* credential and MUST NOT be treated as "no expiry constraint". |
+| 3 | `nbf` | **Honoured when present.** A token whose `nbf` is in the future MUST be rejected. Absent `nbf` is valid. |
+| 4 | `tenant_id` | **REQUIRED and asserted.** MUST equal the client's configured tenant. Absent claim, or no configured tenant to compare against, MUST fail closed. The JWKS trust anchor is **organization-wide**, so signature validity alone does not bound a token to a tenant. |
+| 5 | `iss` | **Checked when the SDK is configured with an expected issuer**; absent configuration means no check. When configured, a mismatch MUST be rejected. |
+| 6 | `aud` | **Checked when the SDK is configured with an expected audience.** When configured, a token whose `aud` does not contain it MUST be rejected. SDKs guarding a user-facing resource server SHOULD expect `axiam:user`; one guarding a **machine-facing** resource server SHOULD expect `axiam:m2m`, which is what *every* service-account token now carries — both the client-credentials grant and the mTLS device path (§12.1). |
+| 7 | clock skew | Rules 2 and 3 MAY allow a **small, named, documented** leeway (RECOMMENDED 60 s). It MUST be a named constant, not an inline literal, and MUST NOT be operator-configurable to an unbounded value. |
+| 8 | subject of the decision | The guard MUST decide on **the caller's credential and no other**. When that credential fails any rule above, the guard MUST reject. It MUST NOT retry, refresh, or fall back to a *different* credential — in particular not the SDK client's own session — and MUST NOT admit the request under any identity other than the one the caller presented. |
+
+**Rule 8 is about control flow, not claims.** Rules 1–7 ask *"is this token
+good?"*; rule 8 asks *"is this the token the decision is about?"*. A guard can
+satisfy all seven and still be an authentication bypass if a failed verification
+routes into a second, successful one — which is exactly `SEC-085`: the PHP
+framework bridges called a local-verify-**or-refresh-fallback** helper, so a
+caller with an expired, foreign-tenant or forged token was admitted as the
+*application's own* AXIAM principal, typically a service account with more
+privilege than the user whose request it replaced.
+
+A reactive-refresh helper of that shape is legitimate — but only for the SDK's
+**outbound** calls, where the token being refreshed genuinely is the client's
+own. Where an SDK ships both, the two MUST be separate methods, the no-fallback
+one MUST be the documented guard entry point, and the fallback one MUST carry an
+explicit warning against guard use (the PHP SDK's `verifyLocally()` versus
+`verifyLocallyOrFallback()` is the reference spelling).
+
+**Fail-closed is the default for every rule.** A claim that is required and
+absent, unparseable, or of the wrong JSON type MUST cause rejection. An SDK MUST
+NOT treat "the claim was missing so there was nothing to check" as success —
+that is precisely the `SEC-080` defect.
+
+**A raw signature-only primitive MAY be exposed**, for integrators who are
+deliberately implementing their own policy, but it MUST NOT be the documented
+guard entry point and its name MUST make the omission obvious at the call site
+(the C++ SDK's `verify_signature_only_unchecked` is the reference spelling).
+The SDK's own guards MUST route through the full set.
+
+**Required negative tests**, per SDK, each asserting rejection: expired token;
+token with **no** `exp`; token with a non-numeric `exp`; token whose `nbf` is in
+the future; token for a **different tenant**; token with no `tenant_id`; and
+`alg: none` plus an HS-signed token bearing an EdDSA key id. Where the SDK
+supports issuer/audience configuration, add a mismatch case for each. For rule 8,
+where the SDK ships a request guard: a failing caller token MUST still yield 401
+**while the client's own session is healthy and verifiable** — a test whose
+client session is unusable passes vacuously and does not satisfy this clause.
+
+> **Compatibility note.** Rule 3 (`nbf`) and the required-`exp` half of rule 2
+> tighten acceptance in SDKs that previously ignored those claims. A token the
+> AXIAM server minted is unaffected — it always carries `exp` and never a future
+> `nbf` — but a guard fed tokens from another signer sharing the org JWKS may
+> start rejecting what it used to accept. That is the intent, and it MUST be
+> called out as a breaking change in each SDK's CHANGELOG.
+
 ---
 
 ## §11 Declarative Authorization Helpers
@@ -1002,6 +1070,55 @@ specialized to comparing the cookie access token's freshness — a comparison wi
 credential exactly as it does for a `login()` result. It requests no `openid` scope and the
 response carries no `id_token`.
 
+**Two kinds of principal use `login_client_credentials`, and the token differs.**
+The `client_id` identifies either an **OAuth2 client** (`oa_…`) or a **service
+account** (`sa_…`); the request is byte-identical, so **no SDK code change is
+required to support either**. What differs is the token that comes back, which
+matters to any SDK that verifies tokens locally (§10.1) or renders an identity:
+
+| | OAuth2 client (`oa_…`) | Service account (`sa_…`) |
+|---|---|---|
+| `sub` | the `client_id` | the service-account **UUID** |
+| `sub_kind` | `oauth2_client` | `service_account` |
+| `aud` | `axiam:m2m` | `axiam:m2m` |
+| `scope` | requested subset of the client's registered scopes | **none** — a service account registers no scopes, so requesting one is `invalid_scope`; its authorization comes from the roles assigned to it |
+
+Consequences an SDK MUST respect:
+
+1. **`sub` is not portable across the two.** An SDK MUST NOT assume `sub` is a
+   `client_id`, nor parse it as a UUID, without first checking `sub_kind`.
+2. **A §10 guard fronting a resource server that accepts machine callers MUST be
+   configured to expect `axiam:m2m`** (§10.1 rule 6). The default guidance —
+   expect `axiam:user` — is for user-facing resource servers and correctly
+   rejects *both* kinds of client-credentials token. That rejection is not a bug
+   to work around; it is rule 6 doing its job, and the fix is configuration.
+3. A service-account token carries **no `scope` claim**, so an SDK MUST NOT
+   derive authorization from scope for these callers.
+
+**⚠ Breaking change — a device (mTLS) token is now `axiam:m2m` too.**
+`POST /api/v1/auth/device` (§6.1) used to return a token stamped
+`aud: axiam:user`, so a certificate-authenticated device passed every
+user-facing route guard. It now returns `aud: axiam:m2m`, matching the
+client-credentials path above: **both** ways a service account can
+authenticate now yield a machine-audience token. The audience finally
+describes *what kind of principal holds the token* rather than which endpoint
+issued it.
+
+What this means for an SDK:
+
+- **No SDK code change is required.** The device-auth call and its response
+  shape are unchanged; only the `aud` claim value differs.
+- **A §10 guard fronting a resource server that accepts device callers MUST
+  expect `axiam:m2m`** — the same rule-6 consequence as point 2 above, now
+  reaching a second class of caller. A guard configured for `axiam:user` will
+  reject device tokens, correctly.
+- **Server-side, a device token no longer reaches user-facing REST routes.**
+  It is accepted on the authorization-check endpoints (`POST
+  /api/v1/authz/check` and the batch form), which are the machine-facing
+  surface. An SDK whose device flow called any other endpoint with the
+  device token must migrate that call deliberately — the previous access was
+  implicit, not designed.
+
 ### §12.2 Per-language naming map
 
 Casing follows the §1 rules unchanged. Twelve languages are covered: the seven columns below
@@ -1253,6 +1370,85 @@ NOT claim §12. If a later port lands, it MUST use the reserved names already fi
 decisions are recorded as open rather than resolved here: a server-side-Swift (Vapor) port
 cloned from the Kotlin shape, and adding `login_client_credentials` alone to C/C++ for
 machine-to-machine use.
+
+---
+
+## §13 Webhook Signature Verification
+
+Every SDK MUST ship a webhook-signature verifier. AXIAM signs each webhook
+delivery with a Stripe-style signed timestamp; without an SDK helper every
+integrator hand-rolls the HMAC comparison (or skips it), which is the
+`T-145` gap this section closes.
+
+### 13.1 The wire format (server side, normative)
+
+The delivery `POST` carries:
+
+| Header | Value |
+|---|---|
+| `X-Axiam-Timestamp` | unix seconds, decimal ASCII |
+| `X-Axiam-Signature` | `t=<unix_seconds>,v1=<hex_lowercase>` |
+| `X-Axiam-Event` | event type |
+| `X-Axiam-Delivery` | delivery UUID (at-least-once dedup key) |
+
+`v1 = HMAC-SHA256(secret_utf8_bytes, "<timestamp>.<raw_body>")`, hex-encoded
+lowercase, where `<timestamp>` is byte-identical to the `t=` field.
+
+### 13.2 Required helper
+
+| SDK | Entry point |
+|---|---|
+| Rust | `axiam_sdk::webhook::verify_webhook` |
+| TypeScript | `verifyWebhook` |
+| Python | `axiam_sdk.webhook.verify_webhook` |
+| Java | `io.axiam.sdk.webhook.AxiamWebhooks.verify` |
+| Kotlin | `io.axiam.sdk.webhook.AxiamWebhooks.verify` |
+| C# | `Axiam.Sdk.Webhooks.AxiamWebhooks.Verify` |
+| PHP | `Axiam\Sdk\Webhook\AxiamWebhooks::verify` |
+| Go | `webhook.Verify` |
+| Swift | `AxiamWebhooks.verify` |
+| C | `axiam_webhook_verify` |
+| C++ | `axiam::webhook::verify` |
+
+Parameters: the plaintext `secret` (wrapped in `Sensitive<T>` per §7 wherever
+the SDK has that type), the raw `X-Axiam-Signature` header value, the **raw
+request body bytes**, and a freshness `tolerance` defaulting to **300 s**. A
+`now` injection seam for tests is required.
+
+### 13.3 Rules
+
+1. **Raw body only.** The helper MUST accept the untouched bytes received off
+   the wire. Re-serializing parsed JSON changes key order/whitespace and breaks
+   the MAC; every SDK's documentation MUST state this.
+2. **Parse `t=` from the signature header**, not from `X-Axiam-Timestamp` —
+   only the former is covered by the MAC. If the SDK also reads the separate
+   header it MUST require the two to be equal.
+3. **A header with no `v1` is a failure.** Unknown keys and future schemes are
+   ignored for forward compatibility, but "nothing to verify" MUST NOT be
+   treated as success.
+4. **Constant-time comparison** over the decoded MAC bytes. Never `==` on hex
+   strings, never an early-return byte loop. Failed hex decode fails closed.
+5. **Freshness is two-sided.** Reject when `abs(now - t) > tolerance`, so a
+   future-dated timestamp is rejected as well as a stale one.
+6. **Fail closed and quiet.** Return a typed error or `false`; never surface
+   the expected signature in an error message, and never log the secret or the
+   computed MAC at any level.
+7. **Dedup is the receiver's job.** Document that `X-Axiam-Delivery` is the
+   at-least-once dedup key, since a retry replays a valid signature inside the
+   freshness window.
+
+### 13.4 Required tests
+
+Valid-and-fresh accepted; tampered body rejected; wrong secret rejected; stale
+`t` rejected; future `t` beyond tolerance rejected; malformed header (missing
+`v1`, non-numeric `t`, empty) rejected. Plus a cross-SDK pin: compute the MAC
+for the shared vector below in test setup and assert the helper accepts it.
+
+```
+secret    = "whsec_test_0123456789abcdef"
+timestamp = 1785700000
+body      = {"event":"user.created","id":"01JQ0000000000000000000000"}
+```
 
 ---
 
