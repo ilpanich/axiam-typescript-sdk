@@ -30,6 +30,7 @@ import {
   AxiamError,
   mapHttpStatusToError,
   NetworkError,
+  OAuthProtocolError,
   sanitizeAxiosError,
   Sensitive,
 } from '../core/index.js';
@@ -61,6 +62,16 @@ import type {
   SsoStartParams,
   SsoStartResult,
   TokenResponseWire,
+  DeviceAuthorization,
+  DeviceAuthorizationResponseWire,
+  DeviceAuthorizeParams,
+  DeviceLoginParams,
+  DevicePollParams,
+  ExchangedToken,
+  LogoutUrlParams,
+  TokenExchangeParams,
+  TokenExchangeResponseWire,
+  VerifiedLogoutToken,
 } from './oidcTypes.js';
 
 /** Path of the OIDC discovery document, relative to the client base URL. */
@@ -77,6 +88,108 @@ export const SSO_CALLBACK_PATH = '/api/v1/auth/federation/oidc/callback';
  * a floor of 5 minutes; a smaller configured value is raised to it.
  */
 export const MIN_DISCOVERY_TTL_MS = 300_000;
+
+/** `grant_type` of the device access-token request (RFC 8628 §3.4). */
+export const DEVICE_CODE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
+
+/**
+ * Polling interval used when the authorization response omits `interval`
+ * (RFC 8628 §3.2, §14.2 rule 2). An SDK MUST NOT hard-code a faster floor.
+ */
+export const DEFAULT_POLL_INTERVAL_SECS = 5;
+
+/**
+ * Seconds added to the polling interval on each `slow_down` (§14.2 rule 1).
+ * The increase is permanent and cumulative.
+ */
+export const SLOW_DOWN_INCREMENT_SECS = 5;
+
+/** `grant_type` of an RFC 8693 exchange. */
+export const TOKEN_EXCHANGE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:token-exchange';
+
+/** The only `subject_token_type` / `actor_token_type` AXIAM accepts. */
+export const ACCESS_TOKEN_TYPE = 'urn:ietf:params:oauth:token-type:access_token';
+
+/**
+ * The `events` member that distinguishes a logout token from an ID token
+ * (OIDC Back-Channel Logout 1.0 §2.4).
+ */
+export const BACKCHANNEL_LOGOUT_EVENT = 'http://schemas.openid.net/event/backchannel-logout';
+
+/**
+ * Maximum age accepted for a logout token's `iat`, in seconds. AXIAM issues
+ * them with a 120 s lifetime; this bound is the same order and stops a token
+ * captured from a mis-configured RP being replayed days later.
+ */
+export const MAX_LOGOUT_TOKEN_AGE_SECS = 300;
+
+/** The claim shape of a back-channel logout token (§12.7.3). */
+interface LogoutTokenClaims {
+  iss?: string;
+  aud?: string;
+  iat?: number;
+  exp?: number;
+  jti?: string;
+  sid?: string;
+  sub?: string;
+  events?: Record<string, unknown>;
+  /** Never legitimately present — see `verifyLogoutToken`. */
+  nonce?: string;
+}
+
+/**
+ * The §14.2 polling schedule: the interval, and the deadline it stops at.
+ *
+ * @remarks
+ * Exported so the arithmetic §14.2 rules 1, 2 and 4 describe can be tested
+ * exhaustively and instantly. Driving it through a mock HTTP server would
+ * test the transport rather than the rule, and would take a real half-minute
+ * to assert one `slow_down`.
+ *
+ * @internal
+ */
+export class PollSchedule {
+  #intervalSecs: number;
+  #remainingSecs: number;
+
+  constructor(intervalSecs: number, expiresInSecs: number) {
+    this.#intervalSecs = intervalSecs > 0 ? intervalSecs : DEFAULT_POLL_INTERVAL_SECS;
+    this.#remainingSecs = expiresInSecs;
+  }
+
+  /** The current inter-poll delay, in seconds. */
+  get intervalSecs(): number {
+    return this.#intervalSecs;
+  }
+
+  /** Apply one `slow_down` (§14.2 rule 1): **cumulative, never reset.** */
+  slowDown(): void {
+    this.#intervalSecs += SLOW_DOWN_INCREMENT_SECS;
+  }
+
+  /**
+   * Consume one interval's worth of the grant's remaining life.
+   *
+   * @returns `false` when the deadline has been reached, at which point the
+   * caller MUST stop (§14.2 rule 4) — the deadline is authoritative even if
+   * the server is still answering `authorization_pending`.
+   */
+  tick(): boolean {
+    if (this.#intervalSecs >= this.#remainingSecs) {
+      this.#remainingSecs = 0;
+      return false;
+    }
+    this.#remainingSecs -= this.#intervalSecs;
+    return true;
+  }
+}
+
+/** Await `ms` milliseconds. Extracted so tests can stub the timer. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 /** The `openid` scope, which every authorization request must carry (§12.1 rule 4). */
 const OPENID_SCOPE = 'openid';
@@ -664,6 +777,375 @@ export class OidcClient {
       sessionId: response.data.session_id,
       expiresIn: response.data.expires_in,
       redirectUri: response.data.redirect_uri,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // §14 Device Authorization Grant (RFC 8628)
+  // -------------------------------------------------------------------------
+
+  /**
+   * `POST /oauth2/device_authorization` (CONTRACT.md §14.1) — start the grant
+   * and obtain the code pair.
+   *
+   * @remarks
+   * **Unauthenticated by design.** A device that cannot show a browser also
+   * cannot hold a client secret, so this never sends `client_secret` and never
+   * refuses a client built without one (§14.1).
+   */
+  async deviceAuthorize(params: DeviceAuthorizeParams = {}): Promise<DeviceAuthorization> {
+    const configuration = params.configuration ?? (await this.oidcDiscover());
+    const endpoint = configuration.device_authorization_endpoint;
+    if (!endpoint) {
+      throw new AuthError(
+        "the authorization server's discovery document advertises no " +
+          'device_authorization_endpoint: this server does not support the device grant ' +
+          '(CONTRACT.md §14.1)',
+      );
+    }
+
+    const form = new URLSearchParams();
+    form.set('client_id', this.#options.clientId);
+    if (params.scope !== undefined) {
+      form.set('scope', Array.isArray(params.scope) ? params.scope.join(' ') : params.scope);
+    }
+
+    const url = this.#endpointUrl(endpoint, params.tenantId);
+    const { data } = await this.#postForm<DeviceAuthorizationResponseWire>(
+      url,
+      form,
+      'device authorization request failed',
+    );
+
+    return {
+      deviceCode: new Sensitive(data.device_code),
+      userCode: data.user_code,
+      verificationUri: data.verification_uri,
+      ...(data.verification_uri_complete != null
+        ? { verificationUriComplete: data.verification_uri_complete }
+        : {}),
+      expiresIn: data.expires_in,
+      // §14.2 rule 2: the interval comes from the response; only its absence
+      // falls back to the RFC default. A server-sent 0 is treated as absent —
+      // polling with no delay is never what the server meant.
+      interval: data.interval != null && data.interval > 0 ? data.interval : DEFAULT_POLL_INTERVAL_SECS,
+    };
+  }
+
+  /**
+   * `POST /oauth2/token` with the device-code grant (CONTRACT.md §14.1) —
+   * **one** poll attempt.
+   *
+   * @remarks
+   * The raw single call, so an application driving its own loop (a UI
+   * rendering a countdown, say) can. The five RFC 8628 §3.5 answers surface as
+   * {@link OAuthProtocolError} — `authorization_pending` and `slow_down`
+   * included — so a hand-rolled loop sees exactly what {@link deviceLogin}
+   * sees. Most callers want {@link deviceLogin}.
+   */
+  async devicePoll(params: DevicePollParams): Promise<OidcTokenSet> {
+    const configuration = params.configuration ?? (await this.oidcDiscover());
+    const form = new URLSearchParams();
+    form.set('grant_type', DEVICE_CODE_GRANT_TYPE);
+    form.set('device_code', exposeSecret(params.deviceCode));
+    form.set('client_id', this.#options.clientId);
+
+    const wire = await this.#postToken(configuration, form, params.tenantId);
+    // No nonce: the device grant has no authorization request to carry one,
+    // and §12.4 rule 6 applies to the authorization-code flow.
+    return this.#toTokenSet(wire, configuration, undefined);
+  }
+
+  /**
+   * The composed §14.3 helper: start the grant, hand the caller the user code,
+   * poll to completion.
+   *
+   * @remarks
+   * `onUserCode` is awaited **before the first poll** — §14.3 rule 2 requires
+   * the caller to have had the chance to display the code before polling
+   * begins. The SDK never prints it.
+   *
+   * Per §14.3 rule 4 (contract 1.7 errata) this SDK **returns** the token set;
+   * whether it is adopted is the same MAY as `loginClientCredentials`.
+   *
+   * Polling follows §14.2: the interval comes from the response; `slow_down`
+   * adds 5 s **permanently**; `authorization_pending` loops; `access_denied`
+   * and `expired_token` raise distinct errors; polling stops at `expires_in`
+   * even if the server has not yet said `expired_token`. A 5xx or transport
+   * failure mid-poll is **not** terminal (rule 6) — the loop absorbs it and
+   * tries again, bounded by the same deadline, because a server restart must
+   * not lose a grant the user has already approved.
+   */
+  async deviceLogin(params: DeviceLoginParams): Promise<OidcTokenSet> {
+    const configuration = params.configuration ?? (await this.oidcDiscover());
+    const authorization = await this.deviceAuthorize({
+      ...(params.scope !== undefined ? { scope: params.scope } : {}),
+      ...(params.tenantId !== undefined ? { tenantId: params.tenantId } : {}),
+      configuration,
+    });
+
+    // §14.3 rule 2 — before any polling.
+    await params.onUserCode(authorization);
+
+    const schedule = new PollSchedule(authorization.interval, authorization.expiresIn);
+
+    for (;;) {
+      // §14.2 rule 4: the deadline is authoritative. Checking before sleeping
+      // keeps the SDK from issuing a request that can only be refused, and
+      // reports it under the same `expired_token` code the server would have
+      // used — so a caller's branch does not care which side noticed first.
+      if (!schedule.tick()) {
+        throw new OAuthProtocolError(
+          'expired_token',
+          'the device authorization expired before the user completed it ' +
+            '(client-side deadline from expires_in; CONTRACT.md §14.2 rule 4)',
+        );
+      }
+
+      await sleep(schedule.intervalSecs * 1000);
+
+      try {
+        return await this.devicePoll({
+          deviceCode: authorization.deviceCode,
+          ...(params.tenantId !== undefined ? { tenantId: params.tenantId } : {}),
+          configuration,
+        });
+      } catch (err) {
+        if (err instanceof OAuthProtocolError) {
+          if (err.error === 'authorization_pending') {
+            continue;
+          }
+          if (err.error === 'slow_down') {
+            schedule.slowDown(); // §14.2 rule 1: cumulative, never reset.
+            continue;
+          }
+          throw err; // expired_token / access_denied / invalid_grant
+        }
+        // §14.2 rule 6: transport and 5xx failures are not among the five
+        // protocol answers and are not terminal.
+        if (err instanceof NetworkError) {
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // §15 Token Exchange (RFC 8693)
+  // -------------------------------------------------------------------------
+
+  /**
+   * `POST /oauth2/token` with the RFC 8693 grant (CONTRACT.md §15.1) —
+   * exchange a token for a **narrower** one.
+   *
+   * @remarks
+   * The exchanging client authenticates (`client_secret_post`): unlike §14's
+   * device, this is a confidential service.
+   *
+   * What this method deliberately does **not** do:
+   *
+   * - **No default `actorToken`** (§15.2 rule 1). Passing none asks for
+   *   *impersonation*; the SDK will not quietly reuse the client's own session
+   *   token as the actor and turn that into a delegation.
+   * - **No retry or downgrade on `unauthorized_client`** (rule 2) — a
+   *   registration fact an operator must fix.
+   * - **No auto-narrowing on `invalid_scope`** (rule 3). The server refuses
+   *   instead of silently narrowing precisely so the caller finds out here.
+   * - **No adoption** (rule 5). The returned token is handed onward in one
+   *   outbound call; adopting it would silently re-privilege every subsequent
+   *   call this client makes.
+   *
+   * A cross-tenant subject token answers `invalid_grant`, identically to an
+   * expired one. The SDK does not try to tell them apart (§15.3): the server
+   * collapses them because distinguishing them is a tenant-enumeration signal.
+   *
+   * @throws AuthError when no `clientSecret` is configured — client-side, with
+   * no wire call.
+   */
+  async tokenExchange(params: TokenExchangeParams): Promise<ExchangedToken> {
+    const configuration = params.configuration ?? (await this.oidcDiscover());
+    const form = new URLSearchParams();
+    form.set('grant_type', TOKEN_EXCHANGE_GRANT_TYPE);
+    form.set('subject_token', exposeSecret(params.subjectToken));
+    form.set('subject_token_type', ACCESS_TOKEN_TYPE);
+    if (params.actorToken !== undefined) {
+      form.set('actor_token', exposeSecret(params.actorToken));
+      // Sent exactly when `actor_token` is: RFC 8693 §2.1 requires the pair,
+      // and the type alone is a malformed request.
+      form.set('actor_token_type', ACCESS_TOKEN_TYPE);
+    }
+    if (params.scopes !== undefined) {
+      form.set('scope', params.scopes.join(' '));
+    }
+    if (params.audience !== undefined) {
+      form.set('audience', params.audience);
+    }
+    if (params.resource !== undefined) {
+      form.set('resource', params.resource);
+    }
+    form.set('client_id', this.#options.clientId);
+    form.set('client_secret', this.#requireClientSecret('tokenExchange'));
+
+    const url = this.#endpointUrl(configuration.token_endpoint, params.tenantId);
+    const { data } = await this.#postForm<TokenExchangeResponseWire>(
+      url,
+      form,
+      'token exchange request failed',
+    );
+
+    return {
+      accessToken: new Sensitive(data.access_token),
+      issuedTokenType: data.issued_token_type,
+      tokenType: data.token_type,
+      expiresIn: data.expires_in,
+      ...(data.scope != null ? { scope: data.scope } : {}),
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // §12.7 Logout helpers
+  // -------------------------------------------------------------------------
+
+  /**
+   * Build the RP-initiated logout URL to redirect the user agent to
+   * (CONTRACT.md §12.7.2).
+   *
+   * @remarks
+   * Performs **no network I/O** beyond the discovery fetch the SDK caches
+   * anyway, and does **not** clear this client's own session: whether the
+   * local session ends is the application's decision — a backend holding a
+   * service-account session must not lose it because a *user* logged out.
+   *
+   * `end_session_endpoint` is read from discovery and never synthesised from
+   * the issuer (rule 1). Code that concatenates works against AXIAM and breaks
+   * against every other OP the same application is pointed at.
+   *
+   * `postLogoutRedirectUri` is passed through **unvalidated against any local
+   * list** (rule 3): the allow-list lives in the client's server-side
+   * registration, and a client-side copy would drift and reject a URI an
+   * operator had just registered.
+   */
+  async logoutUrl(params: LogoutUrlParams): Promise<string> {
+    const configuration = params.configuration ?? (await this.oidcDiscover());
+    const endpoint = configuration.end_session_endpoint;
+    if (!endpoint) {
+      throw new AuthError(
+        "the authorization server's discovery document advertises no " +
+          'end_session_endpoint: this server does not support RP-initiated logout ' +
+          '(CONTRACT.md §12.7.2 rule 1)',
+      );
+    }
+
+    const url = new URL(endpoint);
+    url.searchParams.set('id_token_hint', exposeSecret(params.idToken));
+    if (params.postLogoutRedirectUri !== undefined) {
+      url.searchParams.set('post_logout_redirect_uri', params.postLogoutRedirectUri);
+    }
+    if (params.state !== undefined) {
+      url.searchParams.set('state', params.state);
+    }
+    return url.toString();
+  }
+
+  /**
+   * Verify a back-channel logout token the OP POSTed to this application's
+   * `backchannel_logout_uri` (CONTRACT.md §12.7.3).
+   *
+   * @remarks
+   * Every check exists because skipping it has a name:
+   *
+   * 1. **Signature**, through the same §12.4 JWKS verifier the ID-token path
+   *    uses — no second key-fetching path — with the same `kid`-required
+   *    discipline.
+   * 2. **`iss`/`aud`**: a token minted for another RP is not accepted here.
+   * 3. **`events` carries the back-channel-logout key.** This is what
+   *    distinguishes a logout token from an ID token; skipping it means
+   *    accepting a replayed ID token as a logout instruction.
+   * 4. **`nonce` is absent.** Back-Channel Logout 1.0 §2.4 forbids it, and its
+   *    presence is the documented signature of an ID token being replayed.
+   *    Rejected, not ignored.
+   * 5. **At least one of `sid`/`sub`** — a token naming neither identifies
+   *    nothing.
+   * 6. **`exp` in the future, `iat` recent.**
+   *
+   * @returns `sid`, `sub` and `jti` — never a bare boolean, because the RP has
+   * to know *which* session to end.
+   */
+  async verifyLogoutToken(
+    token: string,
+    configuration?: OidcConfiguration,
+  ): Promise<VerifiedLogoutToken> {
+    const config = configuration ?? (await this.oidcDiscover());
+    const { decodeProtectedHeader } = await import('jose');
+
+    // Same alg/kid discipline as §12.4 rules 1-2, applied before any key
+    // lookup: a token with no `kid` gets no "the only key" fallback.
+    let header: { alg?: string; kid?: string };
+    try {
+      header = decodeProtectedHeader(token);
+    } catch {
+      throw new AuthError('logout token is not a well-formed JWS');
+    }
+    if (header.alg !== 'EdDSA') {
+      throw new AuthError(`logout token alg must be EdDSA, got ${String(header.alg)}`);
+    }
+    if (!header.kid) {
+      throw new AuthError('logout token carries no kid header');
+    }
+
+    const claims = (await this.#verifierFor(config.jwks_uri).verifySignatureOnlyUnchecked(
+      token,
+    )) as unknown as LogoutTokenClaims;
+
+    if (claims.iss !== config.issuer) {
+      throw new AuthError('logout token issuer does not match the discovery document');
+    }
+    if (claims.aud !== this.#options.clientId) {
+      throw new AuthError('logout token audience does not match this client_id');
+    }
+
+    // Without this check the whole method is an elaborate way to accept an ID
+    // token.
+    const event = claims.events?.[BACKCHANNEL_LOGOUT_EVENT];
+    if (event === undefined || typeof event !== 'object' || event === null || Array.isArray(event)) {
+      throw new AuthError(
+        'not a logout token: the events claim does not carry ' +
+          'http://schemas.openid.net/event/backchannel-logout',
+      );
+    }
+
+    if (claims.nonce !== undefined) {
+      throw new AuthError(
+        'logout token carries a nonce, which Back-Channel Logout 1.0 §2.4 forbids: ' +
+          'this is an ID token being replayed as a logout token',
+      );
+    }
+
+    if (claims.sid === undefined && claims.sub === undefined) {
+      throw new AuthError('logout token names neither sid nor sub, so it identifies no session');
+    }
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    const skew = this.#options.clockSkewSec ?? 0;
+    if (typeof claims.exp !== 'number' || claims.exp + skew < nowSec) {
+      throw new AuthError('logout token has expired');
+    }
+    if (typeof claims.iat !== 'number' || claims.iat - skew > nowSec) {
+      throw new AuthError('logout token was issued in the future');
+    }
+    if (nowSec - claims.iat > MAX_LOGOUT_TOKEN_AGE_SECS + skew) {
+      throw new AuthError('logout token is too old to be a live delivery');
+    }
+
+    if (typeof claims.jti !== 'string' || claims.jti === '') {
+      throw new AuthError('logout token carries no jti, so the RP cannot dedup redeliveries');
+    }
+
+    return {
+      ...(claims.sid !== undefined ? { sid: claims.sid } : {}),
+      ...(claims.sub !== undefined ? { sub: claims.sub } : {}),
+      jti: claims.jti,
     };
   }
 

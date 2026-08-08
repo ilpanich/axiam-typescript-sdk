@@ -68,6 +68,29 @@ export interface OidcConfiguration {
   claims_supported: string[];
   /** Grant types the token endpoint supports. */
   grant_types_supported: string[];
+  /**
+   * RFC 8628 device authorization endpoint, used by `deviceAuthorize` (§14.1).
+   *
+   * Optional because a server that does not implement the device grant does
+   * not advertise it, and because this document may come from a non-AXIAM OP.
+   * Its absence is an error at call time, never a cue to build the URL by
+   * concatenation.
+   */
+  device_authorization_endpoint?: string;
+  /**
+   * OIDC RP-Initiated Logout 1.0 `end_session_endpoint`, used by `logoutUrl`
+   * (§12.7.2 rule 1).
+   *
+   * Optional for the same reason, and the rule is stricter here: §12.7.2
+   * rule 1 forbids synthesising this URL from the issuer. Code that
+   * concatenates works against AXIAM and breaks against every other OP the
+   * same application is pointed at.
+   */
+  end_session_endpoint?: string;
+  /** Whether the OP sends back-channel logout tokens. */
+  backchannel_logout_supported?: boolean;
+  /** Whether those logout tokens carry `sid`. AXIAM always sends it. */
+  backchannel_logout_session_supported?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -353,4 +376,213 @@ export interface SsoLoginSuccessResponseWire {
   session_id: string;
   expires_in: number;
   redirect_uri: string;
+}
+
+// ---------------------------------------------------------------------------
+// §14 Device Authorization Grant (RFC 8628)
+// ---------------------------------------------------------------------------
+
+/** Arguments to `deviceAuthorize` (CONTRACT.md §14.1). */
+export interface DeviceAuthorizeParams {
+  /** Scopes to request, as a string or array. */
+  scope?: string | string[];
+  /** Tenant UUID for the mandatory `tenant_id` query parameter (§12.1 note 2). */
+  tenantId?: string;
+  /** A pre-fetched discovery document; fetched via `oidcDiscover` when absent. */
+  configuration?: OidcConfiguration;
+}
+
+/**
+ * The `DeviceAuthorizationResponse` — what the device shows its user, plus the
+ * `device_code` it polls with.
+ *
+ * @remarks
+ * `deviceCode` is {@link Sensitive} (§14.5): a bearer credential for the
+ * lifetime of the grant. `userCode` deliberately is **not** — it exists to be
+ * read aloud and typed by a human, and wrapping it would defeat the one thing
+ * it is for. Neither may be logged; displaying `userCode` is the caller's job.
+ */
+export interface DeviceAuthorization {
+  /** The device's polling credential (§14.5 secret). */
+  deviceCode: Sensitive<string>;
+  /** The short code the human types into the verification page. */
+  userCode: string;
+  /** Where the human goes to enter {@link DeviceAuthorization.userCode}. */
+  verificationUri: string;
+  /**
+   * The verification URI with the user code already embedded, when the server
+   * sent one — prefer it when the device can render a QR code.
+   *
+   * Never synthesised by concatenation when absent (§14.3): its format is the
+   * server's to choose.
+   */
+  verificationUriComplete?: string;
+  /** Seconds until the grant expires. Polling stops here (§14.2 rule 4). */
+  expiresIn: number;
+  /** Seconds between polls, from the response, defaulted to 5 s when omitted. */
+  interval: number;
+}
+
+/** Arguments to `devicePoll` (CONTRACT.md §14.1). */
+export interface DevicePollParams {
+  /** The `deviceCode` from {@link DeviceAuthorization}. */
+  deviceCode: Sensitive<string> | string;
+  /** Tenant UUID for the `tenant_id` query parameter. */
+  tenantId?: string;
+  /** A pre-fetched discovery document. */
+  configuration?: OidcConfiguration;
+}
+
+/** Arguments to `deviceLogin` (CONTRACT.md §14.3). */
+export interface DeviceLoginParams {
+  /** Scopes to request. */
+  scope?: string | string[];
+  /** Tenant UUID for the `tenant_id` query parameter. */
+  tenantId?: string;
+  /** A pre-fetched discovery document. */
+  configuration?: OidcConfiguration;
+  /**
+   * Called with the {@link DeviceAuthorization} **before the first poll**
+   * (§14.3 rule 2), so the caller can display the code. The SDK never prints
+   * it: what the device does with it is the application's decision.
+   */
+  onUserCode: (authorization: DeviceAuthorization) => void | Promise<void>;
+}
+
+/** 200 body of `POST /oauth2/device_authorization`. */
+export interface DeviceAuthorizationResponseWire {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete?: string | null;
+  expires_in: number;
+  interval?: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// §15 Token Exchange (RFC 8693)
+// ---------------------------------------------------------------------------
+
+/**
+ * Arguments to `tokenExchange` (CONTRACT.md §15.1).
+ *
+ * @remarks
+ * `subjectToken` is the only required field; everything else is optional and
+ * **named**, because four optional strings in positional order is a bug
+ * waiting to be written (§15.1).
+ */
+export interface TokenExchangeParams {
+  /** The token being exchanged (§15.5 secret). */
+  subjectToken: Sensitive<string> | string;
+  /**
+   * The acting party, when this is a **delegation** (§15.2 rule 1).
+   *
+   * Its absence selects **impersonation** — a different operation with
+   * different risk. The SDK never fills this in for you.
+   */
+  actorToken?: Sensitive<string> | string;
+  /** Scopes to request. Omitted from the body when absent. */
+  scopes?: string[];
+  /** The service the issued token is for. */
+  audience?: string;
+  /** RFC 8707 synonym of `audience`; the server refuses the pair when they disagree. */
+  resource?: string;
+  /** Tenant UUID for the `tenant_id` query parameter. */
+  tenantId?: string;
+  /** A pre-fetched discovery document. */
+  configuration?: OidcConfiguration;
+}
+
+/**
+ * The result of an exchange (wire schema `TokenExchangeResponse`).
+ *
+ * @remarks
+ * **There is no `refreshToken` field, and that is deliberate** (§15.2 rule 4).
+ * RFC 8693 issues none, so the type cannot represent one: an application that
+ * wants a fresh exchanged token re-runs the exchange. This result also never
+ * enters the §9 single-flight refresh guard — there is nothing to refresh.
+ */
+export interface ExchangedToken {
+  /** The issued token (§15.5 secret). */
+  accessToken: Sensitive<string>;
+  /**
+   * What the server actually issued. Mandatory in RFC 8693 §2.2.1 and
+   * surfaced rather than dropped (§15.2 rule 6), so a client that asked for
+   * one type and got another can tell.
+   */
+  issuedTokenType: string;
+  /** The token type (`Bearer`). */
+  tokenType: string;
+  /** Lifetime in seconds — never longer than the subject token's remaining life. */
+  expiresIn: number;
+  /**
+   * **The granted scope, which may be narrower than requested** even on
+   * success (§15.2 rule 7). Read it rather than assuming the request was
+   * honoured verbatim.
+   */
+  scope?: string;
+}
+
+/** 200 body of a token-exchange `POST /oauth2/token`. */
+export interface TokenExchangeResponseWire {
+  access_token: string;
+  issued_token_type: string;
+  token_type: string;
+  expires_in: number;
+  scope?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// §12.7 Logout helpers
+// ---------------------------------------------------------------------------
+
+/** Arguments to `logoutUrl` (CONTRACT.md §12.7.2). */
+export interface LogoutUrlParams {
+  /**
+   * A previously-issued ID token, placed in `id_token_hint` — the only
+   * *authenticated* statement of which session is being ended.
+   */
+  idToken: Sensitive<string> | string;
+  /**
+   * Where the OP should send the browser afterwards. Honoured only on exact
+   * match against the client's registered allow-list — a server-side check the
+   * SDK deliberately does not duplicate (§12.7.2 rule 3).
+   */
+  postLogoutRedirectUri?: string;
+  /**
+   * An opaque value echoed back on the redirect. Generated and checked by the
+   * caller (§12.7.2 rule 2), never by the SDK.
+   */
+  state?: string;
+  /** A pre-fetched discovery document. */
+  configuration?: OidcConfiguration;
+}
+
+/**
+ * What a verified logout token names (§12.7.3).
+ *
+ * @remarks
+ * Deliberately **not** a bare boolean: the RP has to know *which* session to
+ * end, and a verifier that only says "valid" would force the caller to
+ * re-parse the token themselves, with none of the checks this type is proof
+ * of.
+ */
+export interface VerifiedLogoutToken {
+  /**
+   * The session that ended. **When present, end only this session** — falling
+   * back to "every session for `sub`" is over-reach the AXIAM server itself
+   * refuses to make.
+   */
+  sid?: string;
+  /** The subject whose session ended. */
+  sub?: string;
+  /**
+   * Replay identifier.
+   *
+   * **The RP dedups on this, not the SDK.** Back-channel delivery is
+   * at-least-once with retry, so a valid token legitimately arrives twice; the
+   * SDK has no durable store and an in-memory guard would silently drop a real
+   * second logout after a restart. Surfaced, never consumed.
+   */
+  jti: string;
 }

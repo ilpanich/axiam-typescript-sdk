@@ -48,6 +48,8 @@ export interface WireCheckAccessRequest {
 export interface WireCheckAccessResponse {
   allowed: boolean;
   deny_reason: string;
+  /** B1 deny-override decision reason (proto field 3). */
+  reason_code?: string;
 }
 
 export interface WireBatchCheckAccessRequest {
@@ -151,6 +153,11 @@ function fromWireResponse(resp: WireCheckAccessResponse): AccessDecision {
   return {
     allowed: resp.allowed,
     reason: resp.deny_reason ? resp.deny_reason : undefined,
+    // proto3 renders an unset `string` as `""`, so an older server that never
+    // set field 3 is indistinguishable from one that set it empty. Both mean
+    // "no reason code", and both map to `undefined` rather than to `""`,
+    // which would be a value callers could accidentally branch on.
+    reasonCode: resp.reason_code ? resp.reason_code : undefined,
   };
 }
 

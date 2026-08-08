@@ -33,6 +33,14 @@ export {
   MIN_DISCOVERY_TTL_MS,
   SSO_CALLBACK_PATH,
   SSO_START_PATH,
+  ACCESS_TOKEN_TYPE,
+  BACKCHANNEL_LOGOUT_EVENT,
+  DEFAULT_POLL_INTERVAL_SECS,
+  DEVICE_CODE_GRANT_TYPE,
+  MAX_LOGOUT_TOKEN_AGE_SECS,
+  PollSchedule,
+  SLOW_DOWN_INCREMENT_SECS,
+  TOKEN_EXCHANGE_GRANT_TYPE,
 } from './oidc.js';
 export type {
   AuthorizationRequest,
@@ -49,6 +57,14 @@ export type {
   SsoCompleteResult,
   SsoStartParams,
   SsoStartResult,
+  DeviceAuthorization,
+  DeviceAuthorizeParams,
+  DeviceLoginParams,
+  DevicePollParams,
+  ExchangedToken,
+  LogoutUrlParams,
+  TokenExchangeParams,
+  VerifiedLogoutToken,
 } from './oidcTypes.js';
 export {
   MemoryOidcStateStore,

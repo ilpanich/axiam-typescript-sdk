@@ -25,6 +25,8 @@ export const TOKEN_ENDPOINT = `${BASE_URL}/oauth2/token`;
 export const INTROSPECT_ENDPOINT = `${BASE_URL}/oauth2/introspect`;
 export const REVOKE_ENDPOINT = `${BASE_URL}/oauth2/revoke`;
 export const ISSUER = 'https://iam.example.com';
+export const DEVICE_AUTHORIZATION_ENDPOINT = `${BASE_URL}/oauth2/device_authorization`;
+export const END_SESSION_ENDPOINT = `${BASE_URL}/oauth2/end_session`;
 
 /** A discovery document pointing every endpoint at the mocked origin. */
 export function discoveryDocument(overrides: Partial<OidcConfiguration> = {}): OidcConfiguration {
@@ -42,7 +44,109 @@ export function discoveryDocument(overrides: Partial<OidcConfiguration> = {}): O
     scopes_supported: ['openid', 'profile', 'email'],
     token_endpoint_auth_methods_supported: ['client_secret_post'],
     claims_supported: ['sub', 'iss', 'aud', 'exp', 'iat', 'nonce'],
-    grant_types_supported: ['authorization_code', 'client_credentials', 'refresh_token'],
+    grant_types_supported: [
+      'authorization_code',
+      'client_credentials',
+      'refresh_token',
+      'urn:ietf:params:oauth:grant-type:device_code',
+      'urn:ietf:params:oauth:grant-type:token-exchange',
+    ],
+    device_authorization_endpoint: DEVICE_AUTHORIZATION_ENDPOINT,
+    end_session_endpoint: END_SESSION_ENDPOINT,
+    backchannel_logout_supported: true,
+    backchannel_logout_session_supported: true,
+    ...overrides,
+  };
+}
+
+/**
+ * A discovery document with the §14/§12.7 endpoints deliberately absent — the
+ * shape an older AXIAM, or a third-party OP without those features, publishes.
+ * Used to assert the SDK errors rather than concatenating a URL onto the
+ * issuer (§12.7.2 rule 1).
+ */
+export function discoveryDocumentWithoutOptionalEndpoints(): OidcConfiguration {
+  const doc = discoveryDocument();
+  delete doc.device_authorization_endpoint;
+  delete doc.end_session_endpoint;
+  return doc;
+}
+
+export const LOGOUT_SID = 'session-abc';
+export const LOGOUT_JTI = 'logout-token-jti-1';
+
+/** Options for {@link signLogoutToken}. Defaults produce a VALID token. */
+export interface LogoutTokenOptions {
+  issuer?: string;
+  audience?: string;
+  subject?: string;
+  /** `null` omits `sid`. */
+  sid?: string | null;
+  jti?: string;
+  expiresInSec?: number;
+  issuedAtSec?: number;
+  /** Omit `events` entirely — the check that separates a logout token from an ID token. */
+  omitEvents?: boolean;
+  /** Present `events`, but carrying some other event key. */
+  wrongEvent?: boolean;
+  /** A `nonce`, which Back-Channel Logout 1.0 §2.4 forbids. */
+  nonce?: string;
+  /** Omit `sub` as well as `sid`, so the token names nothing. */
+  omitSub?: boolean;
+  /** Sign with a header carrying no `kid`. */
+  omitKid?: boolean;
+}
+
+/** Mint a back-channel logout token (OIDC Back-Channel Logout 1.0 §2.4). */
+export async function signLogoutToken(
+  key: SigningKey,
+  options: LogoutTokenOptions = {},
+): Promise<string> {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const claims: Record<string, unknown> = {
+    jti: options.jti ?? LOGOUT_JTI,
+  };
+  if (!options.omitEvents) {
+    const eventKey = options.wrongEvent
+      ? 'http://schemas.openid.net/event/some-other-thing'
+      : 'http://schemas.openid.net/event/backchannel-logout';
+    claims.events = { [eventKey]: {} };
+  }
+  if (options.sid !== null) {
+    claims.sid = options.sid ?? LOGOUT_SID;
+  }
+  if (options.nonce !== undefined) {
+    claims.nonce = options.nonce;
+  }
+
+  const header: Record<string, unknown> = { alg: 'EdDSA' };
+  if (!options.omitKid) {
+    header.kid = key.kid;
+  }
+
+  let builder = new SignJWT(claims)
+    .setProtectedHeader(header as never)
+    .setIssuer(options.issuer ?? ISSUER)
+    .setAudience(options.audience ?? CLIENT_ID)
+    .setIssuedAt(options.issuedAtSec ?? nowSec)
+    .setExpirationTime(nowSec + (options.expiresInSec ?? 120));
+  if (!options.omitSub) {
+    builder = builder.setSubject(options.subject ?? 'user-1');
+  }
+  return builder.sign(key.privateKey);
+}
+
+/** A `DeviceAuthorizationResponse` wire body. */
+export function deviceAuthorizationResponse(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    device_code: 'device-code-value',
+    user_code: 'WDJB-MJHT',
+    verification_uri: `${BASE_URL}/device`,
+    verification_uri_complete: `${BASE_URL}/device?user_code=WDJB-MJHT`,
+    expires_in: 30,
+    interval: 1,
     ...overrides,
   };
 }

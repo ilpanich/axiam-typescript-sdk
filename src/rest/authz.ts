@@ -31,7 +31,10 @@ function toWireBody(check: AccessCheck): CheckAccessBodyWire {
 }
 
 function fromWireDecision(wire: CheckAccessResponseWire): AccessDecision {
-  return { allowed: wire.allowed, reason: wire.reason };
+  // §11 rule 9: `reason_code` is surfaced verbatim, including a value this
+  // SDK has never heard of — the outcome is carried by `allowed` alone, so an
+  // unknown code can never change it.
+  return { allowed: wire.allowed, reason: wire.reason, reasonCode: wire.reason_code };
 }
 
 /**
