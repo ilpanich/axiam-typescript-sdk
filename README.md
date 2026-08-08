@@ -17,9 +17,13 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to CONTRACT.md §1–§13 (including §6.1 mTLS client certificates, the
-§10.1 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
-`verifyWebhook` signature verifier).
+This SDK conforms to CONTRACT.md §1–§13 and §12.7, §14, §15 (including §6.1 mTLS client
+certificates, the §10.1 minimum local-verification set, the §12 OIDC/SSO relying-party
+helpers, and the §13 `verifyWebhook` signature verifier).
+
+§12.7, §14 and §15 are named rather than folded into the range because they landed after
+this SDK already claimed §1–§13: widening the range silently would turn a statement that
+was true when written into a different claim without anyone editing it.
 
 ### §10.1 minimum local-verification set
 
@@ -506,6 +510,94 @@ try {
 strings.
 
 See `examples/express-oidc-login.ts` for a complete, runnable example.
+
+## Device authorization grant (`axiam-sdk/node`, CONTRACT.md §14)
+
+RFC 8628 — signing in a device that cannot show a browser: a TV, a CLI, a headless
+commissioning tool.
+
+```ts
+const tokens = await oidc.deviceLogin({
+  onUserCode: (auth) => {
+    // Called BEFORE the first poll. Display it however the device can —
+    // screen, QR code, e-ink panel. The SDK never prints it for you.
+    console.log(`visit ${auth.verificationUri} and enter ${auth.userCode}`);
+  },
+});
+```
+
+`deviceAuthorize` and `devicePoll` are also public, for an application driving its own
+loop. The polling rules are where implementations go wrong, so they are worth stating:
+
+- **`slow_down` raises the interval permanently.** An SDK that backs off for one round and
+  returns to the original interval will be told to slow down again, forever.
+- **`access_denied` and `expired_token` stay distinct.** A human said no, versus nobody
+  answered — the only information the device can act on.
+- **Polling stops at `expires_in`**, even if the server has not yet said `expired_token`.
+- **A `5xx` mid-poll is not terminal.** A server restart must not lose a grant the user has
+  already approved.
+
+`deviceCode` is `Sensitive`; `userCode` deliberately is not — it exists to be read aloud,
+and wrapping it would defeat the one thing it is for.
+
+Per §14.3 rule 4, `deviceLogin` **returns** the token set rather than adopting it. See
+[`examples/device-login.ts`](examples/device-login.ts).
+
+## Token exchange (`axiam-sdk/node`, CONTRACT.md §15)
+
+RFC 8693 — a service holding a user's token exchanging it for a *narrower* one before
+calling the next service.
+
+```ts
+const exchanged = await oidc.tokenExchange({
+  subjectToken: new Sensitive(userToken),
+  scopes: ['orders:read'],
+  audience: 'orders-service',
+});
+```
+
+Most of what this method does is refuse to be helpful, and each refusal is deliberate:
+
+- **No default `actorToken`.** Omitting it asks for *impersonation*; the SDK will not
+  quietly substitute the client's own session token and turn that into a delegation.
+- **No auto-narrowing after `invalid_scope`.** The server refuses rather than silently
+  narrowing precisely so the caller finds out here.
+- **No refresh token, ever** — `ExchangedToken` has no such field, so there is nothing to
+  synthesise. Re-run the exchange.
+- **No adoption.** The issued token is handed onward in one call; adopting it would
+  silently re-privilege every later call this client makes. A MUST NOT, where
+  `loginClientCredentials` adoption is a MAY.
+
+See [`examples/token-exchange.ts`](examples/token-exchange.ts).
+
+## Logout — RP-initiated and back-channel (`axiam-sdk/node`, CONTRACT.md §12.7)
+
+`logoutUrl` builds the redirect; `verifyLogoutToken` validates a token the OP **pushed** to
+your back-channel endpoint.
+
+```ts
+const url = await oidc.logoutUrl({ idToken });
+
+// …and at your registered backchannel_logout_uri:
+const verified = await oidc.verifyLogoutToken(logoutToken);
+if (verified.sid) {
+  endSession(verified.sid); // that session ONLY
+}
+```
+
+The verifier is where the security weight sits — the input arrives unsolicited and
+instructs you to terminate a session. It checks the signature (same JWKS path, same
+`kid`-required discipline as §12.4), `iss`, `aud`, that `events` carries the
+back-channel-logout key (**the only thing separating a logout token from an ID token**),
+that `nonce` is *absent* (its presence is how an ID token gets replayed as one), that
+something is named, and freshness.
+
+It returns `sid`/`sub`/`jti` rather than a bare boolean: you have to know *which* session to
+end. **Dedup on `jti` yourself** — delivery is at-least-once, so a valid token legitimately
+arrives twice; the SDK has no durable store and an in-memory guard would silently drop a
+real second logout after a restart.
+
+See [`examples/logout.ts`](examples/logout.ts).
 
 ## Webhook signature verification (`axiam-sdk/node`, CONTRACT.md §13)
 

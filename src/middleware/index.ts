@@ -67,6 +67,18 @@ export type {
   SsoCompleteResult,
   SsoStartParams,
   SsoStartResult,
+  // §12.7/§14/§15. Re-exported here for the same reason as the types above:
+  // `OidcClient` is part of this entry point's public surface, so every type
+  // its methods name must be reachable from here or typedoc reports a
+  // dangling reference (and CI treats that as an error).
+  DeviceAuthorization,
+  DeviceAuthorizeParams,
+  DeviceLoginParams,
+  DevicePollParams,
+  ExchangedToken,
+  LogoutUrlParams,
+  TokenExchangeParams,
+  VerifiedLogoutToken,
 } from '../node/oidcTypes.js';
 export type { IdTokenClaims } from '../node/oidcIdToken.js';
 export {

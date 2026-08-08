@@ -115,6 +115,8 @@ export interface CheckAccessBodyWire {
 export interface CheckAccessResponseWire {
   allowed: boolean;
   reason?: string;
+  /** B1 deny-override decision reason (CONTRACT.md §11 rule 9). */
+  reason_code?: string;
 }
 
 /** Wire body for POST /api/v1/authz/check/batch. */
