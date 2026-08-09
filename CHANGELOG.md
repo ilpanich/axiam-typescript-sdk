@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **§16 bounded read-only retry policy.** `checkAccess`/`can`/`batchCheck` now retry under
+  the contract's normative table: 3 attempts, 200 ms base, 5 s cap, **full jitter** over
+  `[0, backoff]`, `Retry-After` honored as a floor. Both non-deterministic inputs are
+  injectable, so the tests pin the jitter fraction to 0 and 1 to prove the range instead of
+  sleeping.
+- **§18 `AxiamClient.close()`**, idempotent, with use-after-close rejecting rather than
+  silently reconnecting. It does **not** log out and never reaches the network: the
+  server-side session outlives the client object, and a `close()` that logged out would end
+  every user's session on each deploy.
+- **§19 telemetry hooks** — `telemetryHook` on `AxiamClientOptions`, plus the `TelemetryEvent`
+  union and `examples/telemetry-hook.ts` with the OpenTelemetry mapping. A hook that throws
+  cannot fail the operation that fired it, and no event payload can carry a token. One
+  request pair per *attempt*, not per logical call, so callers can count real wire calls.
+- **§17 decision memo — opt-in, off by default.** `decisionMemoTtlMs`, clamped to 5000 ms.
+  Allows and denies memoized identically, failures never memoized, cleared on any credential
+  change. **Reads-your-own-writes is not guaranteed.**
+- `retryEnabled` (§16.6), default on. No knob for the attempt cap, base or delay cap: §16.1
+  forbids raising them.
+
+### Fixed
+
+- **`withRetry` was never called by any production path.** It was exported, unit-tested and
+  green, but `checkAccess` did not route through it — so this SDK performed **no read-only
+  retries at all** while appearing to, leaving §11.2 rule 5 silently unmet. A tested helper
+  nobody calls is worse than an absent one: the passing tests are what stop anyone looking.
+  The §16 conformance tests now assert through the public `checkAccess` surface.
+- **`Retry-After` replaced the backoff instead of flooring it.** `retryAfterMs ?? backoff(n)`
+  meant a `Retry-After: 0` retried immediately, defeating the policy — exactly what §16.1's
+  "floor, never a ceiling" forbids. Now `Math.max(jittered, retryAfterMs)`.
+- **Partial jitter replaced with full jitter.** The old `base + 0–20%` keeps every client's
+  retries clustered around the same instant, which causes the thundering herd retries are
+  meant to prevent.
+- The §19 request pair now carries the real attempt number. An earlier draft emitted every
+  pair as attempt 1, which would have made a retried call indistinguishable from a single
+  slow one — caught by the conformance test asserting `[1, 2]`.
+
+### Changed
+
+- Re-vendored `CONTRACT.md` at **1.8.1**. `openapi.json` unchanged — docs-only contract revs.
+- `RetryOptions.maxAttempts` removed: §16.1 fixes the cap at 3 and forbids raising it.
+  `withRetry`'s callback now receives the attempt number.
+
 ## [1.0.0-alpha24] - 2026-08-04
 
 ### Added

@@ -13,6 +13,7 @@
 // customCa.
 
 import { Sensitive } from './sensitive.js';
+import type { TelemetryHook } from './telemetry.js';
 
 /**
  * Configuration for {@link AxiamClient}, passed as its constructor's first
@@ -51,6 +52,53 @@ export interface AxiamClientOptions {
   orgId?: string;
   /** PEM-encoded custom CA certificate, for self-signed/dev environments (§6). */
   customCa?: string;
+  /**
+   * Enable the CONTRACT.md §16 bounded read-only retry policy. **Default:
+   * `true`.**
+   *
+   * Set `false` to make every operation exactly one attempt. That is the right
+   * choice for a caller who owns their own retry layer — they know their
+   * deadline and this SDK does not — but it is not a way to make failures
+   * quieter: a transient `NetworkError` simply surfaces immediately.
+   *
+   * §16.1 permits this switch but forbids raising the attempt cap, base delay
+   * or delay cap above the contract's values, so there is no knob for those:
+   * eleven SDKs agreeing on one table is the point.
+   */
+  retryEnabled?: boolean;
+  /**
+   * Enable the CONTRACT.md §17 client-side decision memo, in milliseconds.
+   * **Default: `0`, which means disabled** — not "cache for zero milliseconds".
+   *
+   * ## What you are accepting
+   *
+   * The staleness bound is this TTL, **in both directions**. A grant revoked on
+   * the server can still read as allowed for up to the TTL, and a grant just
+   * added can still read as denied for up to the TTL.
+   *
+   * **Reads-your-own-writes is not guaranteed.** An admin UI that grants a role
+   * and immediately re-checks is the case that breaks, and it breaks silently.
+   * If that is your workload, leave this off.
+   *
+   * Clamped to 5000 ms rather than rejected, so asking for a minute gets you
+   * five seconds. Allows and denies are memoized identically (asymmetric
+   * caching leaks the outcome through latency), failures are never memoized,
+   * and the memo is cleared on any credential change.
+   */
+  decisionMemoTtlMs?: number;
+  /**
+   * Install a CONTRACT.md §19 telemetry sink.
+   *
+   * Receives request start/end, §16 retry and §9 refresh events, so metrics can
+   * be wired without this package depending on any metrics library. See
+   * `examples/telemetry-hook.ts`.
+   *
+   * A hook that throws cannot fail the operation that fired it (§19.2 rule 2),
+   * and no event payload can carry a token — {@link TelemetryEvent} is a closed
+   * union with a fixed field set (§19.2 rule 3). Invoked on the calling path,
+   * so it must not block; buffer on your side if you need async delivery.
+   */
+  telemetryHook?: TelemetryHook;
   /**
    * PEM-encoded client-certificate chain for mutual TLS (§6.1). Presented to
    * the server to authenticate an IoT device / service account. MUST be

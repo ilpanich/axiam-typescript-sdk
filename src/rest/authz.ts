@@ -8,6 +8,8 @@
 // async functions.
 
 import { mapHttpStatusToError, NetworkError } from '../core/index.js';
+import { memoKey } from '../core/decisionMemo.js';
+import { withRetry } from './retry.js';
 import type { AxiamClient } from './client.js';
 import type {
   AccessCheck,
@@ -45,10 +47,42 @@ function fromWireDecision(wire: CheckAccessResponseWire): AccessDecision {
  * as a transport failure.
  */
 export async function checkAccess(client: AxiamClient, check: AccessCheck): Promise<AccessDecision> {
+  client.ensureOpen();
+
+  // §17: consult the decision memo first. Disabled by default, in which case
+  // this is one map lookup that always misses.
+  const key = memoKey(check);
+  const memoized = client.decisionMemo.get(key);
+  if (memoized) return memoized;
+
+  // §16: a `POST`, but side-effect-free, so it is retry-eligible. Eligibility
+  // is "changes no server state", NOT "is a GET" — gating on the verb would
+  // exclude the single most important operation this policy covers.
+  const decision = await withRetry(
+    (attempt) => attemptCheck(client, check, attempt),
+    client.retryOptions('checkAccess'),
+  );
+
+  // Only a decision the server actually returned is memoized: reaching here
+  // means success, so §17.1 rule 7's ban on negative-caching a failure is
+  // structural rather than a check that could be forgotten.
+  client.decisionMemo.set(key, decision);
+  return decision;
+}
+
+/** One attempt at the single-check call, with its §19 event pair. */
+async function attemptCheck(
+  client: AxiamClient,
+  check: AccessCheck,
+  attempt: number,
+): Promise<AccessDecision> {
+  const done = client.telemetry.startRequest('checkAccess', 'POST', CHECK_PATH, attempt);
   try {
     const response = await client.session.axios.post<CheckAccessResponseWire>(CHECK_PATH, toWireBody(check));
+    done(response.status, 'success');
     return fromWireDecision(response.data);
   } catch (err) {
+    done(statusOf(err), 'failure');
     throw mapAuthzError(err, check.action, check.resourceId);
   }
 }
@@ -67,13 +101,27 @@ export async function can(client: AxiamClient, action: string, resourceId: strin
  * order as the input `checks` array (server-guaranteed ordering).
  */
 export async function batchCheck(client: AxiamClient, checks: AccessCheck[]): Promise<AccessDecision[]> {
+  client.ensureOpen();
   const body: BatchCheckAccessBodyWire = { checks: checks.map(toWireBody) };
-  try {
-    const response = await client.session.axios.post<BatchCheckAccessResponseWire>(BATCH_CHECK_PATH, body);
-    return response.data.results.map(fromWireDecision);
-  } catch (err) {
-    throw mapAuthzError(err);
+  return withRetry(async (attempt) => {
+    const done = client.telemetry.startRequest('batchCheck', 'POST', BATCH_CHECK_PATH, attempt);
+    try {
+      const response = await client.session.axios.post<BatchCheckAccessResponseWire>(BATCH_CHECK_PATH, body);
+      done(response.status, 'success');
+      return response.data.results.map(fromWireDecision);
+    } catch (err) {
+      done(statusOf(err), 'failure');
+      throw mapAuthzError(err);
+    }
+  }, client.retryOptions('batchCheck'));
+}
+
+/** The HTTP status an axios-shaped error carries, if any. */
+function statusOf(err: unknown): number | undefined {
+  if (err && typeof err === 'object' && 'response' in err) {
+    return (err as { response?: { status?: number } }).response?.status;
   }
+  return undefined;
 }
 
 function mapAuthzError(err: unknown, action?: string, resourceId?: string): Error {

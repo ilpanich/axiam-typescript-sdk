@@ -56,6 +56,12 @@ function extractErrorMessage(err: unknown): string {
  * mfa_required branch (mfaToken sourced from the wire challenge_token).
  */
 export async function login(client: AxiamClient, email: string, password: string): Promise<LoginResult> {
+  // §18.1 rule 4: use-after-close is an error, not a reconnect.
+  client.ensureOpen();
+  // §17.1 rule 9: entries are keyed by subject, not session, so any credential
+  // change must drop them — otherwise a re-authentication as a different
+  // principal inherits the previous one's decisions.
+  client.decisionMemo.clear();
   // The server resolves the workspace from the login body (org + tenant), not
   // the X-Tenant-ID header, so tenant/org context must travel here (§5).
   const body = client.session.buildLoginBody(email, password);
@@ -95,6 +101,12 @@ export async function login(client: AxiamClient, email: string, password: string
  * returned from that prior login() call).
  */
 export async function verifyMfa(client: AxiamClient, mfaToken: string, code: string): Promise<LoginResult> {
+  // §18.1 rule 4: use-after-close is an error, not a reconnect.
+  client.ensureOpen();
+  // §17.1 rule 9: entries are keyed by subject, not session, so any credential
+  // change must drop them — otherwise a re-authentication as a different
+  // principal inherits the previous one's decisions.
+  client.decisionMemo.clear();
   const body: MfaVerifyRequestBody = { challenge_token: mfaToken, totp_code: code };
 
   try {
@@ -122,6 +134,12 @@ export async function verifyMfa(client: AxiamClient, mfaToken: string, code: str
  * 401 (D-07). Exposed as a public method for explicit proactive refresh.
  */
 export async function refresh(client: AxiamClient): Promise<void> {
+  // §18.1 rule 4: use-after-close is an error, not a reconnect.
+  client.ensureOpen();
+  // §17.1 rule 9: entries are keyed by subject, not session, so any credential
+  // change must drop them — otherwise a re-authentication as a different
+  // principal inherits the previous one's decisions.
+  client.decisionMemo.clear();
   try {
     await client.session.axios.post<RefreshSuccessResponseWire>(REFRESH_PATH, client.session.buildRefreshBody());
     // H8 fix (SDK bench harness validation): a successful refresh rotates
@@ -156,6 +174,12 @@ export async function refresh(client: AxiamClient): Promise<void> {
  * the request has been sent successfully.
  */
 export async function logout(client: AxiamClient): Promise<void> {
+  // §18.1 rule 4: use-after-close is an error, not a reconnect.
+  client.ensureOpen();
+  // §17.1 rule 9: entries are keyed by subject, not session, so any credential
+  // change must drop them — otherwise a re-authentication as a different
+  // principal inherits the previous one's decisions.
+  client.decisionMemo.clear();
   try {
     await client.session.axios.post(LOGOUT_PATH, {});
   } catch (err) {
