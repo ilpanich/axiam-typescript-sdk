@@ -11,3 +11,7 @@ export * from './csrf.js';
 export * from './singleFlightRefresh.js';
 export * from './config.js';
 export * from './authz.js';
+// §17 decision memo, §19 telemetry hooks (D5).
+export * from './decisionMemo.js';
+export * from './telemetry.js';
+export * from './telemetryReporter.js';

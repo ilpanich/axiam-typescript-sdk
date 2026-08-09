@@ -38,7 +38,7 @@ describe('withRetry (CF-01)', () => {
       .mockRejectedValueOnce(new NetworkError('down'))
       .mockResolvedValueOnce('recovered');
 
-    const promise = withRetry(fn, { idempotent: true, maxAttempts: 3 });
+    const promise = withRetry(fn, { idempotent: true });
     await vi.runAllTimersAsync();
 
     await expect(promise).resolves.toBe('recovered');
@@ -50,7 +50,7 @@ describe('withRetry (CF-01)', () => {
     const err = Object.assign(new NetworkError('rate limited'), { retryAfterMs: 1234 });
     const fn = vi.fn().mockRejectedValueOnce(err).mockResolvedValueOnce('ok');
 
-    const promise = withRetry(fn, { idempotent: true, maxAttempts: 2 });
+    const promise = withRetry(fn, { idempotent: true });
     // Nothing resolves before the hinted delay elapses.
     await vi.advanceTimersByTimeAsync(1233);
     expect(fn).toHaveBeenCalledTimes(1);
@@ -63,7 +63,7 @@ describe('withRetry (CF-01)', () => {
     vi.useFakeTimers();
     const fn = vi.fn().mockRejectedValue(new NetworkError('always down'));
 
-    const promise = withRetry(fn, { idempotent: true, maxAttempts: 3 });
+    const promise = withRetry(fn, { idempotent: true });
     const settled = promise.catch((e) => e);
     await vi.runAllTimersAsync();
 

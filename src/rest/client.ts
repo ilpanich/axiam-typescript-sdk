@@ -7,6 +7,11 @@
 // auth.ts/authz.ts, which extend this class's prototype.
 
 import type { AxiamClientOptions } from '../core/index.js';
+import { NetworkError } from '../core/index.js';
+import { DecisionMemo } from '../core/decisionMemo.js';
+import { TelemetryDispatcher } from '../core/telemetry.js';
+import { TelemetryReporter } from '../core/telemetryReporter.js';
+import type { RetryOptions } from './retry.js';
 import { createSession, SharedSession } from './session.js';
 import { installInterceptors } from './interceptors.js';
 import * as authMethods from './auth.js';
@@ -65,9 +70,71 @@ export class AxiamClient {
    *   NEVER statically imported from this browser-safe module, so a `/rest`
    *   browser bundle keeps pulling zero Node dependencies (SC#1).
    */
+  /** §17 decision memo. Disabled unless `decisionMemoTtlMs` was configured. */
+  readonly decisionMemo: DecisionMemo;
+
+  /** §19 telemetry dispatcher. Empty unless a hook was installed. */
+  readonly telemetry: TelemetryReporter;
+
+  /** §16.1 disable switch. Defaults to enabled. */
+  private readonly retryEnabled: boolean;
+
+  /** §18 shutdown flag. Set once by close(); read on every operation. */
+  private closed = false;
+
   constructor(options: AxiamClientOptions, session?: SharedSession) {
     this.session = session ?? createSession(options);
     installInterceptors(this.session.axios, this.session);
+    // §17.1 rule 1: off unless the caller asked for it.
+    this.decisionMemo = new DecisionMemo(options.decisionMemoTtlMs ?? 0);
+    this.telemetry = new TelemetryReporter(new TelemetryDispatcher(options.telemetryHook));
+    this.retryEnabled = options.retryEnabled ?? true;
+  }
+
+  /**
+   * Release this client's local resources (CONTRACT.md §18).
+   *
+   * Idempotent — calling it twice is not an error. Cleanup runs from error
+   * paths, and an error path that itself throws hides the original failure.
+   *
+   * **This does not log out.** §18.1 rule 5: shutting down a client releases
+   * *local* resources and never reaches the network. The server-side session
+   * deliberately outlives the client object, which is what lets a process
+   * restart and resume; a `close()` that logged out would silently end every
+   * user's session on each deploy. Call {@link logout} first if ending the
+   * session is what you want.
+   *
+   * After this returns, any operation on the client rejects rather than
+   * silently reconnecting.
+   */
+  close(): void {
+    this.closed = true;
+    this.decisionMemo.clear();
+  }
+
+  /**
+   * Throws if {@link close} has been called (§18.1 rule 4).
+   *
+   * @internal
+   */
+  ensureOpen(): void {
+    if (this.closed) {
+      throw new NetworkError('client is closed: this AxiamClient was shut down with close()');
+    }
+  }
+
+  /**
+   * §16 options for `operation`, bound to this client's switch and telemetry.
+   *
+   * @internal
+   */
+  retryOptions(operation: string): RetryOptions {
+    return {
+      idempotent: true,
+      operation,
+      enabled: this.retryEnabled,
+      telemetry: this.telemetry.dispatcher,
+    };
   }
 
   /** `POST /api/v1/auth/login` (§1, D-18). */

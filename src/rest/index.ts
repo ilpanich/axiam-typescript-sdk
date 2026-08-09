@@ -8,8 +8,29 @@
 export { AxiamClient } from './client.js';
 export { SharedSession } from './session.js';
 export { SKIP_REFRESH } from './interceptors.js';
-export { withRetry } from './retry.js';
+export { withRetry, backoffMs, delayMs, MAX_ATTEMPTS, BASE_DELAY_MS, MAX_DELAY_MS } from './retry.js';
 export type { RetryOptions } from './retry.js';
+
+// §17 decision memo and §19 telemetry hooks (D5). Re-exported here — not just
+// from `core` — because typedoc resolves references from the entry points
+// listed in typedoc.json, and `AxiamClient.decisionMemo`/`.telemetry` and
+// `AxiamClientOptions.telemetryHook` reference these types. Leaving them out
+// makes `npm run docs` exit non-zero on dangling references, which is a CI
+// gate here.
+export { DecisionMemo, MAX_TTL_MS, memoKey } from '../core/decisionMemo.js';
+export { TelemetryDispatcher } from '../core/telemetry.js';
+export { TelemetryReporter } from '../core/telemetryReporter.js';
+export type {
+  TelemetryEvent,
+  TelemetryHook,
+  Outcome,
+  RefreshRole,
+  RequestStartEvent,
+  RequestEndEvent,
+  RetryEvent,
+  RefreshEvent,
+} from '../core/telemetry.js';
+export type { FinishRequest } from '../core/telemetryReporter.js';
 export type {
   AccessCheck,
   AccessDecision,
