@@ -21,6 +21,7 @@
 // to repeat that.
 
 import type { AccessDecision } from './authz.js';
+import type { TelemetryDispatcher } from './telemetry.js';
 
 /**
  * The §17.1 rule 2 ceiling. A configured TTL above this is clamped, not
@@ -143,6 +144,29 @@ export class DecisionMemo {
    */
   clear(): void {
     this.entries.clear();
+  }
+
+  /**
+   * Emit a {@link ConfigClampedEvent} if the requested TTL was clamped (§19.2
+   * rule 6).
+   *
+   * This is the clamp that matters most to get right: an operator who set a
+   * 60-second TTL believes their staleness bound is 60 seconds. It is five, and
+   * without this event nothing anywhere says so.
+   *
+   * Nothing is emitted when the requested value was already inside the limit,
+   * or when the memo is disabled — an event that fires when nothing happened
+   * trains its reader to ignore it.
+   */
+  reportClamp(requestedMs: number, telemetry: TelemetryDispatcher): void {
+    if (!telemetry.installed || requestedMs <= 0 || requestedMs === this.ttlMs) return;
+    telemetry.emit({
+      type: 'configClamped',
+      setting: 'decisionMemoTtlMs',
+      requested: String(requestedMs),
+      effective: String(this.ttlMs),
+      contractReference: '§17.1 rule 2',
+    });
   }
 
   /** Entry count, for tests. */

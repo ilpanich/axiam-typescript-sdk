@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **§19 `ConfigClampedEvent` (contract 1.9).** A clamped setting is now reported at
+  construction rather than applied silently — currently the §17.1 rule 2 memo TTL. Clamping
+  is right; clamping *silently* is not: an operator who set a 60-second TTL believes their
+  staleness bound is 60 seconds, and it is five. Nothing is emitted for a value already
+  within its limit, or for the disabled default.
+
+### Added
+
 - **§16 bounded read-only retry policy.** `checkAccess`/`can`/`batchCheck` now retry under
   the contract's normative table: 3 attempts, 200 ms base, 5 s cap, **full jitter** over
   `[0, backoff]`, `Retry-After` honored as a floor. Both non-deterministic inputs are

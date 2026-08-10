@@ -29,6 +29,7 @@ export type {
   RequestEndEvent,
   RetryEvent,
   RefreshEvent,
+  ConfigClampedEvent,
 } from '../core/telemetry.js';
 export type { FinishRequest } from '../core/telemetryReporter.js';
 export type {
