@@ -88,6 +88,9 @@ export class AxiamClient {
     // §17.1 rule 1: off unless the caller asked for it.
     this.decisionMemo = new DecisionMemo(options.decisionMemoTtlMs ?? 0);
     this.telemetry = new TelemetryReporter(new TelemetryDispatcher(options.telemetryHook));
+    // §19.2 rule 6: a clamped setting is reported, not swallowed. Emitted once,
+    // here, because construction is the only moment an operator can act on it.
+    this.decisionMemo.reportClamp(options.decisionMemoTtlMs ?? 0, this.telemetry.dispatcher);
     this.retryEnabled = options.retryEnabled ?? true;
   }
 
