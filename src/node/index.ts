@@ -41,6 +41,11 @@ export {
   PollSchedule,
   SLOW_DOWN_INCREMENT_SECS,
   TOKEN_EXCHANGE_GRANT_TYPE,
+  UMA_TICKET_GRANT_TYPE,
+  UMA_PROTECTION_SCOPE,
+  UMA_CLAIM_TOKEN_FORMAT,
+  umaParseChallenge,
+  umaChallengeHeader,
 } from './oidc.js';
 export type {
   AuthorizationRequest,
@@ -65,6 +70,12 @@ export type {
   LogoutUrlParams,
   TokenExchangeParams,
   VerifiedLogoutToken,
+  RequestedPermission,
+  RequestingPartyToken,
+  ResourceSet,
+  RptPermission,
+  UmaChallenge,
+  UmaExchangeTicketParams,
 } from './oidcTypes.js';
 export {
   MemoryOidcStateStore,

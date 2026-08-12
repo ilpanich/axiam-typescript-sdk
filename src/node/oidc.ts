@@ -28,6 +28,7 @@ import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import {
   AuthError,
   AxiamError,
+  isOAuth2ErrorBody,
   mapHttpStatusToError,
   NetworkError,
   OAuthProtocolError,
@@ -72,6 +73,13 @@ import type {
   TokenExchangeParams,
   TokenExchangeResponseWire,
   VerifiedLogoutToken,
+  RequestedPermission,
+  RequestingPartyToken,
+  ResourceSet,
+  ResourceSetWire,
+  RptResponseWire,
+  UmaChallenge,
+  UmaExchangeTicketParams,
 } from './oidcTypes.js';
 
 /** Path of the OIDC discovery document, relative to the client base URL. */
@@ -109,6 +117,84 @@ export const TOKEN_EXCHANGE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:token
 
 /** The only `subject_token_type` / `actor_token_type` AXIAM accepts. */
 export const ACCESS_TOKEN_TYPE = 'urn:ietf:params:oauth:token-type:access_token';
+
+/** `grant_type` of the UMA ticket grant (UMA 2.0 §3.3.1, CONTRACT.md §20.1). */
+export const UMA_TICKET_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:uma-ticket';
+
+/** The scope that makes an access token a Protection API Token (§20.2 rule 1). */
+export const UMA_PROTECTION_SCOPE = 'uma_protection';
+
+/** The only `claim_token_format` AXIAM v1 accepts (§20.2 rule 2). */
+export const UMA_CLAIM_TOKEN_FORMAT = 'urn:ietf:params:oauth:token-type:access_token';
+
+/**
+ * Parse a `WWW-Authenticate: UMA …` header value (CONTRACT.md §20.3).
+ *
+ * @remarks
+ * **This deliberately does not exchange the ticket.** Parsing a challenge and
+ * acting on it are separate decisions: the `as_uri` names an authorization
+ * server this client has not necessarily chosen to trust, and auto-exchanging
+ * would send the requesting party's `claimToken` to whatever host answered the
+ * 403. The caller decides.
+ *
+ * @returns the parsed challenge, or `undefined` when the header is not a UMA
+ * challenge.
+ */
+export function umaParseChallenge(header: string): UmaChallenge | undefined {
+  const trimmed = header.trim();
+  if (!trimmed.startsWith('UMA')) return undefined;
+  const rest = trimmed.slice(3);
+  // "UMA" alone is a valid, if useless, challenge; anything else must be
+  // separated by whitespace so `UMAX realm="…"` is not read as UMA.
+  if (rest.length > 0 && !/^\s/.test(rest)) return undefined;
+
+  const challenge: UmaChallenge = {};
+  for (const part of rest.split(',')) {
+    const eq = part.indexOf('=');
+    if (eq === -1) continue;
+    const key = part.slice(0, eq).trim();
+    const value = part.slice(eq + 1).trim().replace(/^"|"$/g, '');
+    if (key === 'realm') challenge.realm = value;
+    else if (key === 'as_uri') challenge.asUri = value;
+    else if (key === 'ticket') challenge.ticket = new Sensitive(value);
+  }
+  return challenge;
+}
+
+/**
+ * Format a `WWW-Authenticate: UMA` header value (§20.3, emit half).
+ *
+ * The resource-server side: having obtained a ticket from `umaRequestTicket`,
+ * tell the caller where to redeem it.
+ */
+export function umaChallengeHeader(
+  realm: string,
+  asUri: string,
+  ticket: Sensitive<string> | string,
+): string {
+  return `UMA realm="${realm}", as_uri="${asUri}", ticket="${exposeSecret(ticket)}"`;
+}
+
+/** Map the camelCase {@link ResourceSet} onto the snake_case wire shape. */
+function toResourceSetWire(resource: ResourceSet): ResourceSetWire {
+  return {
+    name: resource.name,
+    ...(resource.type !== undefined ? { type: resource.type } : {}),
+    // Always sent, even when empty: an update replaces the scope list, and
+    // omitting the key would leave the server's copy untouched (§20.2 rule 8).
+    resource_scopes: resource.resourceScopes ?? [],
+  };
+}
+
+/** Map the wire shape back onto {@link ResourceSet}. */
+function fromResourceSetWire(wire: ResourceSetWire): ResourceSet {
+  return {
+    ...(wire._id != null ? { id: wire._id } : {}),
+    name: wire.name,
+    ...(wire.type != null ? { type: wire.type } : {}),
+    resourceScopes: wire.resource_scopes ?? [],
+  };
+}
 
 /**
  * The `events` member that distinguishes a logout token from an ID token
@@ -374,6 +460,31 @@ function mapOidcError(err: unknown, url: string, fallbackMessage: string): Axiam
     return mapHttpStatusToError(status, bodyMessage(body, fallbackMessage), { url, body, cause: err });
   }
   return new NetworkError(fallbackMessage, sanitizeAxiosError(err));
+}
+
+/**
+ * Map an error from the **uma-ticket grant**, where `access_denied` arrives as
+ * HTTP **403** (UMA 2.0 §3.3.6) rather than the 400 every other OAuth2 error
+ * uses.
+ *
+ * @remarks
+ * §20.4 requires dispatching on the `error` field rather than the status, so
+ * that the code reaches the caller whichever status carries it. This is kept
+ * local to the ticket grant on purpose: {@link mapHttpStatusToError}'s §2 rows
+ * apply the OAuth2 mapping to 400/401 only, and widening that globally would
+ * change how every OAuth2 endpoint's 403 is reported — a cross-cutting change
+ * this grant does not need and did not ask for. An ordinary REST 403 keeps
+ * mapping to `AuthzError`.
+ */
+function mapUmaGrantError(err: unknown, url: string, fallbackMessage: string): AxiamError {
+  if (err instanceof AxiamError) {
+    return err;
+  }
+  const body = axiosBody(err);
+  if (axiosStatus(err) === 403 && isOAuth2ErrorBody(body)) {
+    return new OAuthProtocolError(body.error, body.error_description);
+  }
+  return mapOidcError(err, url, fallbackMessage);
 }
 
 /**
@@ -1001,6 +1112,200 @@ export class OidcClient {
       expiresIn: data.expires_in,
       ...(data.scope != null ? { scope: data.scope } : {}),
     };
+  }
+
+  // -------------------------------------------------------------------------
+  // §20 UMA 2.0 — Protection API and ticket grant
+  // -------------------------------------------------------------------------
+
+  /**
+   * `POST /uma2/rreg/resource_set` — register a resource set (CONTRACT.md §20.1).
+   *
+   * @remarks
+   * The `pat` is an explicit parameter, not this client's session. A Protection
+   * API Token must be a **client-credentials** token, because a ticket binds to
+   * the `client_id` that minted it — and this client's session is usually a
+   * *user* session, which names no client to bind to (§20.2 rule 1).
+   */
+  async umaRegisterResource(
+    pat: Sensitive<string> | string,
+    resource: ResourceSet,
+  ): Promise<ResourceSet> {
+    const wire = await this.#umaProtection<ResourceSetWire>(
+      'post',
+      '/uma2/rreg/resource_set',
+      pat,
+      toResourceSetWire(resource),
+    );
+    return fromResourceSetWire(wire);
+  }
+
+  /** `GET /uma2/rreg/resource_set/{id}` — read a resource set (§20.1). */
+  async umaReadResource(pat: Sensitive<string> | string, id: string): Promise<ResourceSet> {
+    const wire = await this.#umaProtection<ResourceSetWire>(
+      'get',
+      `/uma2/rreg/resource_set/${encodeURIComponent(id)}`,
+      pat,
+    );
+    return fromResourceSetWire(wire);
+  }
+
+  /**
+   * `PUT /uma2/rreg/resource_set/{id}` — replace a resource set (§20.1).
+   *
+   * @remarks
+   * **The scope list is replaced, not merged** (§20.2 rule 8). Whatever
+   * `resource.resourceScopes` holds becomes the complete declared set; omitting
+   * a scope removes it, which is how a resource server drops an authority. This
+   * method performs no read-before-write.
+   */
+  async umaUpdateResource(
+    pat: Sensitive<string> | string,
+    id: string,
+    resource: ResourceSet,
+  ): Promise<ResourceSet> {
+    const wire = await this.#umaProtection<ResourceSetWire>(
+      'put',
+      `/uma2/rreg/resource_set/${encodeURIComponent(id)}`,
+      pat,
+      toResourceSetWire(resource),
+    );
+    return fromResourceSetWire(wire);
+  }
+
+  /** `DELETE /uma2/rreg/resource_set/{id}` — deregister (§20.1). */
+  async umaDeleteResource(pat: Sensitive<string> | string, id: string): Promise<void> {
+    await this.#umaProtection<void>(
+      'delete',
+      `/uma2/rreg/resource_set/${encodeURIComponent(id)}`,
+      pat,
+    );
+  }
+
+  /**
+   * `GET /uma2/rreg/resource_set` — list the ids **this client** registered
+   * (§20.1).
+   *
+   * @remarks
+   * Not the tenant's whole resource tree: a protection scope does not entitle a
+   * caller to enumerate it.
+   */
+  async umaListResources(pat: Sensitive<string> | string): Promise<string[]> {
+    return this.#umaProtection<string[]>('get', '/uma2/rreg/resource_set', pat);
+  }
+
+  /**
+   * `POST /uma2/perm` — mint a permission ticket (§20.1).
+   *
+   * @remarks
+   * Scope names are validated **here**, against each resource's declared set.
+   * Asking for an undeclared scope is a `400`, not a denial — the two are
+   * different failures, and this SDK surfaces the distinction the server draws
+   * rather than flattening it.
+   */
+  async umaRequestTicket(
+    pat: Sensitive<string> | string,
+    permissions: RequestedPermission[],
+  ): Promise<Sensitive<string>> {
+    const wire = await this.#umaProtection<{ ticket: string }>(
+      'post',
+      '/uma2/perm',
+      pat,
+      permissions.map((p) => ({
+        resource_id: p.resourceId,
+        resource_scopes: p.resourceScopes,
+      })),
+    );
+    return new Sensitive(wire.ticket);
+  }
+
+  /**
+   * `POST /oauth2/token` with the uma-ticket grant (§20.1) — exchange a ticket
+   * for an RPT.
+   *
+   * @remarks
+   * **This method never retries.** It issues exactly one request and is outside
+   * the §16 retry policy — not on `5xx`, not on timeout, not on any transport
+   * failure (§20.2 rule 6). The ticket is consumed *before* the request is
+   * evaluated, so a failed exchange has already spent it: a retry cannot
+   * succeed, and under concurrency it is precisely the second redemption that
+   * ilpanich/axiam#302's measured residual describes. On failure, request a
+   * **new** ticket.
+   *
+   * What it deliberately does not do:
+   *
+   * - **No default `claimToken`** (rule 2) — it is required. Defaulting it to
+   *   the resource server's own PAT would mint an RPT for the resource server
+   *   instead of for the user.
+   * - **No auto-narrowing on `access_denied`** (rule 3). A partial grant is
+   *   refused whole; whether two-of-three permissions is useful is the
+   *   application's judgement, not this SDK's.
+   * - **No adoption** (rule 4). The RPT is the *requesting party's* token.
+   *   Adopting it would re-privilege every later call this client makes as that
+   *   user.
+   *
+   * The four ticket refusals — unknown, expired, already used, wrong client —
+   * all answer `invalid_grant` with one message. This SDK does not try to tell
+   * them apart (§20.4): the server collapses them so a caller cannot probe for
+   * live ticket handles.
+   *
+   * @throws AuthError when no `clientSecret` is configured — client-side, with
+   * no wire call.
+   */
+  async umaExchangeTicket(params: UmaExchangeTicketParams): Promise<RequestingPartyToken> {
+    const configuration = params.configuration ?? (await this.oidcDiscover());
+    const form = new URLSearchParams();
+    form.set('grant_type', UMA_TICKET_GRANT_TYPE);
+    form.set('ticket', exposeSecret(params.ticket));
+    form.set('claim_token', exposeSecret(params.claimToken));
+    form.set('claim_token_format', UMA_CLAIM_TOKEN_FORMAT);
+    form.set('client_id', this.#options.clientId);
+    form.set('client_secret', this.#requireClientSecret('umaExchangeTicket'));
+
+    const url = this.#endpointUrl(configuration.token_endpoint, params.tenantId);
+    // One POST, no retry wrapper. See the rule-6 note above — this is the §16
+    // exception, and it is load-bearing rather than stylistic.
+    let data: RptResponseWire;
+    try {
+      const config: AxiosRequestConfig = {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      };
+      const response = await this.#session.axios.post<RptResponseWire>(
+        url,
+        form.toString(),
+        config,
+      );
+      data = response.data;
+    } catch (err) {
+      throw mapUmaGrantError(err, url, 'uma ticket exchange request failed');
+    }
+
+    return {
+      accessToken: new Sensitive(data.access_token),
+      tokenType: data.token_type,
+      expiresIn: data.expires_in,
+    };
+  }
+
+  /** Shared PAT-authenticated Protection API request. */
+  async #umaProtection<T>(
+    method: 'get' | 'post' | 'put' | 'delete',
+    path: string,
+    pat: Sensitive<string> | string,
+    body?: unknown,
+  ): Promise<T> {
+    const config: AxiosRequestConfig = {
+      headers: { Authorization: `Bearer ${exposeSecret(pat)}` },
+    };
+    try {
+      const response =
+        method === 'get' || method === 'delete'
+          ? await this.#session.axios[method]<T>(path, config)
+          : await this.#session.axios[method]<T>(path, body, config);
+      return response.data;
+    } catch (err) {
+      throw mapOidcError(err, path, 'UMA protection API request failed');
+    }
   }
 
   // -------------------------------------------------------------------------

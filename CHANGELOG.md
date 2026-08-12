@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **§20 UMA 2.0 — Protection API and ticket grant (contract 1.10).** New methods on
+  `OidcClient`: `umaRegisterResource` / `umaReadResource` / `umaUpdateResource` /
+  `umaDeleteResource` / `umaListResources`, `umaRequestTicket`, `umaExchangeTicket`, plus the
+  `WWW-Authenticate: UMA` challenge helpers `umaParseChallenge` and `umaChallengeHeader`.
+
+  Two behaviours are load-bearing rather than incidental, and both are asserted by counting
+  requests. **`umaExchangeTicket` never retries** — the one documented exception to the §16
+  retry policy, because a ticket is consumed before the request is evaluated, so a retry
+  cannot succeed and under concurrency is exactly the second redemption that
+  ilpanich/axiam#302's measured residual describes. And **`umaParseChallenge` does not
+  exchange the ticket it parsed**: the `as_uri` names an authorization server the client has
+  not chosen to trust.
+
+  The PAT is an explicit parameter on every Protection API call rather than being taken from
+  the client's session, because that session is usually a *user* session and a ticket binds
+  to a `client_id`.
+
+  `access_denied` on the ticket grant arrives as **403** (UMA 2.0 §3.3.6), unlike RFC 8628's,
+  which is a 400. It is mapped to `OAuthProtocolError` by a mapper local to this grant rather
+  than by widening §2's endpoint-qualified rows — an ordinary REST 403 still maps to
+  `AuthzError`, unchanged.
+
 - **§19 `ConfigClampedEvent` (contract 1.9).** A clamped setting is now reported at
   construction rather than applied silently — currently the §17.1 rule 2 memo TTL. Clamping
   is right; clamping *silently* is not: an operator who set a 60-second TTL believes their
