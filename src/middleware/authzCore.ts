@@ -11,7 +11,7 @@
 // that identity is absent, the caller (express.ts/fastify.ts) responds 401
 // without ever reaching this module.
 
-import { AuthzError, NetworkError } from '../core/index.js';
+import { AuthzError, NetworkError, type Sensitive } from '../core/index.js';
 import type { AccessCheck, AccessDecision } from '../rest/types.js';
 import type { VerifiableSession } from './verifyCore.js';
 
@@ -110,6 +110,65 @@ export interface RequireAccessOptions {
   scope?: string;
   /** Debug-only denial logger (§11.2.8) — never receives the token, only `action`/`resourceId`. */
   logger?: AuthzLogger;
+  /**
+   * When set, a denial also carries a `WWW-Authenticate: UMA` challenge
+   * (§20.3): the guard mints a permission ticket for the action it just refused
+   * and tells the caller where to redeem it.
+   *
+   * Opt-in — see {@link UmaChallenger} for why that matters.
+   */
+  umaChallenge?: UmaChallenger;
+}
+
+/**
+ * Mints a permission ticket. Structurally the `umaRequestTicket` method of an
+ * `OidcClient`, taken as a function so this module does not depend on the
+ * Node-only OIDC entry point — the middleware core is shared with the browser
+ * build, which has no Protection API client.
+ */
+export type UmaTicketMinter = (
+  pat: string,
+  permissions: ReadonlyArray<{ resourceId: string; resourceScopes: string[] }>,
+) => Promise<Sensitive<string>>;
+
+/**
+ * A configured `WWW-Authenticate: UMA` challenge emitter (§20.3, emit half).
+ *
+ * Attach one via {@link RequireAccessOptions.umaChallenge} and a denial stops
+ * being a bare 403: the guard mints a fresh permission ticket for the pairs the
+ * caller lacked and returns it in the header, so a UMA-aware client knows where
+ * to go for authority instead of only being told "no".
+ *
+ * **Opt-in, and deliberately so.** Emitting a challenge means minting a
+ * credential — a wire call to the Protection API, and a live ticket, produced
+ * on a path the caller did not explicitly request. A guard that did that on
+ * every denial by default would turn each unauthorized request into a
+ * Protection API call, which is a denial-of-service amplifier pointed at your
+ * own authorization server.
+ *
+ * **Failure is not escalation.** If minting fails — the PAT expired, the
+ * Protection API is down, the resource declares none of the requested scopes —
+ * the denial still surfaces as an ordinary 403 without a challenge. A caller
+ * who was going to be refused is refused either way; letting a Protection API
+ * outage turn a deny into a 500 would hand the outage a second consequence, and
+ * letting it turn into an allow would be a security bug.
+ */
+export interface UmaChallenger {
+  /** The protection realm to name in the header. */
+  realm: string;
+  /**
+   * The authorization server to send the caller to — normally this
+   * deployment's issuer, read from discovery rather than concatenated by hand.
+   */
+  asUri: string;
+  /**
+   * A Protection API Token: a *client-credentials* token carrying the
+   * `uma_protection` scope (§20.2 rule 1). A user token cannot stand in — a
+   * minted ticket is bound to the `client_id` that minted it.
+   */
+  pat: string;
+  /** Typically `oidcClient.umaRequestTicket.bind(oidcClient)`. */
+  mint: UmaTicketMinter;
 }
 
 /** Minimal logger seam for the §11.2.8 debug-only denial/error log (mirrors `amqp/consumer.ts`'s `ConsumeLogger`). */
@@ -171,6 +230,12 @@ export type CheckOutcome =
       kind: 'denied';
       /** Denial message surfaced in the 403 body. */
       message: string;
+      /**
+       * The complete `WWW-Authenticate` value, when a {@link UmaChallenger} was
+       * configured *and* minting succeeded (§20.3). Absent otherwise, including
+       * when minting failed — the denial stands either way.
+       */
+      challenge?: string;
     }
   | {
       /** The authz transport failed — fail-closed → HTTP 503, never an allow. */
@@ -196,16 +261,17 @@ export async function evaluateAccess(
   resourceId: string,
   subjectId: string,
   scope?: string,
+  challenger?: UmaChallenger,
 ): Promise<CheckOutcome> {
   try {
     const decision = await checker.checkAccess({ action, resourceId, scope, subjectId });
     if (!decision.allowed) {
-      return { kind: 'denied', message: decision.reason ?? 'access denied' };
+      return deny(decision.reason ?? 'access denied', action, resourceId, challenger);
     }
     return { kind: 'allowed' };
   } catch (err) {
     if (err instanceof AuthzError) {
-      return { kind: 'denied', message: err.message };
+      return deny(err.message, action, resourceId, challenger);
     }
     if (err instanceof NetworkError) {
       return { kind: 'unavailable', message: err.message };
@@ -214,6 +280,48 @@ export async function evaluateAccess(
     // "couldn't decide", never a silent allow.
     return { kind: 'unavailable', message: 'authorization service unavailable' };
   }
+}
+
+/**
+ * Build the denial, minting a §20.3 challenge when one was configured.
+ *
+ * Only ever reached on a path that has already decided to refuse, so minting
+ * cannot change the outcome — at worst it fails and the caller gets the plain
+ * 403 they would have got anyway.
+ */
+async function deny(
+  message: string,
+  action: string,
+  resourceId: string,
+  challenger?: UmaChallenger,
+): Promise<CheckOutcome> {
+  if (!challenger) return { kind: 'denied', message };
+  try {
+    // §20.2: the UMA scope is the AXIAM *action*, which is what makes the ticket
+    // ask for exactly the authority this check just refused — and what keeps a
+    // deny rule vetoing the resulting RPT the same way it vetoed the check.
+    const ticket = await challenger.mint(challenger.pat, [{ resourceId, resourceScopes: [action] }]);
+    return {
+      kind: 'denied',
+      message,
+      challenge: umaChallengeHeaderValue(challenger.realm, challenger.asUri, ticket.expose()),
+    };
+  } catch {
+    // Deliberately swallowed; see UmaChallenger's "failure is not escalation".
+    // Not logged either: the §11.2.8 logger never receives credentials, and the
+    // failure reason from a Protection API call can contain a token echo.
+    return { kind: 'denied', message };
+  }
+}
+
+/**
+ * Format the header value. Duplicated from the Node-only `umaChallengeHeader`
+ * rather than imported, because this module is in the browser build's
+ * dependency graph and that one is not — the format is four literals and a
+ * template, and a shared import would drag the whole OIDC entry point along.
+ */
+function umaChallengeHeaderValue(realm: string, asUri: string, ticket: string): string {
+  return `UMA realm="${realm}", as_uri="${asUri}", ticket="${ticket}"`;
 }
 
 /** Local (no server round-trip) role check (§11.2.9): true iff `roles` and the identity's roles share at least one entry. */

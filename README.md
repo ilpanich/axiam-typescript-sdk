@@ -17,7 +17,7 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19 (including §6.1 mTLS client
+This SDK conforms to CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19, §20 (including §6.1 mTLS client
 certificates, the §10.1 minimum local-verification set, the §12 OIDC/SSO relying-party
 helpers, and the §13 `verifyWebhook` signature verifier).
 
@@ -598,6 +598,72 @@ arrives twice; the SDK has no durable store and an in-memory guard would silentl
 real second logout after a restart.
 
 See [`examples/logout.ts`](examples/logout.ts).
+
+## UMA 2.0 — Protection API and ticket grant (CONTRACT.md §20)
+
+The resource-server side of User-Managed Access: register what you guard, ask the
+authorization server what a caller would need, and redeem the resulting ticket.
+
+The two runnable halves are [`examples/uma-resource-server.ts`](examples/uma-resource-server.ts)
+and [`examples/uma-client.ts`](examples/uma-client.ts) — run the first, then the second
+against it.
+
+### Making a denial actionable (`axiam-sdk/middleware`)
+
+```ts
+import { requireAccess, type UmaChallenger } from 'axiam-sdk/middleware';
+
+const challenger: UmaChallenger = {
+  realm: 'invoices',
+  asUri: (await oidc.oidcDiscover()).issuer,
+  pat, // a client-credentials token carrying `uma_protection` (§20.2 rule 1)
+  mint: (token, permissions) => oidc.umaRequestTicket(token, [...permissions]),
+};
+
+app.get(
+  '/invoices/:id',
+  requireAccess(session, 'invoices:read', fromParam('id'), { umaChallenge: challenger }),
+  handler,
+);
+```
+
+Without `umaChallenge` this is an ordinary §11 guard and a denial is a bare 403. With it, the
+guard mints a permission ticket for the action it just refused and returns
+`WWW-Authenticate: UMA realm=…, as_uri=…, ticket=…` alongside the 403 — so a UMA-aware client
+knows where to obtain authority instead of only being told no. The body is unchanged, so a
+client that does not speak UMA sees exactly the 403 it saw before. Both `requireAccess`
+(Express) and `requireAccessHook` (Fastify) take the option.
+
+**It is opt-in, and that is a design decision rather than an oversight.** Emitting a
+challenge means *minting a credential*: a wire call to the Protection API and a live ticket,
+produced on a path the caller did not explicitly request. A guard that did that on every
+denial by default would turn each unauthorized request into a Protection API call — a
+denial-of-service amplifier pointed at your own authorization server.
+
+**Failure is not escalation.** If minting fails — expired PAT, Protection API down, a scope
+the resource never declared — the denial still surfaces as a plain 403 with no challenge. A
+caller who was going to be refused is refused either way; letting an outage turn a deny into
+a 500 would give it a second consequence, and letting it turn into an allow would be a
+security bug.
+
+### Consuming the challenge (`axiam-sdk/node`)
+
+```ts
+import { umaParseChallenge } from 'axiam-sdk/node';
+
+const challenge = umaParseChallenge(response.headers.get('www-authenticate') ?? '');
+if (challenge?.ticket) {
+  // Deciding whether to trust challenge.asUri is YOUR call — parsing performed no
+  // exchange, deliberately (§20.3): that host was chosen by the server you just
+  // failed against.
+  const rpt = await oidc.umaExchangeTicket({ ticket: challenge.ticket, claimToken: userToken });
+}
+```
+
+The rest of the surface — `umaRegisterResource`, the other four `rreg` operations,
+`umaRequestTicket`, `umaExchangeTicket` — plus the rules they enforce (a ticket is never
+retried, the RPT is never adopted, an update replaces the scope list rather than merging it)
+is documented on the generated API docs for `axiam-sdk/node`.
 
 ## Webhook signature verification (`axiam-sdk/node`, CONTRACT.md §13)
 
