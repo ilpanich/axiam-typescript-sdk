@@ -586,3 +586,128 @@ export interface VerifiedLogoutToken {
    */
   jti: string;
 }
+
+// ---------------------------------------------------------------------------
+// §20 UMA 2.0 — Protection API and ticket grant
+// ---------------------------------------------------------------------------
+
+/**
+ * A UMA resource set — an AXIAM resource seen through the Protection API
+ * (CONTRACT.md §20.1).
+ *
+ * `_id` is **the AXIAM resource id**, not a parallel identifier: the same UUID
+ * is directly usable as the `resourceId` of a later {@link RequestedPermission},
+ * and as the resource id anywhere else in this SDK.
+ */
+export interface ResourceSet {
+  /** Assigned by the server on registration; absent on the way in. */
+  id?: string;
+  /** Human-readable name, shown in the admin UI. */
+  name: string;
+  /**
+   * Free-form resource type. Defaults server-side to `uma_resource` when
+   * omitted, so a resource server that leaves it out does not produce a row
+   * that sorts oddly next to hand-made ones.
+   */
+  type?: string;
+  /**
+   * The scope names a resource server may ask for on this resource.
+   *
+   * **Replaced wholesale by an update, never merged** (§20.2 rule 8). This SDK
+   * does not read the current scopes and fold them into an update payload as a
+   * convenience — doing so would make removing a scope impossible through it.
+   */
+  resourceScopes?: string[];
+}
+
+/** One `(resource, scopes)` pair a resource server requires (§20.1). */
+export interface RequestedPermission {
+  /** The AXIAM resource id — the same UUID the Protection API returned as `_id`. */
+  resourceId: string;
+  /**
+   * Scope names, each of which the resource must already declare. Matched
+   * exactly: no prefix or wildcard semantics in either direction.
+   */
+  resourceScopes: string[];
+}
+
+/**
+ * One entry of an RPT's `permissions` claim.
+ *
+ * **A record of a decision already made, not a live authorization answer**
+ * (§20.2 rule 7). These are the pairs the engine allowed when the RPT was
+ * minted; a grant revoked afterwards does not empty a live RPT. Do not cache
+ * them beyond the token's own expiry — which is why that expiry is short.
+ */
+export interface RptPermission {
+  resourceId: string;
+  resourceScopes: string[];
+  /** Absolute expiry, seconds since the epoch. */
+  exp: number;
+}
+
+/**
+ * A Requesting Party Token (§20.1).
+ *
+ * **There is no `refreshToken` field, and that is deliberate** (§20.2 rule 5).
+ * The grant issues none, so an RPT cannot outlive the ticket that authorised
+ * it; an application that wants a fresh one re-runs the grant. This result
+ * never enters the §9 single-flight refresh guard — there is nothing to refresh.
+ */
+export interface RequestingPartyToken {
+  /** The RPT itself (§20.6 secret). */
+  accessToken: Sensitive<string>;
+  /** Always `Bearer`. */
+  tokenType: string;
+  /** `min(claimToken remaining, server ceiling, 300 s)`. */
+  expiresIn: number;
+}
+
+/**
+ * A parsed `WWW-Authenticate: UMA` challenge (§20.3).
+ */
+export interface UmaChallenge {
+  /** The protection realm the resource server named. */
+  realm?: string;
+  /**
+   * The authorization server the resource server nominates.
+   *
+   * **Not automatically trusted.** See `umaParseChallenge`.
+   */
+  asUri?: string;
+  /** The ticket to exchange — a bearer credential for its 60-second life. */
+  ticket?: Sensitive<string>;
+}
+
+/** Arguments to `umaExchangeTicket` (§20.1). */
+export interface UmaExchangeTicketParams {
+  /** The permission ticket, from `umaRequestTicket` or a parsed challenge. */
+  ticket: Sensitive<string> | string;
+  /**
+   * The requesting party's access token.
+   *
+   * **Required**, though UMA 2.0 §3.3.1 marks it optional: v1 implements
+   * neither incremental authorization nor claims-gathering, so this is the only
+   * channel that names a requesting party (§20.2 rule 2).
+   */
+  claimToken: Sensitive<string> | string;
+  /** Tenant UUID for the `tenant_id` query parameter. */
+  tenantId?: string;
+  /** A pre-fetched discovery document. */
+  configuration?: OidcConfiguration;
+}
+
+/** Wire shape of a resource set (snake_case, as the server sends it). */
+export interface ResourceSetWire {
+  _id?: string;
+  name: string;
+  type?: string;
+  resource_scopes?: string[];
+}
+
+/** Wire shape of the RPT the ticket grant returns. */
+export interface RptResponseWire {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+}
