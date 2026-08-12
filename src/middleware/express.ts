@@ -164,9 +164,22 @@ export function requireAccess(
       return;
     }
 
-    const outcome = await evaluateAccess(checker, action, resourceId, axiamUser.userId, opts?.scope);
+    const outcome = await evaluateAccess(
+      checker,
+      action,
+      resourceId,
+      axiamUser.userId,
+      opts?.scope,
+      opts?.umaChallenge,
+    );
     if (outcome.kind === 'denied') {
       opts?.logger?.debug('axiam_sdk.authz', 'access denied', { action, resourceId });
+      if (outcome.challenge) {
+        // §20.3: tell the caller where to obtain authority. Additive — the body
+        // is the unchanged §11.2.5 shape, so a client that does not speak UMA
+        // sees exactly the 403 it saw before.
+        res.setHeader('WWW-Authenticate', outcome.challenge);
+      }
       res.status(403).json(authzDeniedBodyShared(outcome.message));
       return;
     }

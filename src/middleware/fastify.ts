@@ -180,9 +180,20 @@ export function requireAccessHook(
       return;
     }
 
-    const outcome = await evaluateAccess(checker, action, resourceId, axiamUser.userId, opts?.scope);
+    const outcome = await evaluateAccess(
+      checker,
+      action,
+      resourceId,
+      axiamUser.userId,
+      opts?.scope,
+      opts?.umaChallenge,
+    );
     if (outcome.kind === 'denied') {
       opts?.logger?.debug('axiam_sdk.authz', 'access denied', { action, resourceId });
+      if (outcome.challenge) {
+        // §20.3, additive: the body keeps the unchanged §11.2.5 shape.
+        void reply.header('WWW-Authenticate', outcome.challenge);
+      }
       await reply.code(403).send(authzDeniedBodyShared(outcome.message));
       return;
     }

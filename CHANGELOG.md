@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **§20.3 challenge emission wired into the §11 guards.** `RequireAccessOptions.umaChallenge`
+  takes a new `UmaChallenger` (realm, `asUri`, PAT, minter); on denial `requireAccess`
+  (Express) and `requireAccessHook` (Fastify) mint a permission ticket for the action just
+  refused and set `WWW-Authenticate: UMA` alongside the 403. `CheckOutcome`'s `denied` arm
+  gained an optional `challenge`.
+
+  **Opt-in by construction.** Emitting a challenge means minting a credential, so a guard
+  that did it by default would turn every unauthorized request into a Protection API call.
+  And **failure is not escalation**: if minting fails the denial still surfaces as a plain
+  403, because a caller who was going to be refused is refused either way and an outage must
+  not turn a deny into a 500 — still less into an allow.
+
+  The minter is taken as a *function* (`UmaTicketMinter`) rather than an `OidcClient`, because
+  the middleware core is shared with the browser build and that build has no Protection API
+  client. For the same reason the header is formatted inline rather than imported from the
+  Node-only `umaChallengeHeader` — it is four literals and a template, and the import would
+  drag the whole OIDC entry point into the browser bundle.
+
+- **A runnable UMA example pair**: [`examples/uma-resource-server.ts`](examples/uma-resource-server.ts)
+  mints a PAT, registers a resource and guards a route with the challenger;
+  [`examples/uma-client.ts`](examples/uma-client.ts) catches the refusal, parses the
+  challenge, **makes the trust decision about `asUri` explicitly**, exchanges the ticket and
+  retries with the RPT. The client half exists partly to show what §20.3 is protecting: the
+  `asUri` is chosen by the server you just failed against, and the example refuses to redeem
+  against a host that is not the issuer it already trusts.
+
 - **§20 UMA 2.0 — Protection API and ticket grant (contract 1.10).** New methods on
   `OidcClient`: `umaRegisterResource` / `umaReadResource` / `umaUpdateResource` /
   `umaDeleteResource` / `umaListResources`, `umaRequestTicket`, `umaExchangeTicket`, plus the

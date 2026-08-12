@@ -32,6 +32,8 @@ export {
   type OidcLoginSuccessBody,
 } from './oidcLoginCore.js';
 export { authenticateRequest, type AxiamIdentity, type VerifiableSession } from './verifyCore.js';
+// §20.3 challenge emission, wired into the §11 guards via RequireAccessOptions.umaChallenge.
+export type { UmaChallenger, UmaTicketMinter } from './authzCore.js';
 // Re-exported so the middleware entry point's own generated docs can resolve
 // `VerifiableSession.jwksVerifier`'s `Verifier` type (and the `AxiamClaims` it
 // returns) without a dangling cross-module link (`node/jwks.ts` is not itself
