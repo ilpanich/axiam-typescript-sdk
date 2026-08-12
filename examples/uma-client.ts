@@ -63,13 +63,18 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Log the *parsed* fields, never the raw header. The header contains
-  // `ticket="..."`, and §20.6 is explicit that the ticket's 60-second life does
-  // not make it harmless: for those 60 seconds it is the credential that
-  // converts into an RPT, so a header in a log line is a live credential in a
-  // log line. `realm` and `asUri` are not secrets and are the two fields you
-  // actually need to look at.
-  console.log(`challenge: realm=${challenge.realm} as_uri=${challenge.asUri} ticket=[REDACTED]`);
+  // Nothing from the challenge is echoed, and there are two separate reasons.
+  //
+  // The ticket, because §20.6 says so: its 60-second life does not make it
+  // harmless — for those 60 seconds it IS the credential that converts into an
+  // RPT, so a header in a log line is a live credential in a log line.
+  //
+  // The realm and asUri, because they are strings a *remote* server chose. They
+  // are not secrets, but echoing attacker-controlled text into a terminal or a
+  // log file is its own small hazard (escape sequences, log forging), and an
+  // example is the last place to teach the habit. What matters here is the shape
+  // of the challenge, not its contents.
+  console.log(`challenge parsed: as_uri present=${challenge.asUri !== undefined}, ticket present=true`);
 
   // ---- 3. The trust decision ----
   //
@@ -80,7 +85,9 @@ async function main(): Promise<void> {
   const trusted = (await oidc.oidcDiscover()).issuer;
   const nominated = challenge.asUri;
   if (nominated && nominated.replace(/\/$/, '') !== trusted.replace(/\/$/, '')) {
-    console.log(`refusing to redeem: as_uri ${nominated} is not our issuer ${trusted}.`);
+    // The nominated value is deliberately not echoed — see above. Our own issuer
+    // is ours to print, and it is the half a reader needs to debug the mismatch.
+    console.log(`refusing to redeem: the challenge nominates a server that is not ${trusted}.`);
     console.log('this is the auto-exchange §20.3 forbids, and why it forbids it.');
     return;
   }
