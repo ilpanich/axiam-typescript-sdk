@@ -55,7 +55,6 @@ async function main(): Promise<void> {
     console.log('no WWW-Authenticate header: this refusal is not actionable.');
     return;
   }
-  console.log(`challenge: ${header}`);
 
   // ---- 2. Parse, and only parse ----
   const challenge = umaParseChallenge(header);
@@ -63,6 +62,14 @@ async function main(): Promise<void> {
     console.log('the challenge names no ticket; nothing to redeem.');
     return;
   }
+
+  // Log the *parsed* fields, never the raw header. The header contains
+  // `ticket="..."`, and §20.6 is explicit that the ticket's 60-second life does
+  // not make it harmless: for those 60 seconds it is the credential that
+  // converts into an RPT, so a header in a log line is a live credential in a
+  // log line. `realm` and `asUri` are not secrets and are the two fields you
+  // actually need to look at.
+  console.log(`challenge: realm=${challenge.realm} as_uri=${challenge.asUri} ticket=[REDACTED]`);
 
   // ---- 3. The trust decision ----
   //
