@@ -7,7 +7,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { AuthError, OAuthProtocolError, Sensitive } from '../../src/core/index.js';
-import { JWT_TOKEN_TYPE } from '../../src/node/oidc.js';
+import { ACCESS_TOKEN_TYPE, JWT_TOKEN_TYPE } from '../../src/node/oidc.js';
 import {
   BASE_URL,
   CLIENT_SECRET,
@@ -72,6 +72,7 @@ describe('tokenExchange wire shape (§15.1)', () => {
 
     const result = await oidc.tokenExchange({
       subjectToken: new Sensitive(SUBJECT_TOKEN),
+      subjectTokenType: ACCESS_TOKEN_TYPE,
       scopes: ['orders:read', 'orders:write'],
       audience: 'orders-service',
     });
@@ -97,7 +98,7 @@ describe('tokenExchange wire shape (§15.1)', () => {
     const { oidc } = createClient();
 
     await expect(
-      oidc.tokenExchange({ subjectToken: SUBJECT_TOKEN }),
+      oidc.tokenExchange({ subjectToken: SUBJECT_TOKEN, subjectTokenType: ACCESS_TOKEN_TYPE }),
     ).rejects.toThrow(AuthError);
   });
 });
@@ -107,7 +108,7 @@ describe('delegation vs impersonation (§15.2 rule 1)', () => {
     const { forms } = mountExchange(() => exchangeResponse());
     const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
 
-    await oidc.tokenExchange({ subjectToken: SUBJECT_TOKEN });
+    await oidc.tokenExchange({ subjectToken: SUBJECT_TOKEN, subjectTokenType: ACCESS_TOKEN_TYPE });
 
     // Passing no actor token asks for IMPERSONATION. An SDK that helpfully
     // substituted its own session token would silently turn that into a
@@ -122,6 +123,7 @@ describe('delegation vs impersonation (§15.2 rule 1)', () => {
 
     await oidc.tokenExchange({
       subjectToken: SUBJECT_TOKEN,
+      subjectTokenType: ACCESS_TOKEN_TYPE,
       actorToken: new Sensitive(ACTOR_TOKEN),
     });
 
@@ -139,7 +141,7 @@ describe('refusals surface unchanged (§15.2 rules 2-3, §15.3)', () => {
     const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
 
     const err = await oidc
-      .tokenExchange({ subjectToken: SUBJECT_TOKEN, scopes: ['orders:read', 'orders:admin'] })
+      .tokenExchange({ subjectToken: SUBJECT_TOKEN, scopes: ['orders:read', 'orders:admin'], subjectTokenType: ACCESS_TOKEN_TYPE })
       .catch((e: unknown) => e);
 
     expect((err as OAuthProtocolError).error).toBe('invalid_scope');
@@ -153,7 +155,7 @@ describe('refusals surface unchanged (§15.2 rules 2-3, §15.3)', () => {
     const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
 
     const err = await oidc
-      .tokenExchange({ subjectToken: SUBJECT_TOKEN })
+      .tokenExchange({ subjectToken: SUBJECT_TOKEN, subjectTokenType: ACCESS_TOKEN_TYPE })
       .catch((e: unknown) => e);
 
     expect((err as OAuthProtocolError).error).toBe('unauthorized_client');
@@ -175,7 +177,7 @@ describe('refusals surface unchanged (§15.2 rules 2-3, §15.3)', () => {
     const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
 
     const err = await oidc
-      .tokenExchange({ subjectToken: SUBJECT_TOKEN })
+      .tokenExchange({ subjectToken: SUBJECT_TOKEN, subjectTokenType: ACCESS_TOKEN_TYPE })
       .catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(OAuthProtocolError);
@@ -191,7 +193,7 @@ describe('what the result is, and is not (§15.2 rules 4-7)', () => {
     mountExchange(() => exchangeResponse({ refresh_token: 'should-not-exist' }));
     const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
 
-    const result = await oidc.tokenExchange({ subjectToken: SUBJECT_TOKEN });
+    const result = await oidc.tokenExchange({ subjectToken: SUBJECT_TOKEN, subjectTokenType: ACCESS_TOKEN_TYPE });
 
     expect(JSON.stringify(result)).not.toContain('should-not-exist');
     expect('refreshToken' in result).toBe(false);
@@ -203,6 +205,7 @@ describe('what the result is, and is not (§15.2 rules 4-7)', () => {
 
     const result = await oidc.tokenExchange({
       subjectToken: SUBJECT_TOKEN,
+      subjectTokenType: ACCESS_TOKEN_TYPE,
       scopes: ['orders:read', 'orders:write'],
     });
 
@@ -214,7 +217,7 @@ describe('what the result is, and is not (§15.2 rules 4-7)', () => {
     mountExchange(() => exchangeResponse());
     const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
 
-    const result = await oidc.tokenExchange({ subjectToken: SUBJECT_TOKEN });
+    const result = await oidc.tokenExchange({ subjectToken: SUBJECT_TOKEN, subjectTokenType: ACCESS_TOKEN_TYPE });
 
     expect(result.accessToken).toBeInstanceOf(Sensitive);
     expect(String(result.accessToken)).not.toContain(ISSUED_TOKEN);
@@ -229,6 +232,7 @@ describe('what the result is, and is not (§15.2 rules 4-7)', () => {
     const err = await oidc
       .tokenExchange({
         subjectToken: SUBJECT_TOKEN,
+        subjectTokenType: ACCESS_TOKEN_TYPE,
         actorToken: ACTOR_TOKEN,
       })
       .catch((e: unknown) => e);
@@ -263,6 +267,25 @@ function oauthErrorWithDescription(code: string, description: string): Response 
   return HttpResponse.json({ error: code, error_description: description }, { status: 400 });
 }
 
+describe('subjectTokenType is required (§15.1)', () => {
+  it('does not compile when the caller names no type', async () => {
+    // §15.1 makes the type required, and TypeScript is one of the languages
+    // that can refuse the call outright rather than at run time. That refusal
+    // IS the enforcement, so it deserves an assertion: `@ts-expect-error` fails
+    // the build if this ever starts compiling again — i.e. if someone
+    // reintroduces the default this section exists to remove.
+    //
+    // A default would be the SDK choosing which kind of credential the caller
+    // holds. For a caller who actually held a refresh token it would also trade
+    // the `invalid_request` that NAMES the type for a generic `invalid_grant`.
+    const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
+    void (() =>
+      // @ts-expect-error subjectTokenType is required (§15.1)
+      oidc.tokenExchange({ subjectToken: SUBJECT_TOKEN }));
+    expect(typeof oidc.tokenExchange).toBe('function');
+  });
+});
+
 describe('external-IdP subject tokens (§15.7)', () => {
   it('sends the caller-named subject_token_type and surfaces the result unchanged', async () => {
     const { forms } = mountExchange(() => exchangeResponse({ scope: 'read:orders' }));
@@ -293,11 +316,13 @@ describe('external-IdP subject tokens (§15.7)', () => {
     const { forms } = mountExchange(() => exchangeResponse());
     const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
 
-    // A subject token that *looks* exactly like a JWT. An SDK that sniffed the
-    // token would send …:jwt here; §15.7 says it must not look, so the
-    // caller's silence still means the §15.1 same-domain default.
+    // A subject token that *looks* exactly like a JWT, presented as an access
+    // token. An SDK that sniffed the token would "correct" this to …:jwt;
+    // §15.7 says it must not look, so what the caller named is what goes out.
+    // Being able to hold this wrong is the point: only the caller knows.
     await oidc.tokenExchange({
       subjectToken: 'eyJhbGciOiJFZERTQSJ9.eyJpc3MiOiJodHRwczovL3BhcnRuZXIuZXhhbXBsZS8ifQ.sig',
+      subjectTokenType: ACCESS_TOKEN_TYPE,
     });
 
     expect(forms[0]!.get('subject_token_type')).toBe(
