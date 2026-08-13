@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING (contract 1.13): `TokenExchangeParams.subjectTokenType` is now required.** It
+  shipped optional, defaulting to `ACCESS_TOKEN_TYPE` when omitted — which satisfied §15.7's
+  "never inspect the subject token" while leaving the rule it serves unenforced: an optional
+  field with a default *is* a default the SDK applies whenever the caller says nothing. §15.1
+  now makes it required.
+
+  TypeScript is one of the languages that can refuse the call outright, so it does: omitting
+  the field is a **compile error**, not a runtime one. A `@ts-expect-error` test asserts that,
+  so reintroducing the default would fail the build rather than pass silently.
+
+  **Migration** — one line, naming what you were previously getting by silence:
+
+  ```ts
+  const exchanged = await oidc.tokenExchange({
+    subjectToken: new Sensitive(userToken),
+    subjectTokenType: ACCESS_TOKEN_TYPE, // <- add this
+    scopes: ['orders:read'],
+  });
+  ```
+
+  This closes a gap rather than opening one: `subject_token_type` has always been required *on
+  the wire*, and the SDK was covering for that with a constant which stopped being the only
+  legal value when X4 landed. For a caller who actually held a refresh token, the old default
+  traded the `invalid_request` that names the type for a generic `invalid_grant`.
+
 ### Added
 
 - **§15.7 external-IdP subject tokens (X4).** `tokenExchange` can now exchange a token minted
@@ -18,9 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **The type is the caller's to name, never the SDK's to guess.** §15.7 forbids inspecting the
   subject token to pick it, because which kind of token you hold is something only you know and
   a wrong guess is the difference between a request that is refused and one that is silently
-  reinterpreted. Omitting `subjectTokenType` still sends `…:access_token`, so every existing
-  caller is unaffected; a JWT-shaped subject token does **not** change what is sent, which is
-  asserted by a test.
+  reinterpreted. A JWT-shaped subject token does **not** change what is sent, which is asserted
+  by a test. (This shipped with an `ACCESS_TOKEN_TYPE` default; contract 1.13 removed it — see
+  *Changed* above.)
 
   Also asserted: an `actorToken` alongside an external subject token surfaces `invalid_request`
   with no retry and no request rewriting; a refused refresh or ID token type is never retried as

@@ -9,7 +9,7 @@
 //
 // Run: npx tsx examples/token-exchange.ts
 
-import { createNodeSession, createOidcClient } from '../src/node/index.js';
+import { ACCESS_TOKEN_TYPE, createNodeSession, createOidcClient } from '../src/node/index.js';
 import { Sensitive } from '../src/core/index.js';
 
 const baseUrl = process.env.AXIAM_BASE_URL ?? 'https://localhost:8443';
@@ -33,6 +33,7 @@ const oidc = createOidcClient(session, { clientId, clientSecret });
 // (§15.2 rule 1).
 const exchanged = await oidc.tokenExchange({
   subjectToken: new Sensitive(userToken),
+  subjectTokenType: ACCESS_TOKEN_TYPE, // required (§15.1): only you know what you hold
   scopes: ['orders:read'],
   audience: 'orders-service',
 });

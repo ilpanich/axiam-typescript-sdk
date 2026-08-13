@@ -551,6 +551,7 @@ calling the next service.
 ```ts
 const exchanged = await oidc.tokenExchange({
   subjectToken: new Sensitive(userToken),
+  subjectTokenType: ACCESS_TOKEN_TYPE, // required (§15.1), no default
   scopes: ['orders:read'],
   audience: 'orders-service',
 });
@@ -585,9 +586,9 @@ const exchanged = await oidc.tokenExchange({
 });
 ```
 
-- **`subjectTokenType` is yours to state.** The SDK never decodes the subject token to
-  pick it, and never overrides what you named. Omitting it still means `ACCESS_TOKEN_TYPE`,
-  the same-domain exchange above.
+- **`subjectTokenType` is yours to state, and is required** (§15.1). The SDK never decodes
+  the subject token to pick it, and never overrides what you named. There is no default —
+  omitting it does not compile, because a default would be the SDK choosing for you.
 - **No actor token.** Delegation across a trust boundary is unsupported in v1; sending one
   is `invalid_request`, which the SDK will not work around by dropping it and re-sending.
 - **One refusal is distinguishable.** `invalid_grant` whose description is `the subject

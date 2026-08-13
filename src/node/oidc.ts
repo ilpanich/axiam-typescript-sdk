@@ -116,8 +116,9 @@ export const SLOW_DOWN_INCREMENT_SECS = 5;
 export const TOKEN_EXCHANGE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:token-exchange';
 
 /**
- * The `actor_token_type` this SDK sends, and the `subject_token_type` it sends
- * when the caller names none — an AXIAM-issued access token (§15.1).
+ * The `actor_token_type` this SDK sends, and the `subject_token_type` a caller
+ * names for the same-domain exchange of §15.1. There is no default: the type is
+ * a required member of {@link TokenExchangeParams}.
  */
 export const ACCESS_TOKEN_TYPE = 'urn:ietf:params:oauth:token-type:access_token';
 
@@ -1096,7 +1097,7 @@ export class OidcClient {
     // to pick this (§15.7): which kind of token the caller holds is the
     // caller's to know, and a guess here is the difference between a request
     // that is refused and one that is silently reinterpreted.
-    form.set('subject_token_type', params.subjectTokenType ?? ACCESS_TOKEN_TYPE);
+    form.set('subject_token_type', params.subjectTokenType);
     if (params.actorToken !== undefined) {
       form.set('actor_token', exposeSecret(params.actorToken));
       // Sent exactly when `actor_token` is: RFC 8693 §2.1 requires the pair,

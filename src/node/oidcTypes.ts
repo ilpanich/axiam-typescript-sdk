@@ -475,19 +475,22 @@ export interface TokenExchangeParams {
   /** The token being exchanged (§15.5 secret). */
   subjectToken: Sensitive<string> | string;
   /**
-   * What kind of token `subjectToken` is.
+   * What kind of token `subjectToken` is. **Required** (§15.1).
    *
    * @remarks
-   * Omitted sends `ACCESS_TOKEN_TYPE`, the same-domain exchange of §15.1. To
-   * exchange a token from a **trusted external issuer** (§15.7), set this
-   * explicitly — normally to `JWT_TOKEN_TYPE`.
+   * There is no default. A defaulted type would be the SDK choosing which kind
+   * of credential you are holding, which is exactly what §15.7 forbids — so
+   * TypeScript refuses the call at compile time instead.
+   *
+   * Pass `ACCESS_TOKEN_TYPE` for the same-domain exchange of §15.1, or
+   * `JWT_TOKEN_TYPE` for a trusted external issuer's JWT (§15.7).
    *
    * The SDK never reads `subjectToken` to decide this value (§15.7). Which
    * kind of token you hold is something only you know; AXIAM refuses refresh
    * and ID token types by name, and the SDK will not retry a refusal as a
    * different type.
    */
-  subjectTokenType?: string;
+  subjectTokenType: string;
   /**
    * The acting party, when this is a **delegation** (§15.2 rule 1).
    *
