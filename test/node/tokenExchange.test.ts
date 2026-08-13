@@ -7,7 +7,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { AuthError, OAuthProtocolError, Sensitive } from '../../src/core/index.js';
+import { JWT_TOKEN_TYPE } from '../../src/node/oidc.js';
 import {
+  BASE_URL,
   CLIENT_SECRET,
   createClient,
   createMockState,
@@ -234,5 +236,173 @@ describe('what the result is, and is not (§15.2 rules 4-7)', () => {
     const rendered = `${String(err)}${(err as Error).stack ?? ''}`;
     expect(rendered).not.toContain(SUBJECT_TOKEN);
     expect(rendered).not.toContain(ACTOR_TOKEN);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §15.7 — external-IdP subject tokens (X4)
+//
+// No new operation: the same `tokenExchange` carries a partner IdP's token.
+// What changes is which subject tokens the server accepts and what its
+// refusals mean, so these tests are about not getting in the way of either.
+// ---------------------------------------------------------------------------
+
+/**
+ * A token minted by a partner's IdP. Opaque to the SDK — deliberately not a
+ * well-formed JWT, because nothing here may decode it.
+ */
+const EXTERNAL_SUBJECT_TOKEN = 'partner-idp-subject-token';
+
+/**
+ * The one normative `error_description` (§15.7). It means "fix the AXIAM trust
+ * configuration", not "fix your token".
+ */
+const ISSUER_NOT_CONFIGURED = "the subject token's issuer is not configured for token exchange";
+
+function oauthErrorWithDescription(code: string, description: string): Response {
+  return HttpResponse.json({ error: code, error_description: description }, { status: 400 });
+}
+
+describe('external-IdP subject tokens (§15.7)', () => {
+  it('sends the caller-named subject_token_type and surfaces the result unchanged', async () => {
+    const { forms } = mountExchange(() => exchangeResponse({ scope: 'read:orders' }));
+    const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
+
+    const result = await oidc.tokenExchange({
+      subjectToken: new Sensitive(EXTERNAL_SUBJECT_TOKEN),
+      subjectTokenType: JWT_TOKEN_TYPE,
+      scopes: ['read:orders'],
+      audience: 'https://orders.internal',
+    });
+
+    const form = forms[0]!;
+    // The caller named …:jwt, so …:jwt goes on the wire.
+    expect(form.get('subject_token_type')).toBe('urn:ietf:params:oauth:token-type:jwt');
+    expect(form.get('subject_token')).toBe(EXTERNAL_SUBJECT_TOKEN);
+    // Delegation across a trust boundary is unsupported; nothing may add one.
+    expect(form.get('actor_token')).toBeNull();
+
+    // The cross-domain path is not a different result shape, and §15.2
+    // rules 6-7 still hold.
+    expect(result.accessToken.expose()).toBe(ISSUED_TOKEN);
+    expect(result.issuedTokenType).toBe('urn:ietf:params:oauth:token-type:access_token');
+    expect(result.scope).toBe('read:orders');
+  });
+
+  it('never infers subject_token_type from the token itself', async () => {
+    const { forms } = mountExchange(() => exchangeResponse());
+    const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
+
+    // A subject token that *looks* exactly like a JWT. An SDK that sniffed the
+    // token would send …:jwt here; §15.7 says it must not look, so the
+    // caller's silence still means the §15.1 same-domain default.
+    await oidc.tokenExchange({
+      subjectToken: 'eyJhbGciOiJFZERTQSJ9.eyJpc3MiOiJodHRwczovL3BhcnRuZXIuZXhhbXBsZS8ifQ.sig',
+    });
+
+    expect(forms[0]!.get('subject_token_type')).toBe(
+      'urn:ietf:params:oauth:token-type:access_token',
+    );
+  });
+
+  it('surfaces invalid_request for an actor_token, with no retry and no rewriting', async () => {
+    const { forms } = mountExchange(() =>
+      oauthErrorWithDescription(
+        'invalid_request',
+        'actor_token is not supported for an external subject token',
+      ),
+    );
+    const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
+
+    const err = await oidc
+      .tokenExchange({
+        subjectToken: EXTERNAL_SUBJECT_TOKEN,
+        subjectTokenType: JWT_TOKEN_TYPE,
+        actorToken: ACTOR_TOKEN,
+      })
+      .catch((e: unknown) => e);
+
+    expect((err as OAuthProtocolError).error).toBe('invalid_request');
+    // No retry, and no rewriting. Dropping the actor token and re-sending
+    // would turn a delegation the caller asked for into an impersonation they
+    // did not.
+    expect(forms).toHaveLength(1);
+    expect(forms[0]!.get('actor_token')).toBe(ACTOR_TOKEN);
+    expect(forms[0]!.get('subject_token_type')).toBe('urn:ietf:params:oauth:token-type:jwt');
+  });
+
+  it.each([
+    'urn:ietf:params:oauth:token-type:refresh_token',
+    'urn:ietf:params:oauth:token-type:id_token',
+  ])('never retries the refused type %s as a different one', async (refused) => {
+    // A refresh token is a re-authentication credential and an ID token is an
+    // assertion to a client about a login; neither is a bearer credential for
+    // an API, so both are refused BY NAME. Retrying as …:jwt would present one
+    // as if it were.
+    const { forms } = mountExchange(() =>
+      oauthErrorWithDescription('invalid_request', `unsupported subject_token_type ${refused}`),
+    );
+    const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
+
+    await oidc
+      .tokenExchange({ subjectToken: EXTERNAL_SUBJECT_TOKEN, subjectTokenType: refused })
+      .catch(() => undefined);
+
+    expect(forms).toHaveLength(1);
+    expect(forms[0]!.get('subject_token_type')).toBe(refused);
+  });
+
+  it('passes the "issuer is not configured" description through intact', async () => {
+    mountExchange(() => oauthErrorWithDescription('invalid_grant', ISSUER_NOT_CONFIGURED));
+    const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
+
+    const err = await oidc
+      .tokenExchange({
+        subjectToken: EXTERNAL_SUBJECT_TOKEN,
+        subjectTokenType: JWT_TOKEN_TYPE,
+      })
+      .catch((e: unknown) => e);
+
+    expect((err as OAuthProtocolError).error).toBe('invalid_grant');
+    // This is the ONLY distinguishable external failure, and the whole point
+    // of it is that an integrator can tell "fix the AXIAM trust config" from
+    // "fix your token". Truncating or rewording it destroys that.
+    expect((err as OAuthProtocolError).errorDescription).toBe(ISSUER_NOT_CONFIGURED);
+  });
+
+  it('never re-exchanges a token it just obtained', async () => {
+    // Tokens minted from an external subject token carry `ext_exchange`, and
+    // BOTH exchange paths refuse a subject token bearing it: exchanges do not
+    // compose. The SDK's part is to never feed a result back in by itself.
+    const state = createMockState();
+    const forms: URLSearchParams[] = [];
+    let protectedAuthHeader: string | null = null;
+    server.use(
+      discoveryHandler(state),
+      http.post(TOKEN_ENDPOINT, async ({ request }) => {
+        forms.push(new URLSearchParams(await request.text()));
+        return exchangeResponse();
+      }),
+      http.get(`${BASE_URL}/api/v1/protected`, ({ request }) => {
+        protectedAuthHeader = request.headers.get('authorization');
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    const { session, oidc } = createClient({ clientSecret: CLIENT_SECRET });
+
+    const result = await oidc.tokenExchange({
+      subjectToken: EXTERNAL_SUBJECT_TOKEN,
+      subjectTokenType: JWT_TOKEN_TYPE,
+    });
+    await session.axios.get('/api/v1/protected');
+
+    // Exactly one exchange happened: nothing looped the result back in.
+    expect(forms).toHaveLength(1);
+    expect(result.accessToken.expose()).toBe(ISSUED_TOKEN);
+    // §15.2 rule 5 restated for the cross-domain path: had the result been
+    // adopted, every later call would carry it — and the next exchange would
+    // carry it as a *subject* token, which is exactly the re-exchange §15.7
+    // forbids, arrived at by accident rather than by decision.
+    expect(protectedAuthHeader).toBeNull();
   });
 });

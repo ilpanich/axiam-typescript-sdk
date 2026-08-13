@@ -115,8 +115,21 @@ export const SLOW_DOWN_INCREMENT_SECS = 5;
 /** `grant_type` of an RFC 8693 exchange. */
 export const TOKEN_EXCHANGE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:token-exchange';
 
-/** The only `subject_token_type` / `actor_token_type` AXIAM accepts. */
+/**
+ * The `actor_token_type` this SDK sends, and the `subject_token_type` it sends
+ * when the caller names none — an AXIAM-issued access token (§15.1).
+ */
 export const ACCESS_TOKEN_TYPE = 'urn:ietf:params:oauth:token-type:access_token';
+
+/**
+ * A JWT from a trusted external issuer — the cross-domain exchange of §15.7.
+ *
+ * @remarks
+ * Pass it as {@link TokenExchangeParams.subjectTokenType} to exchange a partner
+ * IdP's token. AXIAM also accepts {@link ACCESS_TOKEN_TYPE} for an external
+ * issuer, and refuses refresh and ID token types **by name**.
+ */
+export const JWT_TOKEN_TYPE = 'urn:ietf:params:oauth:token-type:jwt';
 
 /** `grant_type` of the UMA ticket grant (UMA 2.0 §3.3.1, CONTRACT.md §20.1). */
 export const UMA_TICKET_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:uma-ticket';
@@ -1079,7 +1092,11 @@ export class OidcClient {
     const form = new URLSearchParams();
     form.set('grant_type', TOKEN_EXCHANGE_GRANT_TYPE);
     form.set('subject_token', exposeSecret(params.subjectToken));
-    form.set('subject_token_type', ACCESS_TOKEN_TYPE);
+    // Whatever the caller named, verbatim. The subject token is NEVER decoded
+    // to pick this (§15.7): which kind of token the caller holds is the
+    // caller's to know, and a guess here is the difference between a request
+    // that is refused and one that is silently reinterpreted.
+    form.set('subject_token_type', params.subjectTokenType ?? ACCESS_TOKEN_TYPE);
     if (params.actorToken !== undefined) {
       form.set('actor_token', exposeSecret(params.actorToken));
       // Sent exactly when `actor_token` is: RFC 8693 §2.1 requires the pair,
