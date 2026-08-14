@@ -38,11 +38,31 @@ export type { UmaChallenger, UmaTicketMinter } from './authzCore.js';
 // `VerifiableSession.jwksVerifier`'s `Verifier` type (and the `AxiamClaims` it
 // returns) without a dangling cross-module link (`node/jwks.ts` is not itself
 // a TypeDoc entry point) — single source of truth stays node/jwks.ts.
-export type { Verifier, AxiamClaims, AccessTokenExpectations } from '../node/jwks.js';
-// CONTRACT.md §10.1 rule 7's named clock-skew bound and rule 4's tenant
-// assertion, re-exported so a consumer writing their own guard on top of
-// `Verifier` applies the same policy the middleware does.
-export { assertTenantClaim, CLOCK_SKEW_LEEWAY_SEC } from '../node/jwks.js';
+export type {
+  Verifier,
+  AxiamClaims,
+  AccessTokenExpectations,
+  // §10.1 rule 9 (contract 1.15) — `AxiamClaims.cnf`'s type. Same reason as
+  // the three above: without it the generated docs carry a dangling link from
+  // a claim that is load-bearing for sender-constrained tokens.
+  CnfClaim,
+} from '../node/jwks.js';
+// CONTRACT.md §10.1 rule 7's named clock-skew bound, rule 4's tenant
+// assertion, and rule 9's sender-constraint check, re-exported so a consumer
+// writing their own guard on top of `Verifier` applies the same policy the
+// middleware does.
+//
+// Rule 9 in particular: `verifyAccessToken` cannot apply it (it has no
+// transport to ask for a peer certificate), so a guard that accepts
+// certificate-bound tokens MUST reach for `verifyCertificateBinding` itself —
+// which means it has to be reachable from the entry point that guard is
+// written against.
+export {
+  assertTenantClaim,
+  CLOCK_SKEW_LEEWAY_SEC,
+  verifyCertificateBinding,
+  certificateThumbprintS256,
+} from '../node/jwks.js';
 // Same rationale for the §12 types the login glue's own signatures reference
 // (`OidcLoginOptions.client`/`.store`, `onSuccess`'s arguments): re-exported so
 // this entry point's generated docs resolve them without a dangling
