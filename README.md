@@ -17,7 +17,7 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19, §20 (including §6.1 mTLS client
+This SDK conforms to CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19, §20, §21 (including §6.1 mTLS client
 certificates, the §10.1 minimum local-verification set, the §12 OIDC/SSO relying-party
 helpers, and the §13 `verifyWebhook` signature verifier).
 

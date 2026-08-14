@@ -19,6 +19,8 @@ import {
   createVerifier,
   JWKS_PATH,
   resetTenantComparandWarningForTests,
+  verifyCertificateBinding,
+  certificateThumbprintS256,
 } from '../../src/node/jwks.js';
 import { authenticateRequest, type VerifiableSession } from '../../src/middleware/verifyCore.js';
 
@@ -409,3 +411,75 @@ describe('CONTRACT.md §10.1 rule 8 — the decision is about the caller token',
   });
 });
 
+
+// ---------------------------------------------------------------------------
+// §10.1 rule 9 — sender-constrained (certificate-bound) access tokens
+// (contract 1.15, RFC 8705 §3 / RFC 7800).
+//
+// Three negatives and one positive. The POSITIVE is the one that matters most:
+// rule 9 must not become "every caller must present a certificate", which
+// would break every deployment that does not use mTLS at all.
+// ---------------------------------------------------------------------------
+
+describe('§10.1 rule 9 — sender-constrained tokens', () => {
+  /** A real 43-character base64url x5t#S256, and a different one. */
+  const THUMBPRINT = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
+  const OTHER_THUMBPRINT = 'bWluZS1ub3QteW91cnMtdGhpcy1pcy00My1jaGFyc18';
+
+  it('accepts an unbound token with OR without a certificate', () => {
+    // The regression test that keeps rule 9 from becoming a certificate mandate.
+    expect(() => verifyCertificateBinding({}, undefined)).not.toThrow();
+    expect(() => verifyCertificateBinding({}, THUMBPRINT)).not.toThrow();
+  });
+
+  it('accepts a bound token presented with its own certificate', () => {
+    expect(() =>
+      verifyCertificateBinding({ cnf: { 'x5t#S256': THUMBPRINT } }, THUMBPRINT),
+    ).not.toThrow();
+  });
+
+  it('rejects a bound token presented with no certificate', () => {
+    expect(() => verifyCertificateBinding({ cnf: { 'x5t#S256': THUMBPRINT } }, undefined)).toThrow(
+      /no client certificate was presented/,
+    );
+  });
+
+  it('rejects a bound token presented with a different certificate', () => {
+    expect(() =>
+      verifyCertificateBinding({ cnf: { 'x5t#S256': THUMBPRINT } }, OTHER_THUMBPRINT),
+    ).toThrow(/bound to a different client certificate/);
+  });
+
+  // The subtle one. A cnf naming a confirmation method this SDK cannot check
+  // is an UNVERIFIABLE constraint, never NO constraint — read the other way, a
+  // sender-constrained token silently degrades to a bearer token the day a
+  // newer AXIAM issues a confirmation this SDK predates.
+  it('rejects, rather than ignores, a cnf naming an unimplemented method', () => {
+    const dpopish = { cnf: { jkt: '0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I' } } as never;
+    expect(() => verifyCertificateBinding(dpopish, undefined)).toThrow(/cannot verify/);
+    expect(() => verifyCertificateBinding(dpopish, THUMBPRINT)).toThrow(/cannot verify/);
+  });
+
+  it('carries the cnf claim through a real verifyAccessToken round trip', async () => {
+    const key = await serveJwks();
+    const token = await sign(key, { ...goodPayload(), cnf: { 'x5t#S256': THUMBPRINT } });
+    const claims = await createVerifier(BASE_URL).verifyAccessToken(token, {
+      expectedTenantId: TENANT,
+    });
+    expect(claims.cnf?.['x5t#S256']).toBe(THUMBPRINT);
+    // verifyAccessToken deliberately does NOT apply rule 9 — it has no
+    // transport to ask. The caller applies it with the thumbprint its TLS
+    // layer gives it.
+    expect(() => verifyCertificateBinding(claims, THUMBPRINT)).not.toThrow();
+    expect(() => verifyCertificateBinding(claims, undefined)).toThrow();
+  });
+
+  it('computes an unpadded base64url thumbprint', async () => {
+    const der = new Uint8Array(512).fill(0x42);
+    const tp = await certificateThumbprintS256(der);
+    expect(tp).toHaveLength(43);
+    expect(tp).not.toContain('=');
+    expect(tp).not.toMatch(/[+/]/);
+    expect(await certificateThumbprintS256(der)).toBe(tp);
+  });
+});

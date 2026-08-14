@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **CONTRACT.md §10.1 rule 9 — sender-constrained (certificate-bound) access tokens**
+  (contract 1.15, RFC 8705 §3 / RFC 7800). A token carrying `cnf` is **not** a bearer
+  token; accepting one without proving the caller holds the named key converts it back
+  into one.
+  - `AxiamClaims.cnf` / `CnfClaim` — the decoded confirmation claim.
+  - `verifyCertificateBinding(claims, presentedThumbprint)` — the rule. Throws on a
+    bound token with no certificate, with a *different* certificate, or with a `cnf`
+    naming a confirmation method this SDK cannot check.
+  - `certificateThumbprintS256(der)` — RFC 8705 §3.1 `x5t#S256`: base64url, **unpadded**,
+    SHA-256 over the DER certificate. Node only.
+
+  **Not a breaking change, and it does not make certificates mandatory.** An *unbound*
+  token is still accepted with or without a certificate — asserted directly, because the
+  likeliest wrong implementation of this rule is one that starts demanding certificates
+  from every caller.
+
+  `verifyAccessToken` deliberately does **not** apply rule 9: it has no transport to ask
+  for a peer certificate. Call `verifyCertificateBinding` with the thumbprint your TLS
+  layer gives you (`TLSSocket.getPeerCertificate().raw`), or a value a *trusted*
+  terminating proxy forwarded — never a caller-settable header, which would make the
+  mechanism decorative.
+
+  A `cnf` naming an unimplemented method is **rejected**, never read as "unconstrained":
+  read the other way, a sender-constrained token silently degrades to a bearer token the
+  day a newer AXIAM issues a confirmation this SDK predates.
+
+- **CONTRACT.md §21** — the FAPI 2.0 posture as an SDK sees it: client-registration
+  fields, RFC 9207 `iss` on authorization responses, and the discovery additions. Only
+  rule 9 above is normative for this SDK.
+
+### Changed
+
+- **Re-sync vendored `CONTRACT.md` / `openapi.json` to contract 1.15.**
+
+
 ### Changed
 
 - **Re-sync vendored `CONTRACT.md` to contract 1.14** — documentation only, no code change.
