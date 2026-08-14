@@ -50,6 +50,127 @@ export interface AxiamClaims {
   aud?: string;
   /** OAuth2 scopes (space-separated). */
   scope?: string;
+  /**
+   * RFC 7800 / RFC 8705 §3.1 confirmation claim — present **only** on a
+   * sender-constrained token (CONTRACT.md §10.1 rule 9, contract 1.15).
+   *
+   * Its presence changes what the token *is*. Without it, the token is a
+   * bearer credential: whoever holds it may use it. With it, the token names
+   * a key, and accepting it without proving the caller holds that key
+   * converts it straight back into a bearer token.
+   *
+   * {@link Verifier.verifyAccessToken} does **not** check this — it cannot,
+   * having no access to the connection's client certificate. Use
+   * {@link verifyCertificateBinding}.
+   */
+  cnf?: CnfClaim;
+}
+
+/**
+ * RFC 7800 confirmation claim.
+ *
+ * Deliberately an object with one optional field rather than a union: RFC 7800
+ * permits confirmation methods this SDK does not implement, and such a token
+ * must still *parse*. What it must not do is validate — see
+ * {@link verifyCertificateBinding}.
+ */
+export interface CnfClaim {
+  /**
+   * RFC 8705 §3.1 — base64url (unpadded) SHA-256 of the DER client
+   * certificate the token was issued to.
+   */
+  'x5t#S256'?: string;
+}
+
+/**
+ * CONTRACT.md §10.1 **rule 9** — enforce a token's sender constraint against
+ * the certificate the caller presented on **this** connection
+ * (RFC 8705 §3, contract 1.15).
+ *
+ * `presentedThumbprint` is the RFC 8705 §3.1 `x5t#S256` of the peer
+ * certificate: base64url, **unpadded**, SHA-256 over the **DER** encoding.
+ * {@link certificateThumbprintS256} computes it from DER bytes.
+ *
+ * | token's `cnf` | `presentedThumbprint` | result |
+ * |---|---|---|
+ * | absent | anything | returns — an ordinary bearer token |
+ * | `x5t#S256` | equal | returns |
+ * | `x5t#S256` | different, or `undefined` | **throws** |
+ * | present, no `x5t#S256` | anything | **throws** |
+ *
+ * The first row is why adopting this rule breaks nothing: an unbound token is
+ * still accepted whether or not a certificate is present. The last row is the
+ * one that is easy to get wrong — a `cnf` naming a method this SDK cannot
+ * check is an *unverifiable constraint*, never *no constraint*. Read the
+ * other way, a sender-constrained token silently degrades to a bearer token
+ * the day a newer AXIAM issues a confirmation this SDK predates.
+ *
+ * @remarks
+ * **The thumbprint must come from the transport.** Take it from the TLS peer
+ * certificate (`TLSSocket.getPeerCertificate().raw` under Node) or from a
+ * value a *trusted* terminating proxy forwarded over a channel your
+ * application controls. Never from a caller-settable request header: a
+ * forgeable input makes the whole mechanism decorative.
+ *
+ * @throws {Error} on any of the three rejecting rows. The §10 middleware
+ * wraps this into an `AuthError`.
+ */
+export function verifyCertificateBinding(
+  claims: Pick<AxiamClaims, 'cnf'>,
+  presentedThumbprint: string | undefined,
+): void {
+  const cnf = claims.cnf;
+  if (cnf === undefined || cnf === null) return;
+
+  const expected = cnf['x5t#S256'];
+  if (typeof expected !== 'string' || expected.length === 0) {
+    throw new Error(
+      'token carries a cnf confirmation naming a method this SDK cannot verify ' +
+        '(CONTRACT.md §10.1 rule 9 — an unverifiable constraint is not an absent one)',
+    );
+  }
+  if (presentedThumbprint === undefined) {
+    throw new Error('token is certificate-bound but no client certificate was presented');
+  }
+  if (!constantTimeEqual(expected, presentedThumbprint)) {
+    throw new Error('token is bound to a different client certificate than the one presented');
+  }
+}
+
+/**
+ * Constant-time string comparison for {@link verifyCertificateBinding}.
+ *
+ * The thumbprint is usually public — it derives from a certificate sent in the
+ * clear during the handshake — so this is defence in depth. It matters most
+ * for a self-signed client, where the registered thumbprint is the whole
+ * credential. Hand-rolled rather than `crypto.timingSafeEqual` so that this
+ * function stays usable in the browser build, where `node:crypto` is absent.
+ */
+function constantTimeEqual(a: string, b: string): boolean {
+  // Length inequality short-circuits, leaking only the length. Both operands
+  // are fixed-length base64url SHA-256 digests whenever either is well-formed.
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+/**
+ * Compute the RFC 8705 §3.1 `x5t#S256` thumbprint of a DER client
+ * certificate: base64url-encoded SHA-256, **without** padding.
+ *
+ * Unpadded is not a style choice — RFC 7515 §2 defines base64url in JOSE as
+ * omitting `=`, and a padded value will not compare equal to what AXIAM put in
+ * the token.
+ *
+ * Node only (it needs `node:crypto`). A browser-side guard has no peer
+ * certificate to fingerprint in the first place.
+ */
+export async function certificateThumbprintS256(der: Uint8Array): Promise<string> {
+  const { createHash } = await import('node:crypto');
+  return createHash('sha256').update(der).digest('base64url');
 }
 
 /** Path (relative to the client base URL) of the org-wide JWKS endpoint. */

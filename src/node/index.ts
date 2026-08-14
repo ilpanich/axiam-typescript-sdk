@@ -13,6 +13,10 @@ export {
   createVerifier,
   createJwksVerifier,
   assertTenantClaim,
+  // §10.1 rule 9 — sender-constrained tokens (contract 1.15).
+  verifyCertificateBinding,
+  certificateThumbprintS256,
+  type CnfClaim,
   CLOCK_SKEW_LEEWAY_SEC,
   type AccessTokenExpectations,
   type Verifier,
