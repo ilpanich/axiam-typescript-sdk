@@ -66,6 +66,42 @@ describe('§20.2 rule 6 — the ticket grant is never retried', () => {
     ).toBe(1);
   });
 
+  // §20.7 names the timeout case alongside 5xx and invalid_grant, and it is
+  // the one most tempting to treat as "the request never happened" — a §16
+  // retry runner normally re-sends a request that produced no response at all.
+  //
+  // That instinct is wrong here. No response says nothing about whether the
+  // server saw the exchange; it may well have arrived and spent the ticket, and
+  // silence is not evidence that it did not. Re-sending is then the second
+  // redemption.
+  //
+  // A transport failure stands in for the clock: it is the same observable —
+  // no response — and it is deterministic, where a real timeout would race a
+  // sleeping test. The other SDKs in this contract do the same.
+  it('does not retry when the exchange gets no response at all', async () => {
+    let calls = 0;
+    server.use(
+      discoveryHandler(createMockState()),
+      http.post(TOKEN_ENDPOINT, () => {
+        calls += 1;
+        return HttpResponse.error();
+      }),
+    );
+
+    const { oidc: client } = createClient({ clientSecret: CLIENT_SECRET });
+    await expect(
+      client.umaExchangeTicket({ ticket: TICKET, claimToken: CLAIM_TOKEN }),
+    ).rejects.toBeInstanceOf(Error);
+
+    expect(
+      calls,
+      'the ticket grant must issue exactly one request even when it gets no ' +
+        'response — the exchange may already have spent the ticket, so a retry ' +
+        'is the concurrent redemption a server whose storage engine this SDK ' +
+        'cannot attest may admit twice',
+    ).toBe(1);
+  });
+
   it('does not retry invalid_grant, the answer a replayed ticket gets', async () => {
     let calls = 0;
     server.use(
