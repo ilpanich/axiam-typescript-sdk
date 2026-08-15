@@ -46,6 +46,8 @@ export type {
   // the three above: without it the generated docs carry a dangling link from
   // a claim that is load-bearing for sender-constrained tokens.
   CnfClaim,
+  // Rule 9's proof bundle (contract 1.16) — `verifyTokenBinding`'s argument.
+  PresentedProofs,
 } from '../node/jwks.js';
 // CONTRACT.md §10.1 rule 7's named clock-skew bound, rule 4's tenant
 // assertion, and rule 9's sender-constraint check, re-exported so a consumer
@@ -54,13 +56,16 @@ export type {
 //
 // Rule 9 in particular: `verifyAccessToken` cannot apply it (it has no
 // transport to ask for a peer certificate), so a guard that accepts
-// certificate-bound tokens MUST reach for `verifyCertificateBinding` itself —
-// which means it has to be reachable from the entry point that guard is
-// written against.
+// certificate-bound tokens MUST reach for `verifyTokenBinding` itself — which
+// means it has to be reachable from the entry point that guard is written
+// against. `verifyCertificateBinding` remains for transports that can only
+// ever produce a certificate; it refuses a DPoP-bound token rather than
+// ignoring the half it cannot check.
 export {
   assertTenantClaim,
   CLOCK_SKEW_LEEWAY_SEC,
   verifyCertificateBinding,
+  verifyTokenBinding,
   certificateThumbprintS256,
 } from '../node/jwks.js';
 // Same rationale for the §12 types the login glue's own signatures reference

@@ -15,8 +15,13 @@ export {
   assertTenantClaim,
   // §10.1 rule 9 — sender-constrained tokens (contract 1.15).
   verifyCertificateBinding,
+  // Rule 9 extended for DPoP (contract 1.16). The full rule; prefer it over
+  // `verifyCertificateBinding` unless your transport cannot produce a DPoP
+  // thumbprint at all.
+  verifyTokenBinding,
   certificateThumbprintS256,
   type CnfClaim,
+  type PresentedProofs,
   CLOCK_SKEW_LEEWAY_SEC,
   type AccessTokenExpectations,
   type Verifier,
