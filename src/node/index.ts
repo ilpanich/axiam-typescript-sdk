@@ -15,8 +15,13 @@ export {
   assertTenantClaim,
   // §10.1 rule 9 — sender-constrained tokens (contract 1.15).
   verifyCertificateBinding,
+  // Rule 9 extended for DPoP (contract 1.16). The full rule; prefer it over
+  // `verifyCertificateBinding` unless your transport cannot produce a DPoP
+  // thumbprint at all.
+  verifyTokenBinding,
   certificateThumbprintS256,
   type CnfClaim,
+  type PresentedProofs,
   CLOCK_SKEW_LEEWAY_SEC,
   type AccessTokenExpectations,
   type Verifier,
@@ -25,6 +30,20 @@ export {
   type AxiamClaims,
   JWKS_PATH,
 } from './jwks.js';
+// DPoP proof verification (CONTRACT.md §21.7.2, RFC 9449). `verifyDpopProof`
+// returns the proof key's thumbprint, which is what `verifyTokenBinding`
+// above expects as `dpopThumbprint` — the two are meant to be used together,
+// and the thumbprint only ever originates from a proof that verified.
+export {
+  verifyDpopProof,
+  InMemoryJtiStore,
+  jwkThumbprintS256,
+  accessTokenHash,
+  canonicalHtu,
+  DPOP_IAT_LEEWAY_SEC,
+  type JtiStore,
+  type DpopVerifyOptions,
+} from './dpop.js';
 // OIDC / SSO relying-party helpers (CONTRACT.md §12). Node-only: PKCE needs
 // node:crypto and ID-token validation needs jose, so these deliberately do
 // NOT hang off the browser-safe AxiamClient (see src/node/oidc.ts's header).

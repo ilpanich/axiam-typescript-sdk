@@ -20,6 +20,7 @@ import {
   JWKS_PATH,
   resetTenantComparandWarningForTests,
   verifyCertificateBinding,
+  verifyTokenBinding,
   certificateThumbprintS256,
 } from '../../src/node/jwks.js';
 import { authenticateRequest, type VerifiableSession } from '../../src/middleware/verifyCore.js';
@@ -472,6 +473,75 @@ describe('§10.1 rule 9 — sender-constrained tokens', () => {
     // layer gives it.
     expect(() => verifyCertificateBinding(claims, THUMBPRINT)).not.toThrow();
     expect(() => verifyCertificateBinding(claims, undefined)).toThrow();
+  });
+
+  // -------------------------------------------------------------------------
+  // Rule 9 extended for DPoP (contract 1.16)
+  // -------------------------------------------------------------------------
+
+  const JKT = '0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I';
+  const OTHER_JKT = 'sBjflhaR2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
+
+  // The positive regression test, and the one this change is most likely to
+  // break: an unbound token must still pass with no certificate and no proof.
+  // The likeliest wrong implementation of rule 9 demands evidence from
+  // everybody.
+  it('accepts an unbound token with no proofs at all', () => {
+    expect(() => verifyTokenBinding({})).not.toThrow();
+    expect(() => verifyTokenBinding({}, {})).not.toThrow();
+    expect(() =>
+      verifyTokenBinding({}, { certificateThumbprint: THUMBPRINT, dpopThumbprint: JKT }),
+    ).not.toThrow();
+  });
+
+  it('accepts a DPoP-bound token presented with the matching key', () => {
+    expect(() =>
+      verifyTokenBinding({ cnf: { jkt: JKT } }, { dpopThumbprint: JKT }),
+    ).not.toThrow();
+  });
+
+  it('rejects a DPoP-bound token with no proof or the wrong key', () => {
+    expect(() => verifyTokenBinding({ cnf: { jkt: JKT } })).toThrow(/no verified DPoP proof/);
+    expect(() =>
+      verifyTokenBinding({ cnf: { jkt: JKT } }, { dpopThumbprint: OTHER_JKT }),
+    ).toThrow(/different DPoP key/);
+  });
+
+  // Both named is a CONJUNCTION. An operator who turned on two constraints
+  // asked for two; satisfying the more convenient one is not compliance. Each
+  // half is asserted to fail alone because "check whichever we can" is the
+  // likeliest wrong implementation.
+  it('requires both proofs when the cnf names both methods', () => {
+    const both = { cnf: { 'x5t#S256': THUMBPRINT, jkt: JKT } };
+
+    expect(() =>
+      verifyTokenBinding(both, { certificateThumbprint: THUMBPRINT, dpopThumbprint: JKT }),
+    ).not.toThrow();
+
+    expect(() => verifyTokenBinding(both, { certificateThumbprint: THUMBPRINT })).toThrow();
+    expect(() => verifyTokenBinding(both, { dpopThumbprint: JKT })).toThrow();
+  });
+
+  // An empty cnf names nothing checkable and is refused, not read as unbound.
+  // Over gRPC this is also how proto3 delivers an empty CnfClaim message,
+  // which is why §10.3 rule 3 spells it out separately.
+  it('refuses an empty cnf rather than reading it as unbound', () => {
+    expect(() => verifyTokenBinding({ cnf: {} })).toThrow(/no method this SDK can verify/);
+  });
+
+  // The narrow entry point refuses a DPoP-bound token rather than ignoring the
+  // jkt it cannot check — the refusal is what lets it stay in the API without
+  // becoming a downgrade path.
+  it('refuses a DPoP-bound token from the certificate-only entry point', () => {
+    const dpopBound = { cnf: { jkt: JKT } };
+    expect(() => verifyCertificateBinding(dpopBound, undefined)).toThrow(/cannot verify/);
+    expect(() => verifyCertificateBinding(dpopBound, THUMBPRINT)).toThrow(/cannot verify/);
+  });
+
+  it('refuses a both-bound token from the certificate-only entry point', () => {
+    expect(() =>
+      verifyCertificateBinding({ cnf: { 'x5t#S256': THUMBPRINT, jkt: JKT } }, THUMBPRINT),
+    ).toThrow(/both must hold/);
   });
 
   it('computes an unpadded base64url thumbprint', async () => {
