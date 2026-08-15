@@ -212,3 +212,99 @@ describe('gRPC checkAccess/batchCheck (SC#2 Node half)', () => {
     expect(results[2].allowed).toBe(true);
   });
 });
+
+/**
+ * Build a stub client whose `checkAccess` returns one canned wire response,
+ * so the SDK-Q10 reason-precedence rule can be driven end-to-end through
+ * `AuthzGrpcClient` (the mapper itself is module-private by design).
+ */
+function buildResponseStub(response: WireCheckAccessResponse): AuthorizationServiceClientFactory {
+  return () => ({
+    checkAccess(
+      _request: WireCheckAccessRequest,
+      _metadata: grpc.Metadata,
+      callback: (error: grpc.ServiceError | null, response?: WireCheckAccessResponse) => void,
+    ): grpc.ClientUnaryCall {
+      callback(null, response);
+      return {} as grpc.ClientUnaryCall;
+    },
+    batchCheckAccess(
+      _request: WireBatchCheckAccessRequest,
+      _metadata: grpc.Metadata,
+      callback: (error: grpc.ServiceError | null, response?: WireBatchCheckAccessResponse) => void,
+    ): grpc.ClientUnaryCall {
+      callback(null, { results: [response] });
+      return {} as grpc.ClientUnaryCall;
+    },
+    close() {},
+  });
+}
+
+// CONTRACT.md §11.2 rule 9 (SDK-Q10, contract 1.19): read `reason`, and fall
+// back to the deprecated `deny_reason` ONLY when `reason` is absent on a
+// refusal — which is exactly what a pre-SDK-Q10 server sends.
+describe('gRPC decision reason precedence (SDK-Q10, contract 1.19)', () => {
+  afterEach(() => {
+    resetRefreshGuard();
+  });
+
+  const check = { tenantId: 't-1', subjectId: 's-1', action: 'read', resourceId: 'r-1' };
+
+  it('reads `reason` (proto field 4) when the server sends it', async () => {
+    const session = await buildTestSession();
+    const client = new AuthzGrpcClient(
+      session,
+      { baseUrl: BASE_URL },
+      buildResponseStub({
+        allowed: false,
+        deny_reason: 'stale duplicate',
+        reason_code: 'denied_by_rule',
+        reason: 'denied by rule',
+      }),
+    );
+
+    const decision = await client.checkAccess(check);
+    expect(decision.allowed).toBe(false);
+    // `reason` wins outright; the deprecated field is not consulted at all.
+    expect(decision.reason).toBe('denied by rule');
+    expect(decision.reasonCode).toBe('denied_by_rule');
+  });
+
+  it('falls back to the deprecated `deny_reason` when a pre-SDK-Q10 server omits `reason`', async () => {
+    const session = await buildTestSession();
+    const client = new AuthzGrpcClient(
+      session,
+      { baseUrl: BASE_URL },
+      buildResponseStub({ allowed: false, deny_reason: 'caller lacks permission' }),
+    );
+
+    const decision = await client.checkAccess(check);
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toBe('caller lacks permission');
+  });
+
+  it('surfaces no reason on an allow, where a current server omits `reason` entirely', async () => {
+    const session = await buildTestSession();
+    const client = new AuthzGrpcClient(
+      session,
+      { baseUrl: BASE_URL },
+      buildResponseStub({ allowed: true, deny_reason: '' }),
+    );
+
+    const decision = await client.checkAccess(check);
+    expect(decision.allowed).toBe(true);
+    expect(decision.reason).toBeUndefined();
+  });
+
+  it('does not surface an explicitly-empty `reason` as an empty string', async () => {
+    const session = await buildTestSession();
+    const client = new AuthzGrpcClient(
+      session,
+      { baseUrl: BASE_URL },
+      buildResponseStub({ allowed: true, deny_reason: '', reason: '' }),
+    );
+
+    const decision = await client.checkAccess(check);
+    expect(decision.reason).toBeUndefined();
+  });
+});

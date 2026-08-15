@@ -72,7 +72,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Re-sync vendored `CONTRACT.md` / `openapi.json` to contract 1.15.**
+- **Re-sync vendored `CONTRACT.md`, `openapi.json` and `proto/` to contract 1.19**
+  (upstream **R5.8**). The vendored copies had been pinned at the 1.15-era artifacts and
+  drifted three contract revisions behind `ilpanich/axiam@main`. All five files are now
+  byte-identical to upstream, and `proto/axiam/v1/reactor.proto` (contract 1.18 §22, the
+  AMQP reactor protocol) is vendored here for the first time.
+
+- **CONTRACT.md §11.2 rule 9 — the gRPC decision reads `reason`, not `deny_reason`**
+  (**SDK-Q10**, contract 1.19). `CheckAccessResponse` gains `reason` (proto field 4,
+  explicit presence) carrying the same string the REST decision body has always called
+  `reason`; `deny_reason` (field 2) is now `[deprecated = true]` and is removed at AXIAM
+  2.0. The mirrored `WireCheckAccessResponse` gains an optional `reason` and marks
+  `deny_reason` `@deprecated`, and the decision mapper reads `reason`, falling back to
+  `deny_reason` only when `reason` is **absent on a refusal** — which is exactly what a
+  pre-SDK-Q10 server sends. `AccessDecision` still exposes one `reason`, so this is not a
+  breaking change for callers and nothing changes on the wire today.
+
+  **Known residual, deliberately not taken here:** contract 1.19 also relaxes gRPC
+  `subject_id` to optional (an *empty* value meaning "the subject in the verified token").
+  `CheckAccessRequest.subjectId` stays required — relaxing it is a breaking signature move
+  and belongs in its own change. The type's doc comment now records the gap.
 
 
 ### Changed
