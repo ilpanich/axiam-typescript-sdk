@@ -30,22 +30,16 @@ import {
   createVerifier,
   certificateThumbprintS256,
   verifyTokenBinding,
+  verifyDpopProof,
+  InMemoryJtiStore,
 } from '../src/node/index.js';
 
-const verifier = createVerifier(process.env.AXIAM_BASE_URL ?? 'https://axiam.example.com');
+// One store per process. InMemoryJtiStore is per-worker, so a deployment
+// running more than one process needs a shared implementation (Redis, a
+// database table) or each worker gets its own replay window.
+const JTI_STORE = new InMemoryJtiStore();
 
-/**
- * The `jkt` of a DPoP proof you have **already verified** against this
- * request's method, URI, `iat` and `jti`.
- *
- * Returning a thumbprint here asserts the proof checked out. Lifting it off an
- * unverified proof would let a proof captured from any other endpoint
- * authorize this one — which is why this is a separate, deliberate step rather
- * than something the SDK reads out of a header for you.
- */
-function verifiedDpopThumbprint(_req: unknown): string | undefined {
-  return undefined;
-}
+const verifier = createVerifier(process.env.AXIAM_BASE_URL ?? 'https://axiam.example.com');
 
 const server = createServer({ requestCert: true, rejectUnauthorized: false }, async (req, res) => {
   const token = (req.headers.authorization ?? '').replace(/^Bearer /i, '');
@@ -66,10 +60,22 @@ const server = createServer({ requestCert: true, rejectUnauthorized: false }, as
 
     // Rule 9. Returns immediately for an unbound token, so adopting this does
     // not break existing deployments.
-    verifyTokenBinding(claims, {
-      certificateThumbprint,
-      dpopThumbprint: verifiedDpopThumbprint(req),
-    });
+    // All ten §21.7.2 checks. Returns the proof key's thumbprint, so the value
+    // handed to rule 9 below could only have come from a proof that verified —
+    // a thumbprint lifted off an *unverified* proof would let a proof captured
+    // from any other endpoint authorize this one.
+    let dpopThumbprint: string | undefined;
+    const proof = req.headers['dpop'];
+    if (typeof proof === 'string') {
+      dpopThumbprint = await verifyDpopProof(proof, {
+        httpMethod: req.method ?? 'GET',
+        httpUri: new URL(req.url ?? '/', `https://${req.headers.host}`).toString(),
+        accessToken: token,
+        jtiStore: JTI_STORE,
+      });
+    }
+
+    verifyTokenBinding(claims, { certificateThumbprint, dpopThumbprint });
 
     res.writeHead(200).end(`subject ${claims.sub} authorized\n`);
   } catch (err) {

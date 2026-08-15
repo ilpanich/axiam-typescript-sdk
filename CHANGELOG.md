@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CONTRACT.md §21.7.2 DPoP proof verification (RFC 9449).** New `src/node/dpop.ts`
+  implements all ten checks and returns the proof key's RFC 7638 thumbprint, so a
+  value passed on to rule 9 could only have come from a proof that verified.
+  `InMemoryJtiStore` covers check 8 for a single process; the `JtiStore` interface
+  is a required option, not an optional one, because there is no safe default
+  that skips replay tracking.
+
+  Two design points worth knowing: the algorithm is derived from the embedded
+  `jwk` and the header's `alg` is **never read** (the test runs the real
+  public-key-as-HMAC-secret forgery and asserts it verifies under HS256 before
+  asserting this module refuses it), and the `jti` is claimed **last**, after
+  every other check passes, so a stream of invalid proofs cannot burn `jti`
+  values out of the store and deny service to valid ones.
+
 - **CONTRACT.md §10.1 rule 9 extended for DPoP (contract 1.16/1.17).**
   `CnfClaim` gains `jkt` (RFC 9449 §6.1), and a new `verifyTokenBinding(claims, proofs)` applies the full
   ten-row rule against a certificate thumbprint, a verified DPoP key

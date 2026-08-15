@@ -30,6 +30,20 @@ export {
   type AxiamClaims,
   JWKS_PATH,
 } from './jwks.js';
+// DPoP proof verification (CONTRACT.md §21.7.2, RFC 9449). `verifyDpopProof`
+// returns the proof key's thumbprint, which is what `verifyTokenBinding`
+// above expects as `dpopThumbprint` — the two are meant to be used together,
+// and the thumbprint only ever originates from a proof that verified.
+export {
+  verifyDpopProof,
+  InMemoryJtiStore,
+  jwkThumbprintS256,
+  accessTokenHash,
+  canonicalHtu,
+  DPOP_IAT_LEEWAY_SEC,
+  type JtiStore,
+  type DpopVerifyOptions,
+} from './dpop.js';
 // OIDC / SSO relying-party helpers (CONTRACT.md §12). Node-only: PKCE needs
 // node:crypto and ID-token validation needs jose, so these deliberately do
 // NOT hang off the browser-safe AxiamClient (see src/node/oidc.ts's header).
