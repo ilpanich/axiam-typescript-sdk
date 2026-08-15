@@ -23,9 +23,17 @@
  *    two; satisfying the more convenient one is not compliance.
  * 3. **A `cnf` this SDK cannot interpret is refused**, never read as
  *    unconstrained — including an *empty* one.
+ *
+ * ## Why this is a plain function, not an HTTPS server
+ *
+ * Rule 9 is about what you do with the token once the transport has told you
+ * who the caller is, so the example takes that as an input rather than standing
+ * up a server. Terminating TLS correctly is a separate job with its own
+ * pitfalls — and an example that switched certificate validation off to keep
+ * itself short would be teaching the wrong lesson in the middle of a security
+ * guide. Wire `authorize` into Express, Fastify, Nest or a bare
+ * `https.createServer` as you prefer.
  */
-import { createServer } from 'node:https';
-import type { TLSSocket } from 'node:tls';
 import {
   createVerifier,
   certificateThumbprintS256,
@@ -41,46 +49,82 @@ const JTI_STORE = new InMemoryJtiStore();
 
 const verifier = createVerifier(process.env.AXIAM_BASE_URL ?? 'https://axiam.example.com');
 
-const server = createServer({ requestCert: true, rejectUnauthorized: false }, async (req, res) => {
-  const token = (req.headers.authorization ?? '').replace(/^Bearer /i, '');
+/** What the transport tells the guard about one request. */
+interface IncomingRequest {
+  /** The HTTP method, e.g. `'POST'`. */
+  method: string;
+  /** The absolute request URL, query string and all. */
+  url: string;
+  /** The raw `Authorization` header value. */
+  authorization?: string | undefined;
+  /**
+   * The raw `DPoP` header value, when the caller sent one.
+   *
+   * This is the *proof*, not a thumbprint — it is verified below before
+   * anything is believed about it.
+   */
+  dpop?: string | undefined;
+  /**
+   * The DER bytes of the peer's leaf certificate, from the TLS layer.
+   *
+   * Take this from the connection — under Node, `TLSSocket.getPeerCertificate().raw`
+   * — or from a value a *trusted* terminating proxy forwarded over a channel
+   * your application controls. **Never** from a caller-settable request header:
+   * a forgeable input makes the whole mechanism decorative.
+   */
+  peerCertificateDer?: Uint8Array | undefined;
+}
 
-  try {
-    // Rules 1-8: signature, expiry, issuer, audience. NOT rule 9 — this call
-    // has no transport to ask, which is exactly why the binding check is
-    // separate rather than something you can forget to opt into.
-    const claims = await verifier.verifyAccessToken(token, {
-      expectedTenantId: process.env.AXIAM_TENANT_ID,
-    });
+/**
+ * Authorize one request, applying rules 1-9.
+ *
+ * @returns the authenticated subject
+ * @throws {AuthError} if any rule rejects the request
+ */
+export async function authorize(req: IncomingRequest): Promise<string> {
+  const token = (req.authorization ?? '').replace(/^(Bearer|DPoP) /i, '');
 
-    // The thumbprint must come from the connection, never a header the caller
-    // can set: a forgeable input makes the mechanism decorative.
-    const peer = (req.socket as TLSSocket).getPeerCertificate?.();
-    const certificateThumbprint =
-      peer?.raw !== undefined ? await certificateThumbprintS256(peer.raw) : undefined;
+  // Rules 1-8: signature, expiry, issuer, audience. NOT rule 9 — this call has
+  // no transport to ask, which is exactly why the binding check is separate
+  // rather than something you can forget to opt into.
+  const claims = await verifier.verifyAccessToken(token, {
+    expectedTenantId: process.env.AXIAM_TENANT_ID,
+  });
 
-    // Rule 9. Returns immediately for an unbound token, so adopting this does
-    // not break existing deployments.
-    // All ten §21.7.2 checks. Returns the proof key's thumbprint, so the value
-    // handed to rule 9 below could only have come from a proof that verified —
-    // a thumbprint lifted off an *unverified* proof would let a proof captured
-    // from any other endpoint authorize this one.
-    let dpopThumbprint: string | undefined;
-    const proof = req.headers['dpop'];
-    if (typeof proof === 'string') {
-      dpopThumbprint = await verifyDpopProof(proof, {
-        httpMethod: req.method ?? 'GET',
-        httpUri: new URL(req.url ?? '/', `https://${req.headers.host}`).toString(),
-        accessToken: token,
-        jtiStore: JTI_STORE,
-      });
-    }
+  const certificateThumbprint =
+    req.peerCertificateDer !== undefined
+      ? await certificateThumbprintS256(req.peerCertificateDer)
+      : undefined;
 
-    verifyTokenBinding(claims, { certificateThumbprint, dpopThumbprint });
+  // All ten §21.7.2 checks. Returns the proof key's thumbprint, so the value
+  // handed to rule 9 below could only have come from a proof that verified — a
+  // thumbprint lifted off an *unverified* proof would let a proof captured from
+  // any other endpoint authorize this one.
+  const dpopThumbprint =
+    req.dpop !== undefined
+      ? await verifyDpopProof(req.dpop, {
+          httpMethod: req.method,
+          httpUri: req.url,
+          accessToken: token,
+          jtiStore: JTI_STORE,
+        })
+      : undefined;
 
-    res.writeHead(200).end(`subject ${claims.sub} authorized\n`);
-  } catch (err) {
-    res.writeHead(401).end(`${(err as Error).message}\n`);
-  }
-});
+  // Rule 9. Returns immediately for an unbound token, so adopting this does not
+  // break existing deployments.
+  verifyTokenBinding(claims, { certificateThumbprint, dpopThumbprint });
 
-server.listen(8443);
+  return claims.sub;
+}
+
+// A worked call, with neither proof — the ordinary bearer case rule 9 leaves
+// alone.
+if (process.env.AXIAM_DEMO === '1') {
+  authorize({
+    method: 'GET',
+    url: 'https://rs.example.com/v1/things',
+    authorization: 'Bearer …the access token…',
+  })
+    .then((sub) => console.log(`subject ${sub} authorized`))
+    .catch((err: unknown) => console.error(`refused: ${(err as Error).message}`));
+}
