@@ -34,11 +34,12 @@ export type { AccessDecision };
 
 export interface WireCheckAccessRequest {
   tenant_id: string;
-  // `subject_id` is a required (non-`optional`) proto3 field
-  // (`proto/axiam/v1/authorization.proto`), unlike `scope` below — the wire
-  // contract always carries it, so it stays required here too rather than
-  // relaxed to match REST's optional `subjectId` (see `CheckAccessRequest`
-  // below for why the two transports differ).
+  // `subject_id` is a plain (non-`optional`) proto3 string
+  // (`proto/axiam/v1/authorization.proto`), unlike `scope` below. As of
+  // contract 1.19 (SDK-Q10) an **empty** value means "the subject carried by
+  // the verified token" — proto3 cannot express that as absence, so empty
+  // carries the meaning. It stays required on this mirrored wire shape and on
+  // the public `CheckAccessRequest` below; see that type for why.
   subject_id: string;
   action: string;
   resource_id: string;
@@ -47,9 +48,22 @@ export interface WireCheckAccessRequest {
 
 export interface WireCheckAccessResponse {
   allowed: boolean;
+  /**
+   * @deprecated SDK-Q10 (contract 1.19) — superseded by {@link reason} (proto
+   * field 4), which is what the REST decision body has always called this.
+   * Both fields carry the byte-identical string until AXIAM **2.0**, where
+   * proto field 2 is removed. Read `reason` instead; see `fromWireResponse`.
+   */
   deny_reason: string;
   /** B1 deny-override decision reason (proto field 3). */
   reason_code?: string;
+  /**
+   * SDK-Q10 (contract 1.19) — the human-readable reason under the name REST
+   * already uses. Proto field 4, explicit presence: absent on an allow,
+   * present on every refusal. Absent on a *refusal* means a pre-SDK-Q10
+   * server, which is exactly when {@link deny_reason} is still consulted.
+   */
+  reason?: string;
 }
 
 export interface WireBatchCheckAccessRequest {
@@ -123,13 +137,17 @@ export interface WireUserInfoServiceClient {
 /**
  * Public (camelCase, §1) single access-check request shape.
  *
- * `subjectId` is required here (unlike REST's optional `AccessCheck.subjectId`)
- * because gRPC calls typically originate from a service-mesh caller with no
- * request-scoped JWT to derive a subject from — the caller must pass it
- * explicitly. REST, by contrast, derives the subject from the caller's JWT
- * when `subjectId` is omitted (§5). This mirrors the proto's non-`optional`
- * `subject_id` field (`proto/axiam/v1/authorization.proto`), which is not
- * changed here (SDK-Q10, C2).
+ * `subjectId` is required here, unlike REST's optional `AccessCheck.subjectId`.
+ * gRPC calls typically originate from a service-mesh caller with no
+ * request-scoped JWT to derive a subject from, so passing it explicitly is the
+ * normal case; REST, by contrast, derives the subject from the caller's JWT
+ * when `subjectId` is omitted (§5).
+ *
+ * As of contract 1.19 (SDK-Q10) the *wire* field is optional in the same
+ * sense — an empty `subject_id` means "the subject in the verified token" —
+ * but this public type has not been relaxed to an optional `subjectId` to
+ * match. That is a breaking signature move and is tracked separately from the
+ * artifact re-vendor that brought the proto in.
  */
 export interface CheckAccessRequest {
   tenantId: string;
@@ -150,9 +168,17 @@ function toWireRequest(req: CheckAccessRequest): WireCheckAccessRequest {
 }
 
 function fromWireResponse(resp: WireCheckAccessResponse): AccessDecision {
+  // SDK-Q10 / CONTRACT.md §11.2 rule 9 (contract 1.19): read `reason`, fall
+  // back to the deprecated `deny_reason` only when `reason` is absent on a
+  // refusal — that is exactly a pre-SDK-Q10 server, and it is why proto field
+  // 4 has explicit presence rather than being a plain `string`. One reason
+  // accessor is exposed to callers, never two. `deny_reason` disappears at
+  // AXIAM 2.0 and this fallback goes with it.
+  const reason = resp.reason !== undefined ? resp.reason : resp.deny_reason;
+
   return {
     allowed: resp.allowed,
-    reason: resp.deny_reason ? resp.deny_reason : undefined,
+    reason: reason ? reason : undefined,
     // proto3 renders an unset `string` as `""`, so an older server that never
     // set field 3 is indistinguishable from one that set it empty. Both mean
     // "no reason code", and both map to `undefined` rather than to `""`,
