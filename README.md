@@ -17,13 +17,13 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19, §20, §21 (including §6.1 mTLS client
-certificates, the §10.1 minimum local-verification set, the §12 OIDC/SSO relying-party
-helpers, and the §13 `verifyWebhook` signature verifier).
+This SDK conforms to CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19, §20, §21, §22 (including §6.1 mTLS
+client certificates, the §10.1 minimum local-verification set, the §12 OIDC/SSO
+relying-party helpers, and the §13 `verifyWebhook` signature verifier).
 
-§12.7, §14 and §15 are named rather than folded into the range because they landed after
-this SDK already claimed §1–§13: widening the range silently would turn a statement that
-was true when written into a different claim without anyone editing it.
+§12.7, §14, §15 and §22 are named rather than folded into the range because they landed
+after this SDK already claimed §1–§13: widening the range silently would turn a statement
+that was true when written into a different claim without anyone editing it.
 
 ### §10.1 minimum local-verification set
 
@@ -228,6 +228,137 @@ await consume('amqp://localhost:5672', 'axiam.audit.events', signingKey, async (
   console.log('verified audit event:', event);
 });
 ```
+
+### Node — reactors, AMQP extension actors (`axiam-sdk/amqp`, CONTRACT.md §22)
+
+A **reactor** is an external process that subscribes to named hook events on the AMQP bus and
+answers back — allow, deny, or a field-allow-listed mutation — inside a timeout the server
+declared. It is AXIAM's answer to Zitadel Actions and Keycloak SPIs, and the difference is the
+whole design: those load third-party code *into* the authorization server, and this keeps it
+outside, reachable only through a signed reply schema the server validates before it believes
+a word of it.
+
+```typescript
+import { Sensitive } from 'axiam-sdk/amqp';
+import { REACTOR_EVENTS, allow, deny, mutate, reactorServe } from 'axiam-sdk/amqp';
+
+const signingKey = new Sensitive(Buffer.from(process.env.AXIAM_AMQP_SIGNING_KEY_HEX ?? '', 'hex'));
+
+await reactorServe(
+  {
+    amqpUrl: 'amqps://reactor:secret@broker.example.com:5671',
+    tenantId: '11111111-1111-1111-1111-111111111111',
+    reactorId: '99999999-9999-9999-9999-999999999999',
+    signingKey, // the tenant's HKDF-derived AMQP subkey, never the master key
+  },
+  (event) => {
+    switch (event.event) {
+      // token.pre_issue is mutable — the `ext.` namespace, and nothing else.
+      case REACTOR_EVENTS.TOKEN_PRE_ISSUE:
+        return mutate({ 'ext.cost_center': '42' });
+      // login.post_auth is veto-only, plus step-up.
+      case REACTOR_EVENTS.LOGIN_POST_AUTH:
+        return deny('embargoed region');
+      default:
+        return allow();
+    }
+  },
+);
+```
+
+See [`examples/reactor/index.ts`](examples/reactor/index.ts) for a complete three-hook reactor
+with graceful shutdown and a telemetry hook.
+
+#### The five hookable events, and their allow-lists
+
+| Event | Mutable | Complete allow-list | Default failure policy |
+|---|---|---|---|
+| `token.pre_issue` | yes | the **`ext.`** namespace only | `fail_open` |
+| `login.post_auth` | no | — (veto, or `require_mfa`) | `fail_closed` |
+| `user.pre_create` | yes | `username`, `email`, `metadata.` | `fail_closed` |
+| `user.pre_update` | yes | `username`, `email`, `metadata.` | `fail_closed` |
+| `grant.pre_assign` | no | — (veto only) | `fail_closed` |
+
+An entry ending in `.` is a **namespace prefix** and needs at least one character after the
+dot: `ext.` admits `ext.department` and `ext.a.b.c`, and refuses `ext.` itself, `ext`, `extra`,
+`external_id` and `evil.ext.department`. So a reactor can never reach `sub`, `aud`, `exp`,
+`scope` or any other standard claim — a **correctly signed** reply setting `sub` is refused
+exactly as a forged one is.
+
+Registrations that name no `failure_policy` get **the strictest default among their events**,
+in either array order — `defaultFailurePolicyFor([...])` computes it, and "take the first
+event's default" is specifically what §22.8 forbids, because it lets the order of a JSON array
+decide whether an unreachable fraud check passes.
+
+#### `authz.check` is not hookable, and this SDK does not pretend otherwise
+
+`authz.check`, `authz.check_batch` and `token.introspect` are absent from `EVENT_REGISTRY`,
+from `REACTOR_EVENTS` and from every example here (§22.7, a normative MUST NOT). A reactor
+round-trip is milliseconds; the check path's budget is microseconds. An application that needs
+external input on an authorization decision writes a **deny grant**, which the engine
+evaluates in the hot path at hot-path cost — and there is deliberately no client-side
+interceptor in this SDK offering itself as the reactor equivalent.
+
+#### What the runtime guarantees
+
+- **Both directions are signed.** The server signs the event with the tenant's HKDF-derived
+  AMQP subkey; the reactor signs its reply with the same key. An unsigned or stale reply is
+  not a weak reply — the server discards it as though the reactor had never answered. Every
+  event is verified (`key_version >= 2`, MAC, ±300 s freshness, nonce seen-set) *before* your
+  handler is called.
+- **Two canonicalization quirks, both of which are silent failures if missed.** First, a
+  reactor body signs `hmac_signature` as **`null`**, where §8's own two message types omit it.
+  Second — and this one is TypeScript's alone — `Date.prototype.toISOString()` always emits
+  three fractional digits, while the server's `chrono` emits none on a whole second; a reply
+  timestamped `…T12:00:00.000Z` is re-serialized server-side as `…T12:00:00Z` and its MAC
+  fails with no other symptom. `toChronoRfc3339()` is the fix and the runtime always uses it.
+  Both are pinned by server-generated vectors rather than by memory — see
+  [`testdata/reactor_v2_reference_vectors.json`](testdata/reactor_v2_reference_vectors.json)
+  and [`test/amqp/reactor/vectors.test.ts`](test/amqp/reactor/vectors.test.ts).
+- **It declares no topology.** No `assertQueue`, no `assertExchange`, no `bindQueue` — the
+  server owns all three, and the `ReactorChannel` seam this runtime is written against does
+  not even offer them. A reactor that can bind is a reactor that can bind itself to
+  `*.token.pre_issue` and read another tenant's issuance events.
+- **It fails closed on its own errors.** A handler that throws, a body that will not parse, a
+  window that has already closed: each publishes **nothing**, so the registration's
+  `failure_policy` decides. Synthesizing an `allow` would override the operator's
+  `fail_closed` setting from inside the library. `abstain()` is the explicit form of the same
+  thing.
+- **It does not filter your patch.** One forbidden key rejects the whole patch server-side;
+  pruning it here would leave you believing a field was set when it was dropped. Check
+  yourself with `patchFieldAllowed(spec, field)` if you want to know before you send.
+- **It honours `timeout_ms`.** The handler runs inside the window the server declared, and a
+  reply whose window has closed is abandoned rather than published late.
+- **Shutdown drains (§18).** Pass an `AbortSignal`; aborting it cancels the consumer, lets
+  every dispatch already running finish — handler, signature, publish — and only then closes
+  the channel and connection.
+
+#### Registering a reactor (§22.9)
+
+Registration is a REST admin call, not part of this runtime:
+
+```bash
+curl -X POST https://axiam.example.com/api/v1/reactors \
+  -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"fraud-check","events":["login.post_auth"],"mode":"intercept","timeout_ms":500}'
+```
+
+The response's `id` is what `reactorId` takes, and the server declares the queue.
+`timeout_ms` defaults to **500** and is refused outside `1…5000`; the chain's wall-clock
+ceiling is **5000 ms** and the per-tenant in-flight cap is **64**. This SDK exposes those as
+constants (`DEFAULT_REACTOR_TIMEOUT_MS`, `MAX_REACTOR_TIMEOUT_MS`,
+`DEFAULT_REACTOR_MAX_IN_FLIGHT`) but ships **no typed client for the CRUD endpoints** — call
+them through the REST client, and let the server validate; §22.9 explicitly warns against
+re-deriving `PUT` merge semantics or the `failure_policy` re-derivation client-side.
+
+#### Logging
+
+The `payload`, `patch`, `reason` and `decision` are tenant business data — readable by design,
+since a handler that cannot inspect the event cannot decide anything, but this runtime never
+logs them at info level and yours should not either (§22.12). The signing key is
+`Sensitive<Buffer>`, is never logged at any level, and never appears in an error payload.
+`nonce`, `correlation_id` and `hmac_signature` are not secrets and may be logged for
+correlation.
 
 ### Express middleware (`axiam-sdk/middleware`)
 

@@ -101,6 +101,31 @@ describe('barrel entry points', () => {
     expect(mod.HMAC_SIGNED_MESSAGE_TYPES).toContain('AuthzRequest');
   });
 
+  it('/amqp exposes the §22 reactor runtime, and never the hot-path operations', async () => {
+    const mod = await import('../src/amqp/index.js');
+    expect(typeof mod.reactorServe).toBe('function');
+    expect(typeof mod.dispatchReactorDelivery).toBe('function');
+    expect(typeof mod.allow).toBe('function');
+    expect(typeof mod.deny).toBe('function');
+    expect(typeof mod.mutate).toBe('function');
+    expect(typeof mod.abstain).toBe('function');
+    expect(typeof mod.requireStepUp).toBe('function');
+    expect(typeof mod.defaultFailurePolicyFor).toBe('function');
+    expect(typeof mod.patchFieldAllowed).toBe('function');
+    expect(mod.REACTOR_EXCHANGE).toBe('axiam.reactor.events');
+    expect(mod.EVENT_REGISTRY).toHaveLength(5);
+
+    // §22.7 asserted on the enum/list, not on a comment: the three hot-path
+    // operations are absent from every event constant this SDK exposes.
+    const names = mod.EVENT_REGISTRY.map((spec) => spec.name);
+    const constants = Object.values(mod.REACTOR_EVENTS);
+    for (const excluded of ['authz.check', 'authz.check_batch', 'token.introspect']) {
+      expect(names, `${excluded} must not be hookable (§22.7)`).not.toContain(excluded);
+      expect(constants).not.toContain(excluded);
+      expect(mod.eventSpec(excluded)).toBeUndefined();
+    }
+  });
+
   it('/middleware exposes both framework adapters and the shared core', async () => {
     const mod = await import('../src/middleware/index.js');
     expect(typeof mod.axiamMiddleware).toBe('function');

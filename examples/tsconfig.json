@@ -27,6 +27,8 @@
       "axiam-sdk/nestjs": ["../src/nestjs/index.ts"]
     }
   },
-  "include": ["*.ts"],
+  // `*/*.ts` picks up directory-shaped examples (examples/reactor/index.ts,
+  // CONTRACT.md §22) alongside the flat single-file ones.
+  "include": ["*.ts", "*/*.ts"],
   "exclude": ["node_modules", "../dist", "../src/gen"]
 }

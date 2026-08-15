@@ -11,3 +11,8 @@ export { Sensitive } from '../core/index.js';
 export * from './hmac.js';
 export * from './messages.js';
 export * from './consumer.js';
+// CONTRACT.md §22 reactor runtime. The same §8 HMAC, now in BOTH directions —
+// the server signs the hook event, the reactor signs the allow/deny/mutate
+// reply — with one canonicalization difference (`hmac_signature` is serialized
+// as `null` inside a reactor body, not omitted) that the §22.13 vectors pin.
+export * from './reactor/index.js';

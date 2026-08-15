@@ -9,6 +9,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CONTRACT.md §22 — Reactors (AMQP extension actors).** New `src/amqp/reactor/`
+  and `reactorServe(config, handler)`, exported from `axiam-sdk/amqp`: it consumes
+  the server-declared per-reactor queue, verifies every event (§8 v2 —
+  `key_version`, MAC, ±300 s freshness, nonce seen-set) *before* user code sees
+  it, dispatches to a handler returning `allow()` / `deny()` / `mutate()`, then
+  signs and publishes the reply. Also ships the event registry with its
+  mutable-field allow-lists, the strictest-wins `failure_policy` composition
+  (§22.8), `AbortSignal`-driven §18 drain, and `examples/reactor/`.
+
+  **§8's HMAC now runs in both directions**, and TypeScript has *two* ways to
+  produce a MAC that never verifies with no other symptom. The first is shared
+  with every SDK: a reactor body signs `hmac_signature` as **`null`**, where
+  `AuthzRequest` and `AuditEventMessage` omit it. The second is ours alone —
+  `Date.prototype.toISOString()` always emits three fractional digits, while the
+  server's `chrono` emits none on a whole second, so a reply timestamped
+  `…T12:00:00.000Z` is re-serialized server-side as `…T12:00:00Z` and its
+  signature fails. `toChronoRfc3339()` is the fix; the runtime always uses it and
+  a test pins both branches. Both quirks are pinned by the server-generated
+  vectors in `testdata/reactor_v2_reference_vectors.json` — same master key,
+  tenant and derived subkey as the §8 fixture, so one loader serves both.
+
+  Three behaviours are structural rather than documented. The runtime **declares
+  no topology**: the `ReactorChannel` seam has no `assertQueue`/`assertExchange`/
+  `bindQueue` at all, and a test drives the whole of `reactorServe` against a
+  fake channel that *does* offer them, asserting none is ever called (§22.1). It
+  **fails closed on its own errors**: a throwing handler, an unparseable body or
+  an expired window publishes *nothing*, so the operator's `failure_policy`
+  decides rather than a synthesized `allow` from inside the library (§22.10
+  rule 2). And it **does not filter a patch** — one forbidden key rejects the
+  whole patch server-side, and pruning it would leave the author believing a
+  field was set (§22.4 rule 1).
+
+  §22.7's hot-path exclusion is honoured by absence: `authz.check`,
+  `authz.check_batch` and `token.introspect` appear in no constant, no registry
+  row and no example.
+
+  Not shipped, deliberately: a typed client for the §22.9 admin CRUD endpoints.
+  That subsection is informative, and §22.9 specifically warns against
+  re-deriving `PUT` merge semantics or the `failure_policy` re-derivation
+  client-side — so the right surface is the server's.
+
 - **CONTRACT.md §21.7.2 DPoP proof verification (RFC 9449).** New `src/node/dpop.ts`
   implements all ten checks and returns the proof key's RFC 7638 thumbprint, so a
   value passed on to rule 9 could only have come from a proof that verified.
