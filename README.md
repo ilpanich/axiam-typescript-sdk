@@ -266,6 +266,42 @@ await reactorServe(
 );
 ```
 
+#### Binding handlers per event (§22.14)
+
+The `switch` above is the shape every multi-event reactor grows, and its `default:` arm —
+`return allow()` — answers on behalf of code that never ran. That is the defect §22.10
+rule 2 forbids the *runtime* from committing, relocated into your file where the rule does
+not reach it: an operator who set `fail_closed` on the registration has it defeated there.
+
+`reactorHandlers` is §22.14's declarative form, in the spirit of the §11 declarative
+authorization helpers:
+
+```typescript
+import { REACTOR_EVENTS, reactorHandlers, reactorServe } from 'axiam-sdk/amqp';
+
+await reactorServe(
+  options,
+  reactorHandlers({
+    [REACTOR_EVENTS.TOKEN_PRE_ISSUE]: (event) => mutate({ 'ext.cost_center': '42' }),
+    [REACTOR_EVENTS.LOGIN_POST_AUTH]: async (event) => deny('embargoed region'),
+  }),
+);
+```
+
+- **A misspelled event is a compile error**, because the map's key type is
+  `ReactorEventName` — and it is re-checked at runtime for JavaScript callers, who get no
+  such help. That runtime check is also how the three hot-path operations §22.7 excludes are
+  refused: they are in no registry row.
+- **An unbound event abstains** — no reply, and the registration's `failure_policy` decides
+  (§22.8), exactly as it decides a timeout. Never a synthesized `allow`.
+- Several maps may be passed (`reactorHandlers(tokenHandlers, loginHandlers)`) so handlers
+  can be split across modules; binding the same event twice throws rather than silently
+  overwriting.
+
+It is pure sugar: the value it produces is exactly the `ReactorHandler` `reactorServe`
+already takes. It opens nothing, verifies nothing, signs nothing, does not filter a patch,
+and a handler's own rejection reaches the runtime unchanged so nothing is published.
+
 See [`examples/reactor/index.ts`](examples/reactor/index.ts) for a complete three-hook reactor
 with graceful shutdown and a telemetry hook.
 

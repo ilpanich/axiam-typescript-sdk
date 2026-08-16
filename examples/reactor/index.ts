@@ -53,7 +53,6 @@
 import { Sensitive } from 'axiam-sdk/amqp';
 import {
   REACTOR_EVENTS,
-  abstain,
   allow,
   chainedPatch,
   defaultFailurePolicyFor,
@@ -61,6 +60,7 @@ import {
   eventSpec,
   mutate,
   patchFieldAllowed,
+  reactorHandlers,
   reactorQueueName,
   reactorServe,
   requireStepUp,
@@ -84,14 +84,22 @@ async function main(): Promise<void> {
   // by accident (§22.12). NEVER hard-code one.
   const signingKey = new Sensitive(Buffer.from(env('AXIAM_AMQP_SIGNING_KEY_HEX'), 'hex'));
 
-  // The strictest default among the events we registered for (§22.8). Shown here
-  // because it is worth knowing before you go live, not because the SDK needs
-  // it: the server derives it from the registration.
-  const policy = defaultFailurePolicyFor([
-    REACTOR_EVENTS.TOKEN_PRE_ISSUE,
-    REACTOR_EVENTS.LOGIN_POST_AUTH,
-    REACTOR_EVENTS.GRANT_PRE_ASSIGN,
-  ]);
+  // One handler per event (§22.14) instead of a switch whose `default:` arm
+  // answers `allow` on behalf of code that never ran. A misspelled key is a
+  // COMPILE error here; an event nobody bound abstains, so the registration's
+  // failure_policy decides rather than this file.
+  const handlers = {
+    [REACTOR_EVENTS.TOKEN_PRE_ISSUE]: enrichToken,
+    [REACTOR_EVENTS.LOGIN_POST_AUTH]: screenLogin,
+    [REACTOR_EVENTS.GRANT_PRE_ASSIGN]: fourEyes,
+  };
+
+  // The strictest default among the events we registered for (§22.8), derived
+  // from the handlers actually bound rather than from a restatement of the
+  // registration — so the two cannot drift apart. Shown here because it is
+  // worth knowing before you go live, not because the SDK needs it: the server
+  // derives it from the registration.
+  const policy = defaultFailurePolicyFor(Object.keys(handlers));
   console.log(`failure policy when this reactor is unreachable: ${policy}`);
   console.log(`consuming ${reactorQueueName(tenantId, reactorId)} (declared by the server)`);
 
@@ -123,27 +131,8 @@ async function main(): Promise<void> {
         }
       },
     },
-    decide,
+    reactorHandlers(handlers),
   );
-}
-
-/** One function from an event to one of three answers (§22.10). */
-function decide(event: ReactorEvent): ReactorDecision {
-  // The payload is tenant business data: readable by design, but do not log it
-  // at info level (§22.12).
-  switch (event.event) {
-    case REACTOR_EVENTS.TOKEN_PRE_ISSUE:
-      return enrichToken(event);
-    case REACTOR_EVENTS.LOGIN_POST_AUTH:
-      return screenLogin(event);
-    case REACTOR_EVENTS.GRANT_PRE_ASSIGN:
-      return fourEyes(event);
-    default:
-      // An event we did not register for should never arrive. Abstaining
-      // publishes nothing and lets the failure policy decide, which is the
-      // honest answer to "I do not know what this is".
-      return abstain();
-  }
 }
 
 /**
