@@ -38,7 +38,7 @@ via <code>httpOnly</code> cookies set by the server.</p>
 
 </div></div></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/rest/client.ts#L52">src/rest/client.ts:52</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/rest/client.ts#L57">src/rest/client.ts:57</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -49,10 +49,16 @@ via <code>httpOnly</code> cookies set by the server.</p>
 <div class="tsd-index-list"><a href="#constructor" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Constructor"><use href="../assets/icons.svg#icon-512"></use></svg><span>constructor</span></a>
 </div></section>
 <section class="tsd-index-section">
+<h3 class="tsd-index-heading tsd-anchor-link" id="properties">Properties<a href="#properties" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-index-list"><a href="#decisionmemo" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>decision<wbr/>Memo</span></a>
+<a href="#telemetry" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>telemetry</span></a>
+</div></section>
+<section class="tsd-index-section">
 <h3 class="tsd-index-heading tsd-anchor-link" id="methods">Methods<a href="#methods" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-index-list"><a href="#batchcheck" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>batch<wbr/>Check</span></a>
 <a href="#can" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>can</span></a>
 <a href="#checkaccess" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>check<wbr/>Access</span></a>
+<a href="#close" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>close</span></a>
 <a href="#login" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>login</span></a>
 <a href="#logout" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>logout</span></a>
 <a href="#refresh" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>refresh</span></a>
@@ -70,23 +76,28 @@ via <code>httpOnly</code> cookies set by the server.</p>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">options</span>: <a href="../interfaces/index.AxiamClientOptions.html" class="tsd-signature-type tsd-kind-interface">AxiamClientOptions</a></span>
-<div class="tsd-comment tsd-typography"><p>client configuration (§5/§6).</p>
-</div></li>
-<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">session</span>: <a href="index.SharedSession.html" class="tsd-signature-type tsd-kind-class">SharedSession</a></span>
-<div class="tsd-comment tsd-typography"><p>optional pre-built session to adopt instead of the default
-browser <code>SharedSession</code>. This is the injection point for the Node
-persona (SDK-Q05): a Node REST consumer builds a <code>NodeSession</code> (cookie
-jar + CSRF/refresh token sync) via <code>createNodeClient</code>/<code>createNodeSession</code>
-from the Node-only <code>axiam-sdk/node</code> (or <code>axiam-sdk/grpc</code>) subpath and it
-is adopted here, so httpOnly login/refresh cookies persist. When omitted
-the browser <code>SharedSession</code> is built by default — the Node modules are
-NEVER statically imported from this browser-safe module, so a <code>/rest</code>
-browser bundle keeps pulling zero Node dependencies (SC#1).</p>
-</div></li></ul></div>
+<li><span><span class="tsd-kind-parameter">options</span>: <a href="../interfaces/index.AxiamClientOptions.html" class="tsd-signature-type tsd-kind-interface">AxiamClientOptions</a></span></li>
+<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">session</span>: <a href="index.SharedSession.html" class="tsd-signature-type tsd-kind-class">SharedSession</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">AxiamClient</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/rest/client.ts#L68">src/rest/client.ts:68</a></li></ul></aside></div></li></ul></section></section></details>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/rest/client.ts#L85">src/rest/client.ts:85</a></li></ul></aside></div></li></ul></section></section></details>
+<details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h2 class="tsd-anchor-link" id="properties-1">Properties<a href="#properties-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
+<section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="decisionmemo"><code class="tsd-tag">Readonly</code><span>decision<wbr/>Memo</span><a href="#decisionmemo" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">decisionMemo</span><span class="tsd-signature-symbol">:</span> <a href="index.DecisionMemo.html" class="tsd-signature-type tsd-kind-class">DecisionMemo</a></div>
+<div class="tsd-comment tsd-typography"><p>§17 decision memo. Disabled unless <code>decisionMemoTtlMs</code> was configured.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/rest/client.ts#L74">src/rest/client.ts:74</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="telemetry"><code class="tsd-tag">Readonly</code><span>telemetry</span><a href="#telemetry" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">telemetry</span><span class="tsd-signature-symbol">:</span> <a href="index.TelemetryReporter.html" class="tsd-signature-type tsd-kind-class">TelemetryReporter</a></div>
+<div class="tsd-comment tsd-typography"><p>§19 telemetry dispatcher. Empty unless a hook was installed.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/rest/client.ts#L77">src/rest/client.ts:77</a></li></ul></aside></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -104,7 +115,7 @@ browser bundle keeps pulling zero Node dependencies (SC#1).</p>
 <li><span><span class="tsd-kind-parameter">checks</span>: <a href="../interfaces/index.AccessCheck.html" class="tsd-signature-type tsd-kind-interface">AccessCheck</a><span class="tsd-signature-symbol">[]</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.AccessDecision.html" class="tsd-signature-type tsd-kind-interface">AccessDecision</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/rest/client.ts#L104">src/rest/client.ts:104</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/rest/client.ts#L174">src/rest/client.ts:174</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="can"><span>can</span><a href="#can" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -121,7 +132,7 @@ browser bundle keeps pulling zero Node dependencies (SC#1).</p>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">scope</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/rest/client.ts#L99">src/rest/client.ts:99</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/rest/client.ts#L169">src/rest/client.ts:169</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="checkaccess"><span>check<wbr/>Access</span><a href="#checkaccess" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -136,7 +147,28 @@ browser bundle keeps pulling zero Node dependencies (SC#1).</p>
 <li><span><span class="tsd-kind-parameter">check</span>: <a href="../interfaces/index.AccessCheck.html" class="tsd-signature-type tsd-kind-interface">AccessCheck</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.AccessDecision.html" class="tsd-signature-type tsd-kind-interface">AccessDecision</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/rest/client.ts#L94">src/rest/client.ts:94</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/rest/client.ts#L164">src/rest/client.ts:164</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="close"><span>close</span><a href="#close" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="close-1"><span class="tsd-kind-call-signature">close</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#close-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Release this client's local resources (<a href="http://CONTRACT.md">CONTRACT.md</a> §18).</p>
+<p>Idempotent — calling it twice is not an error. Cleanup runs from error
+paths, and an error path that itself throws hides the original failure.</p>
+<p><strong>This does not log out.</strong> §18.1 rule 5: shutting down a client releases
+<em>local</em> resources and never reaches the network. The server-side session
+deliberately outlives the client object, which is what lets a process
+restart and resume; a <code>close()</code> that logged out would silently end every
+user's session on each deploy. Call <a href="#logout" class="tsd-kind-method">logout</a> first if ending the
+session is what you want.</p>
+<p>After this returns, any operation on the client rejects rather than
+silently reconnecting.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/rest/client.ts#L113">src/rest/client.ts:113</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="login"><span>login</span><a href="#login" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -152,7 +184,7 @@ browser bundle keeps pulling zero Node dependencies (SC#1).</p>
 <li><span><span class="tsd-kind-parameter">password</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.LoginResult.html" class="tsd-signature-type tsd-kind-type-alias">LoginResult</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/rest/client.ts#L74">src/rest/client.ts:74</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/rest/client.ts#L144">src/rest/client.ts:144</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="logout"><span>logout</span><a href="#logout" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -163,7 +195,7 @@ browser bundle keeps pulling zero Node dependencies (SC#1).</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/rest/client.ts#L89">src/rest/client.ts:89</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/rest/client.ts#L159">src/rest/client.ts:159</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="refresh"><span>refresh</span><a href="#refresh" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -174,7 +206,7 @@ browser bundle keeps pulling zero Node dependencies (SC#1).</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/rest/client.ts#L84">src/rest/client.ts:84</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/rest/client.ts#L154">src/rest/client.ts:154</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="verifymfa"><span>verify<wbr/>Mfa</span><a href="#verifymfa" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -190,7 +222,7 @@ browser bundle keeps pulling zero Node dependencies (SC#1).</p>
 <li><span><span class="tsd-kind-parameter">code</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.LoginResult.html" class="tsd-signature-type tsd-kind-type-alias">LoginResult</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/rest/client.ts#L79">src/rest/client.ts:79</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/rest/client.ts#L149">src/rest/client.ts:149</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -208,8 +240,10 @@ browser bundle keeps pulling zero Node dependencies (SC#1).</p>
 <div class="tsd-accordion-details">
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Constructors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Constructors</summary>
 <div><a href="#constructor"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Constructor"><use href="../assets/icons.svg#icon-512"></use></svg><span>constructor</span></a></div></details>
+<details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Properties</summary>
+<div><a href="#decisionmemo"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>decision<wbr/>Memo</span></a><a href="#telemetry"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>telemetry</span></a></div></details>
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Methods</summary>
-<div><a href="#batchcheck"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>batch<wbr/>Check</span></a><a href="#can"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>can</span></a><a href="#checkaccess"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>check<wbr/>Access</span></a><a href="#login"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>login</span></a><a href="#logout"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>logout</span></a><a href="#refresh"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>refresh</span></a><a href="#verifymfa"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>verify<wbr/>Mfa</span></a></div></details></div></details></div>
+<div><a href="#batchcheck"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>batch<wbr/>Check</span></a><a href="#can"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>can</span></a><a href="#checkaccess"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>check<wbr/>Access</span></a><a href="#close"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>close</span></a><a href="#login"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>login</span></a><a href="#logout"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>logout</span></a><a href="#refresh"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>refresh</span></a><a href="#verifymfa"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>verify<wbr/>Mfa</span></a></div></details></div></details></div>
 <div class="site-menu">
 <nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">

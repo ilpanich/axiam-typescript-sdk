@@ -17,9 +17,9 @@
 transports (<a href="http://CONTRACT.md">CONTRACT.md</a> §1). <code>reason</code> is present (and non-empty) only when
 <code>allowed</code> is <code>false</code>.</p>
 </div></section>
-<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">AccessDecision</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#allowed">allowed</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#reason">reason</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
+<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">AccessDecision</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#allowed">allowed</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#reason">reason</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#reasoncode">reasonCode</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/core/authz.ts#L18">src/core/authz.ts:18</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/core/authz.ts#L18">src/core/authz.ts:18</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -29,6 +29,7 @@ transports (<a href="http://CONTRACT.md">CONTRACT.md</a> §1). <code>reason</cod
 <h3 class="tsd-index-heading tsd-anchor-link" id="properties">Properties<a href="#properties" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-index-list"><a href="#allowed" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>allowed</span></a>
 <a href="#reason" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>reason?</span></a>
+<a href="#reasoncode" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>reason<wbr/>Code?</span></a>
 </div></section></div></details></section></section>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="properties-1">Properties<a href="#properties-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
@@ -37,16 +38,36 @@ transports (<a href="http://CONTRACT.md">CONTRACT.md</a> §1). <code>reason</cod
 <h3 class="tsd-anchor-link" id="allowed"><span>allowed</span><a href="#allowed" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">allowed</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
 <div class="tsd-comment tsd-typography"><p>Whether the checked action on the checked resource is permitted.</p>
+<p><strong>This field alone carries the outcome.</strong> <a href="#reasoncode" class="tsd-kind-property">AccessDecision.reasonCode</a>
+explains it and never contradicts it.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/core/authz.ts#L20">src/core/authz.ts:20</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/core/authz.ts#L25">src/core/authz.ts:25</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="reason"><code class="tsd-tag">Optional</code><span>reason</span><a href="#reason" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">reason</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Present (and non-empty) only when <code>allowed</code> is <code>false</code>; a human-readable reason the check was denied.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/core/authz.ts#L22">src/core/authz.ts:22</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/core/authz.ts#L27">src/core/authz.ts:27</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="reasoncode"><code class="tsd-tag">Optional</code><span>reason<wbr/>Code</span><a href="#reasoncode" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">reasonCode</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
+<div class="tsd-comment tsd-typography"><p>Machine-readable decision reason (<a href="http://CONTRACT.md">CONTRACT.md</a> §11 rule 9, B1
+deny-override): <code>&quot;allowed&quot;</code>, <code>&quot;no_grant&quot;</code>, or <code>&quot;denied_by_rule&quot;</code>.</p>
+<p><strong>The two refusals mean opposite things to the person on the other end.</strong>
+<code>no_grant</code> says <em>ask an admin for access</em>; <code>denied_by_rule</code> says <em>an admin
+has already decided</em>. An application that cannot tell them apart sends
+users to raise tickets that will be refused — which is why the contract
+forbids collapsing them into a bare <code>false</code>.</p>
+<p>Absent when the server does not send the field: a newer SDK against an
+older server treats it as absent, never as an error. An unrecognised value
+is surfaced verbatim and never changes <a href="#allowed" class="tsd-kind-property">AccessDecision.allowed</a> —
+which is why this is a <code>string</code> rather than a union, so a code the SDK has
+never heard of still reaches the caller intact.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/core/authz.ts#L44">src/core/authz.ts:44</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -63,7 +84,7 @@ transports (<a href="http://CONTRACT.md">CONTRACT.md</a> §1). <code>reason</cod
 <h3>On This Page</h3></summary>
 <div class="tsd-accordion-details">
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Properties</summary>
-<div><a href="#allowed"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>allowed</span></a><a href="#reason"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>reason</span></a></div></details></div></details></div>
+<div><a href="#allowed"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>allowed</span></a><a href="#reason"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>reason</span></a><a href="#reasoncode"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>reason<wbr/>Code</span></a></div></details></div></details></div>
 <div class="site-menu">
 <nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">

@@ -11,7 +11,7 @@
 <li><a href="../modules/middleware.html">middleware</a></li>
 <li><a href="" aria-current="page">CheckOutcome</a></li></ul>
 <h1>Type Alias CheckOutcome</h1></div>
-<div class="tsd-signature"><span class="tsd-kind-type-alias">CheckOutcome</span><span class="tsd-signature-symbol">:</span><br/>    <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">kind</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">&quot;allowed&quot;</span> <span class="tsd-signature-symbol">}</span><br/>    <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">kind</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">&quot;denied&quot;</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">message</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span><br/>    <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">kind</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">&quot;unavailable&quot;</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">message</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span></div>
+<div class="tsd-signature"><span class="tsd-kind-type-alias">CheckOutcome</span><span class="tsd-signature-symbol">:</span><br/>    <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">kind</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">&quot;allowed&quot;</span> <span class="tsd-signature-symbol">}</span><br/>    <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">challenge</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">kind</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">&quot;denied&quot;</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">message</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span><br/>    <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">kind</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">&quot;unavailable&quot;</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">message</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span></div>
 <div class="tsd-comment tsd-typography"><p>The outcome of an <code>evaluateAccess</code> call — one arm per §11.2.5's error-mapping table (the 401/400 arms are handled by callers before this is ever invoked).</p>
 </div>
 <div class="tsd-type-declaration">
@@ -23,8 +23,14 @@
 <h5><span class="tsd-kind-property">kind</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">&quot;allowed&quot;</span></h5>
 <div class="tsd-comment tsd-typography"><p>The check passed — the caller proceeds to the handler.</p>
 </div></li></ul></li>
-<li><span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">kind</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">&quot;denied&quot;</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">message</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span>
+<li><span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">challenge</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">kind</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">&quot;denied&quot;</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">message</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span>
 <ul class="tsd-parameters">
+<li class="tsd-parameter">
+<h5><code class="tsd-tag">Optional</code><span class="tsd-kind-property">challenge</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5>
+<div class="tsd-comment tsd-typography"><p>The complete <code>WWW-Authenticate</code> value, when a <a href="../interfaces/middleware.UmaChallenger.html" class="tsd-kind-interface">UmaChallenger</a> was
+configured <em>and</em> minting succeeded (§20.3). Absent otherwise, including
+when minting failed — the denial stands either way.</p>
+</div></li>
 <li class="tsd-parameter">
 <h5><span class="tsd-kind-property">kind</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">&quot;denied&quot;</span></h5>
 <div class="tsd-comment tsd-typography"><p>The check was evaluated and denied (<code>allowed: false</code> or a server 403) → HTTP 403.</p>
@@ -44,7 +50,7 @@
 <div class="tsd-comment tsd-typography"><p>Failure message surfaced in the 503 body.</p>
 </div></li></ul></li></ul></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/middleware/authzCore.ts#L164">src/middleware/authzCore.ts:164</a></li></ul></aside></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/middleware/authzCore.ts#L223">src/middleware/authzCore.ts:223</a></li></ul></aside></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

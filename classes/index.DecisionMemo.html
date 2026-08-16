@@ -1,0 +1,202 @@
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>DecisionMemo | AXIAM TypeScript SDK</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK</a>
+<div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
+<ul role="listbox" id="tsd-search-results"></ul>
+<div id="tsd-search-status" aria-live="polite" aria-atomic="true">
+<div>Preparing search index...</div></div></dialog><a href="#" class="tsd-widget menu" id="tsd-toolbar-menu-trigger" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-menu"></use></svg></a></div></header>
+<div class="container container-main">
+<div class="col-content">
+<div class="tsd-page-title">
+<ul class="tsd-breadcrumb" aria-label="Breadcrumb">
+<li><a href="../modules/index.html">index</a></li>
+<li><a href="" aria-current="page">DecisionMemo</a></li></ul>
+<h1>Class DecisionMemo</h1></div>
+<section class="tsd-panel tsd-comment">
+<div class="tsd-comment tsd-typography"><p>A bounded, TTL-clamped decision memo.</p>
+<p><code>ttlMs === 0</code> means <strong>disabled</strong> — not &quot;cache for zero milliseconds&quot;. That is
+the default, and both <code>get</code> and <code>set</code> become no-ops.</p>
+</div></section><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/core/decisionMemo.ts#L75">src/core/decisionMemo.ts:75</a></li></ul></aside>
+<section class="tsd-panel-group tsd-index-group">
+<section class="tsd-panel tsd-index-panel">
+<details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h5 class="tsd-index-heading uppercase">Index</h5></summary>
+<div class="tsd-accordion-details">
+<section class="tsd-index-section">
+<h3 class="tsd-index-heading tsd-anchor-link" id="constructors">Constructors<a href="#constructors" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-index-list"><a href="#constructor" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Constructor"><use href="../assets/icons.svg#icon-512"></use></svg><span>constructor</span></a>
+</div></section>
+<section class="tsd-index-section">
+<h3 class="tsd-index-heading tsd-anchor-link" id="accessors">Accessors<a href="#accessors" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-index-list"><a href="#effectivettlms" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Accessor"><use href="../assets/icons.svg#icon-262144"></use></svg><span>effective<wbr/>Ttl<wbr/>Ms</span></a>
+<a href="#enabled" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Accessor"><use href="../assets/icons.svg#icon-262144"></use></svg><span>enabled</span></a>
+<a href="#size" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Accessor"><use href="../assets/icons.svg#icon-262144"></use></svg><span>size</span></a>
+</div></section>
+<section class="tsd-index-section">
+<h3 class="tsd-index-heading tsd-anchor-link" id="methods">Methods<a href="#methods" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-index-list"><a href="#clear" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>clear</span></a>
+<a href="#get" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get</span></a>
+<a href="#reportclamp" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>report<wbr/>Clamp</span></a>
+<a href="#set" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set</span></a>
+</div></section></div></details></section></section>
+<details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Constructors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h2 class="tsd-anchor-link" id="constructors-1">Constructors<a href="#constructors-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
+<section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="constructor"><span>constructor</span><a href="#constructor" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="constructordecisionmemo"><span class="tsd-signature-keyword">new</span> <span class="tsd-kind-constructor-signature">DecisionMemo</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">ttlMs</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">now</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-class">DecisionMemo</a><a href="#constructordecisionmemo" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">ttlMs</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol"> = 0</span></span>
+<div class="tsd-comment tsd-typography"><p>requested TTL in milliseconds; <code>0</code> disables the memo and any
+value above <a href="../variables/index.MAX_TTL_MS.html" class="tsd-kind-variable">MAX_TTL_MS</a> is clamped to it.</p>
+</div></li>
+<li><span><span class="tsd-kind-parameter">now</span>: <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol"> = Date.now</span></span>
+<div class="tsd-comment tsd-typography"><p>injected clock, so the TTL can be tested without waiting.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">DecisionMemo</a></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/core/decisionMemo.ts#L84">src/core/decisionMemo.ts:84</a></li></ul></aside></div></li></ul></section></section></details>
+<details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Accessors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h2 class="tsd-anchor-link" id="accessors-1">Accessors<a href="#accessors-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
+<section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="effectivettlms"><span>effective<wbr/>Ttl<wbr/>Ms</span><a href="#effectivettlms" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li>
+<div class="tsd-signature" id="effectivettlmseffectivettlms"><span class="tsd-signature-keyword">get</span> <span class="tsd-kind-get-signature">effectiveTtlMs</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The effective TTL after clamping.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/core/decisionMemo.ts#L98">src/core/decisionMemo.ts:98</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="enabled"><span>enabled</span><a href="#enabled" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li>
+<div class="tsd-signature" id="enabledenabled"><span class="tsd-signature-keyword">get</span> <span class="tsd-kind-get-signature">enabled</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Whether this memo does anything. <code>false</code> for the default configuration.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/core/decisionMemo.ts#L93">src/core/decisionMemo.ts:93</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="size"><span>size</span><a href="#size" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li>
+<div class="tsd-signature" id="sizesize"><span class="tsd-signature-keyword">get</span> <span class="tsd-kind-get-signature">size</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Entry count, for tests.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/core/decisionMemo.ts#L173">src/core/decisionMemo.ts:173</a></li></ul></aside></div></li></ul></section></section></details>
+<details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
+<section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="clear"><span>clear</span><a href="#clear" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="clear-1"><span class="tsd-kind-call-signature">clear</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#clear-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Drop every entry (§17.1 rule 9).</p>
+<p>Called on login, verifyMfa, refresh and logout. Entries are keyed by
+subject, not by session, so a re-authentication as a <em>different</em> principal
+would otherwise read the previous principal's decisions.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/core/decisionMemo.ts#L145">src/core/decisionMemo.ts:145</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="get"><span>get</span><a href="#get" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="get-1"><span class="tsd-kind-call-signature">get</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/index.AccessDecision.html" class="tsd-signature-type tsd-kind-interface">AccessDecision</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><a href="#get-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>A live decision for <code>key</code>, if one is memoized and unexpired.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">key</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.AccessDecision.html" class="tsd-signature-type tsd-kind-interface">AccessDecision</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/core/decisionMemo.ts#L103">src/core/decisionMemo.ts:103</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="reportclamp"><span>report<wbr/>Clamp</span><a href="#reportclamp" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="reportclamp-1"><span class="tsd-kind-call-signature">reportClamp</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">requestedMs</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">telemetry</span><span class="tsd-signature-symbol">:</span> <a href="index.TelemetryDispatcher.html" class="tsd-signature-type tsd-kind-class">TelemetryDispatcher</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#reportclamp-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Emit a <a href="../interfaces/index.ConfigClampedEvent.html" class="tsd-kind-interface">ConfigClampedEvent</a> if the requested TTL was clamped (§19.2
+rule 6).</p>
+<p>This is the clamp that matters most to get right: an operator who set a
+60-second TTL believes their staleness bound is 60 seconds. It is five, and
+without this event nothing anywhere says so.</p>
+<p>Nothing is emitted when the requested value was already inside the limit,
+or when the memo is disabled — an event that fires when nothing happened
+trains its reader to ignore it.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">requestedMs</span>: <span class="tsd-signature-type">number</span></span></li>
+<li><span><span class="tsd-kind-parameter">telemetry</span>: <a href="index.TelemetryDispatcher.html" class="tsd-signature-type tsd-kind-class">TelemetryDispatcher</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/core/decisionMemo.ts#L161">src/core/decisionMemo.ts:161</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="set"><span>set</span><a href="#set" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="set-1"><span class="tsd-kind-call-signature">set</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">decision</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/index.AccessDecision.html" class="tsd-signature-type tsd-kind-interface">AccessDecision</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#set-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Memoize a decision the server actually returned.</p>
+<p>Callers must only reach here on success. §17.1 rule 7 forbids
+negative-caching a failure: memoizing a transport error as a deny would
+turn a blip into a TTL-long outage, and memoizing it as an allow is
+unthinkable.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">key</span>: <span class="tsd-signature-type">string</span></span></li>
+<li><span><span class="tsd-kind-parameter">decision</span>: <a href="../interfaces/index.AccessDecision.html" class="tsd-signature-type tsd-kind-interface">AccessDecision</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/core/decisionMemo.ts#L125">src/core/decisionMemo.ts:125</a></li></ul></aside></div></li></ul></section></section></details></div>
+<div class="col-sidebar">
+<div class="page-menu">
+<div class="tsd-navigation settings">
+<details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>Settings</h3></summary>
+<div class="tsd-accordion-details">
+<div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span>
+<ul id="tsd-filter-options">
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></div>
+<div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div>
+<details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>On This Page</h3></summary>
+<div class="tsd-accordion-details">
+<details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Constructors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Constructors</summary>
+<div><a href="#constructor"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Constructor"><use href="../assets/icons.svg#icon-512"></use></svg><span>constructor</span></a></div></details>
+<details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Accessors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Accessors</summary>
+<div><a href="#effectivettlms"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Accessor"><use href="../assets/icons.svg#icon-262144"></use></svg><span>effective<wbr/>Ttl<wbr/>Ms</span></a><a href="#enabled"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Accessor"><use href="../assets/icons.svg#icon-262144"></use></svg><span>enabled</span></a><a href="#size"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Accessor"><use href="../assets/icons.svg#icon-262144"></use></svg><span>size</span></a></div></details>
+<details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Methods</summary>
+<div><a href="#clear"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>clear</span></a><a href="#get"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get</span></a><a href="#reportclamp"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>report<wbr/>Clamp</span></a><a href="#set"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set</span></a></div></details></div></details></div>
+<div class="site-menu">
+<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK</a>
+<ul class="tsd-small-nested-navigation" id="tsd-nav-container">
+<li>Loading...</li></ul></nav></div></div></div><footer>
+<p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>
+<div class="overlay"></div></body></html>

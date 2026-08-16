@@ -155,9 +155,8 @@ Sub-types added by later sections of this contract:
 | HTTP Status | Error Type    | Notes                                         |
 |-------------|---------------|-----------------------------------------------|
 | 400         | `NetworkError`| Malformed request (SDK programming error)     |
-| 400 from `/oauth2/*` with an `OAuth2ErrorResponse` body | `OAuthProtocolError` | RFC 6749 protocol error (e.g. `invalid_grant` from `POST /oauth2/token`). MUST NOT collapse into the generic `400` → `NetworkError` row above ([§12.3](#§123-cross-cutting-rules-normative-identical-in-all-sdks) rule 3) |
+| **Any status** from `/oauth2/*` with an `OAuth2ErrorResponse` body | `OAuthProtocolError` | RFC 6749 protocol error. Dispatch on the `error` field, NOT on the status ([§12.3](#§123-cross-cutting-rules-normative-identical-in-all-sdks) rule 3). Rewritten in contract 1.12 — see the note below |
 | 401         | `AuthError`   | Unauthenticated; triggers refresh if tokens present |
-| 401 from `/oauth2/*` with an `OAuth2ErrorResponse` body | `OAuthProtocolError` | Client authentication failed at `POST /oauth2/introspect` / `POST /oauth2/revoke`. MUST NOT trigger the §9 single-flight refresh guard |
 | 403         | `AuthzError`  | Authenticated but not authorized              |
 | 408, 429    | `NetworkError`| Timeout / rate-limited                        |
 | 409         | `AuthzError`  | Conflict (resource-level access denied)       |
@@ -166,6 +165,32 @@ Sub-types added by later sections of this contract:
 
 Where two rows match the same response, the more specific (endpoint- and body-qualified) row
 wins.
+
+**The `/oauth2/*` row was two rows until contract 1.12, gated to `400` and `401`.** That
+enumeration was a description of which statuses the endpoints happened to use, written before
+[§20](#§20-uma-20--protection-api-and-ticket-grant-x2) existed. §20.4's `access_denied` answers
+`403`, so a status-gated mapper dropped it through to the `AuthzError` row and lost the one
+field a caller can act on — and **nine of the eleven SDKs grew a near-identical private mapper
+for that single grant** rather than widen a shared one that other endpoints depend on. (PHP
+needed none: its mapper already dispatched on the `error` field, which is what §20.4 asks for in
+the abstract and what this row now says outright.)
+
+Three things this rewrite does **not** do, each load-bearing:
+
+1. **It is scoped to `/oauth2/*` paths only.** An ordinary REST `403` — including from
+   `/api/v1/authz/check` and from the §20 Protection API at `/uma2/perm` and `/uma2/rreg/*`,
+   whose refusals §20.4 maps by status precisely because they are not OAuth2 protocol errors —
+   still maps to `AuthzError`. An SDK MUST keep a test for that; the assertion to make is that
+   an ordinary REST `403` maps to `AuthzError`, not the older and now-false "the OAuth2 rows
+   apply to no status but 400 and 401".
+2. **It requires a well-formed body.** A `403` from `/oauth2/*` whose body is not an
+   `OAuth2ErrorResponse` — a proxy's HTML error page, an empty body — falls back to the status
+   mapping. "Has an `error` member that is a non-empty string" is the test; a body that merely
+   parses as JSON is not enough.
+3. **It does not change what happens next.** A `401` carrying an `OAuth2ErrorResponse` still
+   MUST NOT enter the §9 single-flight refresh guard ([§12.3](#§123-cross-cutting-rules-normative-identical-in-all-sdks)
+   rule 3): client-authentication failure is not a session expiry, and retrying cannot fix a
+   wrong client secret.
 
 ### gRPC Status → Error Type Mapping
 
@@ -475,13 +500,18 @@ Per-language implementation guidance:
 | Go         | String type with `String()` method returning `"[SENSITIVE]"`     |
 | Kotlin     | `value class Sensitive<T>` (or final class); `toString()` returns `"[SENSITIVE]"`, no `data class` auto-`toString` leak |
 | Swift      | `struct Sensitive<T>: CustomStringConvertible` whose `description` returns `"[SENSITIVE]"`; not `Encodable` in a way that emits the value |
-| C          | Opaque `axiam_sensitive_t` handle; there is no public accessor returning the raw string, and it is never written to logs/`printf` output |
-| C++        | `class Sensitive<T>` with `operator<<`/`to_string` returning `"[SENSITIVE]"`; raw value only via a private/friend accessor |
+| C          | Opaque `axiam_sensitive_t` handle; `axiam_sensitive_reveal()` is the single explicit accessor (rule 3), and the value is never written to logs/`printf` output |
+| C++        | `class Sensitive<T>` with `operator<<`/`to_string` returning `"[SENSITIVE]"`; `expose()` is the single explicit accessor (rule 3) |
 
-The **C** and **C++** rows keep their "no public accessor" wording deliberately: both SDKs defer
-§12 in its entirety ([§12.6](#§126-deferred-sdks-swift-c-c)), so no token material is ever handed
-to their callers outside the §4 cookie jar and rule 3 above has nothing to enable there. Should a
-later §12 port land in either, rule 3 applies to it unchanged.
+**The C and C++ rows changed in contract 1.11.** Through 1.10 both read "no public accessor",
+and that wording was correct for as long as it was true that no token material ever reached
+their callers: both SDKs deferred §12 in its entirety, so everything they held lived in the §4
+cookie jar and rule 3 had nothing to enable. §12.6's 1.11 port removes that premise — §12 hands
+the caller an `OidcTokenSet`, and a token no caller can read cannot be persisted, forwarded or
+revoked. This is the same collision contract 1.5 resolved for the other eight SDKs, resolved the
+same way: **one** explicit accessor, documented as the single one, never reached from a
+log/trace/serialization sink. Swift already exposed `expose()` for the §20 requesting-party
+token and is unchanged here.
 
 **Why §7 reads this way (contract 1.5, non-breaking clarification).** Contract 1.4's §7 said
 flatly that "the raw token string MUST NOT be exposed via any public getter API". That was written
@@ -580,6 +610,62 @@ See `crates/axiam-amqp/src/messages.rs`:
 | `axiam.audit.events`           | `AuditEventMessage` | Yes                  | Yes (`nonce`+`issued_at`) |
 
 `AuthzResponse` and `NotificationEvent` are published by the server and do not carry `hmac_signature` in v1.0.
+
+---
+
+## §8b AMQP Transport Security (A6)
+
+**Requirement level: MUST**, for every SDK that speaks AMQP directly (Rust,
+TypeScript, Go, Python, Java, PHP).
+
+### The layering, stated once
+
+HMAC signing (§8) gives **authenticity and replay protection**. It does not
+give **confidentiality**. A signed `AuthzRequest` still names a subject, a
+resource and an action in cleartext on the wire; a signed `AuditEventMessage`
+still carries the audit record; a signed mail payload still carries the mail.
+
+TLS gives confidentiality. HMAC gives end-to-end authenticity *across broker
+hops* — a property TLS cannot provide, because TLS terminates at the broker and
+the broker then re-sends. **Both are required in production. Neither
+substitutes for the other**, and an SDK that offers one as an alternative to
+the other is not conformant.
+
+### Requirements
+
+| # | Rule |
+|---|---|
+| 1 | An SDK that connects to AMQP **MUST** support `amqps://` URLs (broker TLS port 5671). |
+| 2 | It **MUST** support supplying a custom CA bundle, for a privately-issued broker certificate. This is the common case — an in-cluster broker's certificate is not issued by a public CA. |
+| 3 | It **SHOULD** support client certificates (mutual TLS toward the broker), and where it does, the certificate and its key **MUST** be required together: half a client identity MUST fail closed rather than connect without the mutual half. |
+| 4 | It **MUST NOT** offer a certificate-verification-skip option in a production build, under any name. |
+| 5 | It **MUST NOT** fall back to plaintext when a TLS connection fails. A failed `amqps://` connection is an error to surface, not a condition to work around. |
+| 6 | HMAC signing (§8) remains mandatory on every message regardless of transport. |
+
+### On rule 4, specifically
+
+A verification-skip switch is the most reliably misused option in TLS. It
+appears in a dev compose file, it works, and it travels unchanged into
+production, where it turns TLS into an expensive no-op against precisely the
+attacker TLS exists to stop. Rule 2 exists so that nobody has a legitimate
+reason to want rule 4 relaxed: a custom CA bundle covers the real case (a
+self-signed or private-CA broker certificate) without covering the rest.
+
+Where an SDK's underlying AMQP library exposes such a switch, the SDK MUST NOT
+surface it. Where a debug-build-only escape hatch is genuinely wanted, it MUST
+follow the server's own `DEV_DEFAULT_SIGNING_KEY` pattern — present only in a
+debug build, absent from the shipped artifact, and loud when used.
+
+### Required tests, per SDK
+
+- connect over `amqps://` against a broker with a privately-issued certificate,
+  using a supplied CA bundle: publish/consume round trip succeeds;
+- connect with the **wrong** CA bundle: rejected, with an error naming the
+  verification failure;
+- a client certificate without its key (and the mirror case): rejected before
+  dialling;
+- an HMAC-invalid message over TLS is still rejected — rule 6, i.e. TLS does
+  not become an excuse to trust the payload.
 
 ---
 
@@ -752,6 +838,131 @@ would never have honoured.
 | 6 | `aud` | **Checked when the SDK is configured with an expected audience.** When configured, a token whose `aud` does not contain it MUST be rejected. SDKs guarding a user-facing resource server SHOULD expect `axiam:user`; one guarding a **machine-facing** resource server SHOULD expect `axiam:m2m`, which is what *every* service-account token now carries — both the client-credentials grant and the mTLS device path (§12.1). |
 | 7 | clock skew | Rules 2 and 3 MAY allow a **small, named, documented** leeway (RECOMMENDED 60 s). It MUST be a named constant, not an inline literal, and MUST NOT be operator-configurable to an unbounded value. |
 | 8 | subject of the decision | The guard MUST decide on **the caller's credential and no other**. When that credential fails any rule above, the guard MUST reject. It MUST NOT retry, refresh, or fall back to a *different* credential — in particular not the SDK client's own session — and MUST NOT admit the request under any identity other than the one the caller presented. |
+| 9 | `cnf` | **A token carrying `cnf` is not a bearer token, and MUST NOT be accepted as one.** When the claim is present the guard MUST verify **every** sender constraint it names, or reject. See the normative rules below. |
+
+**Rule 9 — sender-constrained tokens (contract 1.15; extended for DPoP in
+contract 1.16. RFC 8705 §3 / RFC 9449 §6 / RFC 7800).**
+
+AXIAM can issue sender-constrained access tokens under **two** mechanisms, and a
+token may carry either or both:
+
+```json
+"cnf": { "x5t#S256": "<base64url-unpadded SHA-256 of the DER client certificate>" }
+"cnf": { "jkt":      "<base64url-unpadded RFC 7638 SHA-256 thumbprint of the DPoP public key>" }
+```
+
+* `x5t#S256` (RFC 8705 §3) comes from a client registered with
+  `tls_client_certificate_bound_access_tokens`. The caller proves possession by
+  completing a TLS handshake with the certificate — which the transport has
+  already done by the time the guard runs.
+* `jkt` (RFC 9449) comes from a client registered with
+  `dpop_bound_access_tokens`. The caller proves possession by **signing a fresh
+  DPoP proof on every request**, which the guard must verify itself. That is a
+  materially larger obligation than the certificate case, and §21.7 is where it
+  is spelled out.
+
+The claim's presence changes what the token *is*. An ordinary AXIAM access token
+is a bearer credential — whoever holds it may use it. A token with `cnf` names a
+key, and a resource server that accepts it without checking that the caller
+holds that key has silently converted it back into a bearer token, discarding
+the entire protection the operator turned on. That is why this is a rule and not
+a recommendation.
+
+An SDK guard MUST behave exactly as follows. "Evidence" means a certificate the
+transport verified for this connection, or a DPoP proof **the SDK has itself
+verified** per §21.7 — never one it has merely received:
+
+| Token's `cnf` | `x5t#S256` evidence | `jkt` evidence | Guard MUST |
+|---|---|---|---|
+| absent | — | — | **accept** (subject to rules 1–8) |
+| `x5t#S256` only | a certificate whose `x5t#S256` equals it | — | **accept** (subject to rules 1–8) |
+| `x5t#S256` only | a different certificate, or none | — | **reject** |
+| `jkt` only | — | a verified proof whose key thumbprint equals it | **accept** (subject to rules 1–8) |
+| `jkt` only | — | a different key, an unverified proof, or none | **reject** |
+| `jkt` only | anything | the SDK cannot verify DPoP proofs at all | **reject** |
+| **both** | matching certificate | matching verified proof | **accept** (subject to rules 1–8) |
+| **both** | either half missing or wrong | | **reject** |
+| present, naming neither | anything | anything | **reject** |
+| present, but an empty object `{}` | anything | anything | **reject** |
+
+Three rows carry the weight:
+
+1. **`jkt` only, and the SDK cannot verify DPoP proofs → reject.** This is not a
+   deficiency to route around; it is the rule. An SDK whose role is
+   resource-server-only and which has not implemented §21.7 MUST refuse
+   `jkt`-bound tokens and MUST say so in its README. It MUST NOT accept them as
+   bearer tokens, and it MUST NOT accept them on the strength of the proof's
+   *presence* without verifying it.
+2. **Both present is a conjunction, never a disjunction.** A token that named two
+   constraints was issued under two, and honouring it on one uses it under
+   weaker terms than the operator configured. "Check whichever we can" is the
+   characteristic bug of a binding validator and is forbidden.
+3. **`cnf` naming no method the SDK knows → reject**, including an empty object.
+   An absent claim means "never bound"; an empty or unrecognised one means
+   "bound by something that did not survive the trip", and reading it as
+   unconstrained downgrades a sender-constrained token exactly when a newer
+   AXIAM has started issuing a confirmation the SDK predates. **Fail closed**,
+   consistently with every other rule in this section.
+
+Normative details:
+
+1. **The thumbprint is base64url without padding** (RFC 7515 §2), computed over
+   the **DER** encoding of the leaf certificate. A padded value, standard-base64
+   (`+`/`/`), or a hex digest will not compare equal. A well-formed value is
+   exactly 43 characters.
+2. **The comparison input MUST come from the transport.** The certificate must
+   be the one the TLS layer verified for *this* connection — the peer
+   certificate, or a value a **trusted** terminating proxy forwarded over a
+   channel the application controls. An SDK MUST NOT take it from a
+   request header supplied by the caller, and MUST NOT document doing so as a
+   supported deployment. A forgeable input makes the whole mechanism decorative.
+3. **When the SDK cannot see any client certificate at all** — a deployment
+   behind a TLS terminator that forwards nothing — a bound token MUST be
+   rejected, and the SDK's documentation MUST say that guarding bound tokens
+   requires the certificate to be made available. Silently accepting is
+   forbidden; silently rejecting without saying why in the docs is a support
+   burden.
+4. **Introspection carries it too.** An SDK verifying through
+   `POST /oauth2/introspect` rather than locally MUST apply this same rule to
+   the response's `cnf` field (RFC 8705 §3.3), which AXIAM populates for bound
+   tokens. Local-verification SDKs and introspecting SDKs must not disagree
+   about whether a token is a bearer token.
+5. **Comparison SHOULD be constant-time** where the language makes it
+   available. The thumbprint is usually public, so this is defence in depth
+   rather than load-bearing — but it costs nothing and matches the discipline
+   §10.1 applies elsewhere.
+6. **`jkt` is the RFC 7638 JWK thumbprint**, SHA-256, base64url without
+   padding — 43 characters, the same shape and encoding as `x5t#S256`, and
+   therefore trivially confusable with it. An SDK MUST NOT compare a `jkt`
+   against a certificate thumbprint or vice versa. Where the language permits,
+   the two SHOULD be distinct types or at minimum distinctly named parameters;
+   two same-shaped strings in adjacent positional parameters is a swap that
+   compiles.
+7. **A `jkt` comparison input MUST come from a proof the SDK verified.** A
+   thumbprint computed from the JWK in an *unverified* proof header is
+   attacker-supplied: anyone can mint a proof naming their own key. Taking it
+   without checking the signature turns DPoP into a self-signed permission slip.
+   §21.7 lists what "verified" means.
+8. **`cnf` from introspection carries `jkt` too** (RFC 9449 §6.1). Rule 9's
+   detail 4 applies unchanged: a local-verification SDK and an introspecting SDK
+   must not disagree about whether a token is a bearer token.
+
+**Required negative tests** (in addition to those listed below): a bound token
+presented with **no** certificate; a bound token presented with a **different**
+certificate; a token whose `cnf` carries a method the SDK does not implement; a
+token whose `cnf` is an empty object. For contract 1.16, additionally: a
+`jkt`-bound token presented **without** a proof; a `jkt`-bound token presented
+with a proof signed by a **different** key; and — for an SDK that does not
+implement proof verification — a `jkt`-bound token that is **rejected rather
+than accepted as a bearer token**.
+
+And one positive regression test that matters more than all of them: **an
+unbound token MUST still be accepted with or without a certificate and with or
+without a DPoP proof present.** Rule 9 must not become a requirement that every
+caller present a proof — that would break every existing deployment, and it
+remains the most likely way to implement this rule wrongly. Contract 1.16
+widens the ways to get it wrong without widening the rule: a client that has
+never heard of DPoP must get exactly the behaviour it got before.
 
 **Rule 8 is about control flow, not claims.** Rules 1–7 ask *"is this token
 good?"*; rule 8 asks *"is this the token the decision is about?"*. A guard can
@@ -795,6 +1006,92 @@ client session is unusable passes vacuously and does not satisfy this clause.
 > `nbf` — but a guard fed tokens from another signer sharing the org JWKS may
 > start rejecting what it used to accept. That is the intent, and it MUST be
 > called out as a breaking change in each SDK's CHANGELOG.
+
+### §10.2 Revocation posture differs per transport (informative, MUST be documented)
+
+Local verification (§10.1) proves a token was *issued* and has not *expired*. It
+cannot prove the session behind it still exists. What closes that gap depends on
+which AXIAM transport the request reaches, and the two do not agree:
+
+| Transport | Session revocation re-checked per request? | A revoked session stops working after |
+|---|---|---|
+| REST | yes | immediately (or the server's session-cache TTL) |
+| gRPC, default | **no** | **token expiry — up to 15 minutes** |
+| gRPC, `AXIAM__GRPC__STRICT_REVOCATION=true` | yes | immediately (or the server's session-cache TTL) |
+
+The gRPC default is a deliberate latency trade — it is the service-mesh check
+surface — not an oversight, and it is measured: the server-side session cache
+enforces an event-path revocation in **262 ms** (run 5), with out-of-band
+revocation bounded by the cache TTL plus slack.
+
+**SDKs MUST document this in their middleware/route-guard documentation**, in
+the integrator's terms rather than AXIAM's: a guard built on `§10` local
+verification alone, in front of a gRPC data plane running the default posture,
+admits a logged-out user for the remainder of their access token's lifetime. An
+integrator who needs sign-out to take effect immediately must either route the
+authorization decision through REST or ask their operator to enable strict
+revocation.
+
+SDKs MUST NOT try to close this gap client-side (for example by polling session
+state before each call). Doing so would put an unbounded per-request cost on
+the hot path to work around a decision that is the deployment's to make, and it
+would be a *different* staleness window rather than none.
+
+### §10.3 Sender-constrained tokens over gRPC (contract 1.17, normative)
+
+§10.1 rule 9 is transport-independent — a token carrying `cnf` is not a bearer
+token, whichever wire it arrived on. This section says how an SDK obtains that
+`cnf` when it validates through **gRPC** rather than REST, and it exists because
+until contract 1.17 an SDK doing so **could not obtain it at all**.
+
+#### What changed on the wire
+
+`TokenService.ValidateToken` and `TokenService.IntrospectToken` now carry the
+confirmation, alongside the RFC 7662 fields the REST endpoint always returned
+and this one did not:
+
+| Field | Message | Notes |
+|---|---|---|
+| `cnf` | both | `CnfClaim { x5t_s256, jkt }`. **Absent** for an unbound token. |
+| `token_type` | both | `"Bearer"` or `"DPoP"` (RFC 9449 §5). |
+| `scope`, `client_id` | introspect | RFC 7662 §2.2 parity. |
+| `permissions` | introspect | UMA 2.0 RPT permissions (§20). |
+| `ext_exchange_iss` | introspect | X4 cross-domain provenance. |
+
+All are additive proto fields; a client built against the older schema keeps
+working and simply does not see them. **That is precisely the risk**, and it is
+why this section is normative rather than informative.
+
+#### Rules
+
+1. **An SDK that validates or introspects over gRPC MUST read `cnf` and apply
+   §10.1 rule 9 to it**, identically to the REST path. Rule 9 detail 4 already
+   required that local-verifying and introspecting SDKs not disagree about
+   whether a token is a bearer token; over gRPC that was previously impossible
+   to satisfy, and an SDK that keeps ignoring the field now fails the rule
+   rather than merely lacking the data.
+2. **`valid: true` / `active: true` does not mean "usable as presented."** It
+   means the signature, expiry and tenant check out. When `cnf` is present the
+   SDK MUST additionally verify possession against **its own** connection — the
+   AXIAM server cannot do it, because the proof is against the caller's
+   connection and not against the one carrying the introspection call.
+3. **A `CnfClaim` with both members empty MUST be refused**, not read as
+   unbound. Proto3 cannot distinguish "absent string" from "empty string", so
+   this is the wire-level spelling of rule 9's "names neither" row: absence of
+   the whole `cnf` message means unbound, an empty one does not.
+4. **Do not mirror the server's gRPC-side refusal of DPoP.** AXIAM's own gRPC
+   interceptor refuses `jkt`-bound tokens because a tonic interceptor sees
+   neither the HTTP method nor the URI a proof is bound to. An SDK guarding a
+   real endpoint **does** know both, so it can and should verify per §21.7.2.
+   The server's limitation is the server's.
+
+#### Required tests
+
+The same shape §10.1 rule 9 requires, against the gRPC path: a `cnf`-bearing
+introspection response is not treated as a bearer token; an empty `CnfClaim` is
+refused; and — the positive regression — **an unbound response still
+validates**, since a response with no `cnf` is what every pre-1.17 server and
+every unbound token produces.
 
 ---
 
@@ -864,15 +1161,100 @@ macro over an `axiam_require_access(...)` guard function. All compose strictly o
    - unresolvable resource id → 400 `invalid_request`
    - `NetworkError` while calling the authz endpoint → **fail closed** with 503
      `authz_unavailable` (deny; never allow on transport failure; never retry beyond the
-     SDK's existing bounded read-only retry policy)
-6. **No decision caching.** Helpers MUST NOT cache allow/deny decisions (consistent with
-   §10's TTL rule). Batch/page-level optimization stays the application's job via
-   `batch_check`.
+     bounded read-only retry policy of [§16](#§16-retry-policy-d5))
+6. **No decision caching by default.** Helpers MUST NOT cache allow/deny decisions (consistent
+   with §10's TTL rule). Batch/page-level optimization stays the application's job via
+   `batch_check`. The **single** exception is the explicitly opt-in, TTL-clamped decision memo
+   of [§17](#§17-client-side-decision-memo-d5), which is disabled by default and which
+   §17.1 rule 10 forbids from serving the fail-closed path above.
 7. **Transport.** Helpers call the SDK's existing `check_access` surface (REST by default;
    gRPC where the SDK's dispatcher already prefers it, e.g. PHP). No new transport code.
 8. **Redaction.** Deny/error paths MUST NOT log or echo the token, and SHOULD log the
    denied `action` + `resource_id` at debug level only (consistent with §2 rules).
-9. **`require_role` is local.** It reads the verified claims already in the request
+9. **Decision reason (B1 — deny-override).** `check_access` and `batch_check`
+   responses carry a `reason_code` alongside `allowed`:
+
+   | `reason_code` | Meaning |
+   |---|---|
+   | `allowed` | an allow grant matched and no deny did |
+   | `no_grant` | nothing matched — default deny |
+   | `denied_by_rule` | an explicit deny rule matched and overrode any allow |
+
+   **SDKs MUST surface `reason_code` on the result type**, and MUST NOT collapse
+   the two refusals into a bare `false`. They mean opposite things to the person
+   on the other end: `no_grant` says *ask an admin for access*, `denied_by_rule`
+   says *an admin has already decided*. An application that cannot tell them
+   apart sends users to raise tickets that will be refused.
+
+   **Middleware behaviour is unchanged.** Both refusals are still 403
+   `authorization_denied` — the route guard's job is to stop the request, and it
+   stops it identically either way. This clause is about *reporting*, not
+   enforcement, and an SDK MUST NOT vary its guard behaviour on `reason_code`.
+
+   A `reason_code` an SDK does not recognise MUST be surfaced verbatim and MUST
+   NOT change the allow/deny outcome, which is carried by `allowed` alone. An
+   older SDK against a newer server therefore degrades to today's behaviour, and
+   a newer SDK against an older server (which omits the field) MUST treat it as
+   absent rather than as an error.
+
+   Required tests: an allow, a `no_grant` deny and a `denied_by_rule` deny each
+   surface their own reason code; the guard returns 403 for both refusals; an
+   unknown reason code does not alter the outcome.
+
+   **Amended 2026-08 (SDK-Q10).** The decision has one shape now, and it is the
+   REST one. The gRPC `CheckAccessResponse` called its human-readable reason
+   `deny_reason` (`proto/axiam/v1/authorization.proto`) while the REST decision
+   body has always called the same string `reason`
+   (`crates/axiam-api-rest/src/handlers/authz_check.rs`) — one decision under two
+   names, which every SDK speaking both transports had to reconcile in its own
+   mapper, and which is why two same-named `AccessDecision` types could disagree
+   about their own field list.
+
+   - **`reason` (proto field 4) is the canonical name and supersedes
+     `deny_reason`.** It carries exactly the string `deny_reason` carries, and it
+     has *explicit presence*: absent on an allow — REST omits it there — and
+     present on every refusal.
+   - **`deny_reason` (proto field 2) is deprecated, not removed.** It is marked
+     `[deprecated = true]`, so most languages' codegen now warns at the use site,
+     and the server keeps populating it with the identical string. **Both fields
+     ship until AXIAM 2.0**, where `deny_reason` is removed. Renaming it now would
+     have broken every deployed gRPC client on the wire for no behavioural gain;
+     that is why this is a deprecation and not a rename.
+   - **What an SDK does in the meantime.** Read `reason` when present. Fall back
+     to `deny_reason` only when `reason` is absent *on a refusal* — that
+     combination means the server predates this change and nothing else. Expose
+     **one** human-readable reason on the result type, named `reason` in the
+     language's own casing, fed by that rule; do not expose both and do not make
+     callers choose. An SDK whose public type already says `denyReason` /
+     `deny_reason` adds `reason`, deprecates the old accessor in its own idiom on
+     this same 2.0 schedule, and MUST NOT remove it before then. `reason` remains
+     what it always was — a generic string for a human, never a structural hint
+     (T-15-02) and never something to branch on. `reason_code` is the field for
+     that.
+   - **The reconciled decision shape, both transports:** `allowed` (bool),
+     `reason_code` (string, the closed vocabulary above), `reason` (string, absent
+     on an allow). Those three and no others. In particular the check request and
+     the decision carry **no `resource_type` / `resourceType`** — the server has
+     never had such a field on either, so an SDK declaring one on its
+     `AccessCheck` type is declaring something it can never send, and MUST drop
+     it.
+   - **`subject_id` is optional over gRPC too.** REST's `subject_id` is optional
+     and defaults to the token's subject; gRPC required it and then refused
+     anything that was not a restatement of the caller. It is now optional there
+     in the only way proto3 permits without a wire break: an **empty**
+     `subject_id` means "the subject in the verified token", exactly as REST's
+     absent field does. A non-empty value must still equal the token's subject —
+     gRPC has no `authz:check_as` cross-subject form. Making the proto field
+     `optional` was rejected because `buf breaking` refuses the cardinality change
+     (verified against `main`), the same wire-level constraint §10.3 records for
+     an empty `CnfClaim`.
+
+   Required tests for this amendment: a refusal over gRPC surfaces `reason`, and
+   `deny_reason` carries the identical string; an allow surfaces no `reason`; a
+   response carrying only `deny_reason` (an older server) still surfaces its text
+   through the SDK's single `reason` accessor; and a gRPC check with `subject_id`
+   omitted returns the same decision as one that spells the caller out.
+10. **`require_role` is local.** It reads the verified claims already in the request
    context; it never calls the server. Docs in every SDK must state that role names are
    tenant-defined and that `require_access` is the authoritative check.
 
@@ -887,8 +1269,9 @@ as a service account (`client_credentials`), to introspect/revoke tokens, and to
 server's upstream-IdP federation endpoints. It is **additive to §1**: the nine operations
 below are part of the same locked method vocabulary and are subject to the same
 "no diverging names" rule. An SDK that ships §1–§11 without these helpers remains conformant;
-an SDK that ships them states conformance to §1–§12. Three SDKs defer the whole section —
-see [§12.6](#§126-deferred-sdks-swift-c-c).
+an SDK that ships them states conformance to §1–§12. All eleven SDKs implement the section as of
+contract 1.11 — Swift, C and C++ deferred it through contract 1.10 and were ported in 1.11; see
+[§12.6](#§126-swift-c-and-c-ported--contract-111).
 
 These helpers MUST be built on the SDK's existing machinery — the §4 cookie jar, the §6/§6.1
 TLS configuration, the §7 `Sensitive<T>` wrapper, the §9 single-flight refresh guard, and the
@@ -953,8 +1336,30 @@ verifier, at the `jwks_uri` the discovery document advertises.
    form body. The server documents no HTTP Basic (`client_secret_basic`) alternative, so SDKs
    MUST NOT send an `Authorization: Basic` header to `/oauth2/*`.
 4. **`introspect` and `revoke` require confidential-client credentials.** `IntrospectRequest`
-   and `RevokeRequest` both mark `token`, `client_id`, and `client_secret` as required
-   (non-nullable); `token_type_hint` is optional. A public client cannot call them.
+   and `RevokeRequest` both mark `token` and `client_id` as required (non-nullable);
+   `token_type_hint` is optional. A public client cannot call them.
+
+   **Amended 2026-08 (SEC-093).** `client_secret` was required (non-nullable) on both
+   requests, and both endpoints authenticated by shared secret **regardless of the
+   client's registered `token_endpoint_auth_method`** — so a client registered for
+   `tls_client_auth` or `private_key_jwt` (see §21.2's `token_endpoint_auth_method`
+   row) kept a working password-equivalent credential here, which is the opposite of
+   what registering the stronger method is for. The server now honours the
+   registration at `revoke`, `introspect`, `/oauth2/par`, and the `token-exchange`
+   and `uma-ticket` grants, exactly as it already did at the `authorization_code`,
+   `client_credentials` and `refresh_token` grants.
+
+   Consequences for an SDK:
+
+   - `client_secret` is now **optional** (nullable) on `IntrospectRequest`,
+     `RevokeRequest` and the PAR request body, and both requests additionally accept
+     the RFC 7521 pair `client_assertion` / `client_assertion_type`. This is a
+     widening, not a break: an SDK that keeps sending `client_secret` for a
+     `client_secret_post` client is unchanged and stays conformant.
+   - An SDK that supports the strong methods MUST NOT send `client_secret` for a
+     client registered for one of them — it is refused with `invalid_client`, not
+     ignored. Send `client_assertion` for `private_key_jwt`, or nothing at all for
+     the two mTLS methods, whose credential is the TLS connection.
 5. **`revoke` returns no body.** Per RFC 7009 the server answers `200` for unknown, expired,
    or already-revoked tokens. `revoke` therefore returns void/`Unit`/`nil` and MUST treat a
    `200` as success — including for a token it has never issued (idempotence is the point of
@@ -1155,10 +1560,11 @@ prohibited (SDK-Q08).
 **Additional languages (Kotlin, Swift, C, C++).** **Kotlin** implements §12 and uses camelCase
 `suspend` functions identical to the TypeScript column (`oidcDiscover`, `oidcBegin`,
 `oidcExchange`, `oidcRefresh`, `loginClientCredentials`, `introspect`, `revoke`, `ssoStart`,
-`ssoComplete`); no `*Async` twins. **Swift**, **C**, and **C++** defer the whole section
-([§12.6](#§126-deferred-sdks-swift-c-c)), but the names are reserved now so a later port cannot
-diverge: **Swift** camelCase and **C++** snake_case exactly as the TypeScript and Rust columns
-above; **C** snake_case with the mandatory `axiam_` prefix — `axiam_oidc_discover`,
+`ssoComplete`); no `*Async` twins. **Swift**, **C**, and **C++** implement the section as of contract
+1.11 ([§12.6](#§126-swift-c-and-c-ported--contract-111)), using the names reserved for them here
+while it was deferred — a port that diverged from them was never an option: **Swift** camelCase
+and **C++** snake_case exactly as the TypeScript and Rust columns above; **C** snake_case with
+the mandatory `axiam_` prefix — `axiam_oidc_discover`,
 `axiam_oidc_begin`, `axiam_oidc_exchange`, `axiam_oidc_refresh`,
 `axiam_login_client_credentials`, `axiam_introspect`, `axiam_revoke`, `axiam_sso_start`,
 `axiam_sso_complete`. No login/auth/authz method names beyond this map and the §1 map are
@@ -1200,11 +1606,25 @@ NOT split the nine across two hosts.
    as plain strings. See [§12.5](#§125-sensitivet-applicability) for the per-language wrapper.
 3. **Error taxonomy (§2).** An `OAuth2ErrorResponse` body MUST surface as `OAuthProtocolError`
    — a language-idiomatic sub-type of `AuthError` — carrying `error` and `error_description` as
-   publicly accessible fields, with `message` set to `"<error>: <error_description>"`. A `400`
-   from `POST /oauth2/token` MUST NOT surface as the generic `NetworkError` the §2 `400` row
-   otherwise prescribes, and a `401` from `POST /oauth2/introspect` or `POST /oauth2/revoke`
-   MUST NOT enter the §9 single-flight refresh guard (client-credential failure is not a
-   session expiry, and retrying cannot help). ID-token validation failures MUST raise
+   publicly accessible fields, with `message` set to `"<error>: <error_description>"`.
+
+   **Dispatch on the `error` field, at any status** (rewritten in contract 1.12; it enumerated
+   `400` and `401` before). An SDK's `/oauth2/*` mapper MUST check for a well-formed
+   `OAuth2ErrorResponse` body **first**, and fall back to the §2 status mapping only when there
+   is none. Concretely: a `400` from `POST /oauth2/token` MUST NOT surface as the generic
+   `NetworkError` the §2 `400` row otherwise prescribes; a `403` from the §20 ticket grant MUST
+   NOT surface as `AuthzError` and lose its `access_denied` code; and a `401` from
+   `POST /oauth2/introspect` or `POST /oauth2/revoke` MUST NOT enter the §9 single-flight
+   refresh guard (client-credential failure is not a session expiry, and retrying cannot help).
+
+   **One mapper, not one per grant.** The status enumeration this replaces forced nine of the
+   eleven SDKs to grow a private mapper for the §20 ticket grant alone, because widening the
+   shared one would have changed every other endpoint's behaviour. Dispatching on the field
+   removes that: the shared mapper is correct for every `/oauth2/*` grant, present and future,
+   and a section that introduces a new status needs no SDK change at all. The scoping that makes
+   this safe is in the §2 note — `/oauth2/*` only, well-formed body only, §9 behaviour unchanged.
+
+   ID-token validation failures MUST raise
    `AuthError` (or an `AuthError` sub-type) carrying a stable machine-readable reason code —
    `invalid_alg`, `unknown_kid`, `invalid_signature`, `invalid_issuer`, `invalid_audience`,
    `token_expired`, or `nonce_mismatch` — matching the [§12.4](#§124-id-token-validation-checklist-normative-for-oidc_exchange)
@@ -1352,24 +1772,172 @@ the §7 table for the authoritative per-language row. Two additions specific to 
 other structured serialization of `OidcTokenSet`, `AuthorizationRequest`, or an
 `OidcStateStore` entry MUST NOT emit the wrapped values.
 
-### §12.6 Deferred SDKs (Swift, C, C++)
+### §12.6 Swift, C and C++ (ported — contract 1.11)
 
-`axiam-swift-sdk`, `axiam-c-sdk`, and `axiam-cplusplus-sdk` **defer §12 in its entirety**, with
-the same carve-out discipline §1/§1.1 already applies to their `get_user_info`/gRPC deferral.
-These are device- and IoT-oriented SDKs: the Swift SDK ships NIOSSL specifically for client-cert
-mTLS, and the C/C++ SDKs target embedded consumers. The browser-redirect relying-party flow has
+**This section previously deferred §12 in these three SDKs. Contract 1.11 reverses that.**
+`axiam-swift-sdk`, `axiam-c-sdk`, and `axiam-cplusplus-sdk` implement §12 in full, using the
+names already reserved for them in [§12.2](#§122-per-language-naming-map), and satisfy
+§12.1–§12.5 unchanged. Their conformance statements say §1–§12 alongside whatever else they
+ship.
+
+**Why the deferral was written, and why it no longer holds.** The original text reasoned from
+persona: these are device- and IoT-oriented SDKs, the browser-redirect relying-party flow has
 no natural home in any of them, and their authentication story — §6.1 mTLS, password login,
-service credentials — is already complete without it.
+service credentials — was already complete without it. That reasoning covered `oidc_begin` and
+`oidc_exchange`, the two operations that genuinely assume a browser. It never covered the other
+seven. `login_client_credentials` is exactly the machine-to-machine login an embedded consumer
+wants; `introspect` and `revoke` are ordinary token-endpoint calls a device makes about its own
+credentials; `oidc_refresh` is the grant the §9 single-flight guard was built for. §12.6 itself
+recorded "adding `login_client_credentials` alone to C/C++" as an open follow-up — an admission
+that the all-or-nothing deferral was cutting across the wrong seam.
 
-Accordingly, each of these three SDKs MUST document §12 as a deferred follow-up in its scope
-section (same wording pattern as its existing "gRPC transport deferred" carve-out), MUST NOT
-partially implement the vocabulary, and MUST NOT substitute a hand-rolled OAuth2 flow for it.
-Their conformance statement stays at "§1–§10" (or "§1–§11" where the §11 helpers ship) and MUST
-NOT claim §12. If a later port lands, it MUST use the reserved names already fixed in
-[§12.2](#§122-per-language-naming-map) and MUST satisfy §12.1–§12.5 unchanged. Two follow-up
-decisions are recorded as open rather than resolved here: a server-side-Swift (Vapor) port
-cloned from the Kotlin shape, and adding `login_client_credentials` alone to C/C++ for
-machine-to-machine use.
+Two later sections settled it from the other direction. §14 (device authorization grant) exists
+precisely *because* a device cannot show a browser, and its naming map lists all three; §20 gave
+all three a token-endpoint call (`uma_exchange_ticket`) and its own discovery document. By
+contract 1.10 these SDKs were already speaking OAuth2 at `/oauth2/token` — the "second, parallel
+OIDC stack" the deferral warned about had arrived anyway, in pieces, without the shared discovery
+cache and ID-token validation §12 specifies. Porting §12 removes a divergence rather than adding
+one.
+
+**What the port must satisfy.** §12.1's endpoint map, §12.3's cross-cutting rules (statelessness
+above all — the caller owns `state`/`nonce`/`code_verifier`), §12.4's ID-token validation
+checklist, and §12.5's `Sensitive<T>` applicability, all unchanged and all as binding here as in
+the eight SDKs that shipped them first. Two consequences follow that these three did not
+previously have to face:
+
+1. **§7 rule 3 now applies to C and C++.** §12 returns tokens *to* the caller, so each of the
+   three needs the single explicit accessor rule 3 permits — see the §7 table, whose C and C++
+   rows change with this revision. A `Sensitive<T>` a §12 caller can never read makes §12
+   unusable, which is the same reasoning contract 1.5 recorded when it restructured §7.
+2. **`oidc_begin` stays synchronous and network-free** in all three, exactly as §12.1 requires.
+   In C that means it allocates a URL string and a `code_verifier` the caller frees; it does not
+   acquire the client's transport.
+
+The remaining open follow-up from the original text — a server-side-Swift (Vapor) integration
+cloned from the Kotlin shape — is unaffected: it concerns a framework binding, not the §12
+vocabulary, and stays open.
+
+### §12.7 Logout helpers (B5)
+
+**Requirement level: SHOULD, and only where the SDK already ships §12.** The
+RP-side of OIDC RP-Initiated Logout 1.0 and Back-Channel Logout 1.0. An SDK
+that ships §12 without these stays conformant to §12; one that ships them
+states §12.7 alongside (see [Closing Notes](#conformance-statement)).
+
+Server documentation: [`docs/api/logout.md`](../docs/api/logout.md).
+
+#### §12.7.1 Canonical operation set
+
+Two operations, and they sit on opposite sides of the flow: one builds a URL
+for the browser, the other verifies something the *server* pushed to the RP.
+
+| Canonical operation | Wire call | Semantics |
+|---|---|---|
+| `logout_url` | **none — pure local computation, no network I/O** | Build the `end_session_endpoint` URL to redirect the user agent to. Mirrors `oidc_begin`. |
+| `verify_logout_token` | **none — local verification against cached JWKS** | Validate a back-channel logout token the OP POSTed to the RP's own endpoint. Returns the `sid`/`sub` it names. |
+
+`logout_url` takes `(id_token, post_logout_redirect_uri=None, state=None)` and
+returns a URL string. The ID token is passed whole and placed in
+`id_token_hint`.
+
+**`logout_url` MUST NOT be given an `id_token_hint`-less mode that names the
+user some other way.** There is no such parameter on the wire, and an SDK that
+invented one (a `sub`, a session cookie value) would be encouraging exactly the
+request the server refuses to act on.
+
+#### §12.7.2 `logout_url` rules (normative)
+
+1. **`end_session_endpoint` comes from discovery**, not from string
+   concatenation onto the issuer. An SDK that builds `{issuer}/oauth2/end_session`
+   works against AXIAM and breaks against any other OP the same code is pointed
+   at, which is the whole reason discovery exists.
+2. **`state` is the caller's to generate and the caller's to check.** The SDK
+   passes it through and MUST NOT invent one, because the value only means
+   something to the application that will receive it back.
+3. **The SDK MUST NOT pre-validate `post_logout_redirect_uri` against a local
+   list.** The allow-list lives in the client's registration, server-side; a
+   client-side copy would drift and would reject a URI an operator had just
+   registered.
+4. **`logout_url` performs no network I/O** (beyond a discovery fetch the SDK
+   would cache anyway) and does not clear the SDK client's own session. Whether
+   the local session ends is the application's call — a backend that holds a
+   service-account session must not lose it because a *user* logged out. An SDK
+   MAY offer that as a separate explicit call.
+
+#### §12.7.3 `verify_logout_token` rules (normative)
+
+This is the half that carries security weight: the input arrives unsolicited,
+from the network, and instructs the RP to terminate a session. Every check
+below is required, and each exists because skipping it has a name:
+
+1. **Signature verified against the OP's JWKS**, through the SDK's existing
+   §12.4 verifier. No second key-fetching path.
+2. **`iss` matches the configured issuer; `aud` matches this client's
+   `client_id`.** A token minted for another RP must not be accepted here.
+3. **`events` MUST contain the key
+   `http://schemas.openid.net/event/backchannel-logout`**, with an object
+   value. This is what distinguishes a logout token from an ID token; an SDK
+   that skips it will accept a replayed ID token as a logout instruction.
+4. **`nonce` MUST be absent.** Back-Channel Logout 1.0 §2.4 forbids it, and its
+   presence is the documented signature of an ID token being replayed. Reject,
+   do not ignore.
+5. **At least one of `sid` and `sub` MUST be present.** A token naming neither
+   identifies nothing.
+6. **`exp` MUST be in the future** and `iat` recent (AXIAM issues a 120 s
+   lifetime); an SDK SHOULD apply the same freshness tolerance as §13.
+7. **`jti` MUST be surfaced so the RP can dedup.** Delivery is at-least-once
+   with retry, so a valid token legitimately arrives twice; the SDK MUST NOT
+   dedup internally (it has no durable store and would silently drop a real
+   second logout after a restart) but MUST make the key available.
+8. **Failure is a typed error or `false`, never a partial result**, and the
+   error MUST NOT echo the token.
+
+Return type carries `sid`, `sub` and `jti`. **An SDK MUST NOT collapse the
+result to a bare boolean**: the RP has to know *which* session to end, and a
+verifier that only says "valid" forces the caller to re-parse the token
+themselves — with none of the checks above.
+
+**When `sid` is present, the RP MUST end that session only.** Falling back to
+"every session for `sub`" when `sid` was supplied is the same over-reach the
+server refuses to make, and SDK documentation MUST say so.
+
+#### §12.7.4 Per-language naming map
+
+| Canonical | Rust | TypeScript | Python | Java | Kotlin | C# | PHP | Go |
+|---|---|---|---|---|---|---|---|---|
+| `logout_url` | `logout_url` | `logoutUrl` | `logout_url` | `logoutUrl` | `logoutUrl` | `LogoutUrl` | `logoutUrl` | `LogoutURL` |
+| `verify_logout_token` | `verify_logout_token` | `verifyLogoutToken` | `verify_logout_token` | `verifyLogoutToken` | `verifyLogoutToken` | `VerifyLogoutToken` | `verifyLogoutToken` | `VerifyLogoutToken` |
+
+Both are synchronous where the language has the distinction (as `oidc_begin`
+is): neither performs network I/O of its own, so C# takes no `Async` suffix
+here. Swift, C and C++ deferred §12.7 with §12 through contract 1.10; since
+their 1.11 port ([§12.6](#§126-swift-c-and-c-ported--contract-111)) the same
+SHOULD applies to them as to everyone else.
+
+#### §12.7.5 `Sensitive<T>` applicability
+
+The `id_token` passed to `logout_url` and the raw logout token passed to
+`verify_logout_token` are both bearer-shaped and MUST NOT be logged at any
+level. They are **not** wrapped in `Sensitive<T>`: `logout_url` embeds the ID
+token in a URL the application is about to hand to a browser, and a wrapper
+whose whole purpose is to resist stringification is the wrong type for a value
+that must be stringified. The returned `sid`/`sub`/`jti` are identifiers, not
+credentials, and are not wrapped.
+
+#### §12.7.6 Required tests
+
+`logout_url` uses the discovered `end_session_endpoint` (assert it is not
+built by concatenation); `id_token_hint`, `post_logout_redirect_uri` and
+`state` are present when supplied and absent when not; a caller-supplied
+`state` is passed through unmodified.
+
+`verify_logout_token`: a valid token verifies and surfaces `sid`, `sub` and
+`jti`; wrong `aud` rejected; wrong `iss` rejected; bad signature rejected;
+expired rejected; **missing `events` key rejected**; **`nonce` present
+rejected** (assert with an otherwise-valid ID token, which is the actual
+attack); neither `sid` nor `sub` rejected; and the same token verifying twice
+does **not** raise — dedup is the RP's job, and an SDK that failed the second
+delivery would break a legitimate retry.
 
 ---
 
@@ -1452,6 +2020,921 @@ body      = {"event":"user.created","id":"01JQ0000000000000000000000"}
 
 ---
 
+## §14 Device Authorization Grant (RFC 8628)
+
+**Requirement level: SHOULD (v1.0).** An SDK that ships §14 states conformance to it
+alongside whatever else it implements. This section covers the *client* half of the grant —
+the device that cannot show a browser. The verification page (`GET /api/v1/device/verify`,
+`POST /api/v1/device/decide`) is an authenticated first-party surface and is **out of
+scope**: it is the AXIAM console's job, not an SDK's.
+
+Server documentation: [`docs/api/device-flow.md`](../docs/api/device-flow.md).
+
+### §14.1 Canonical operation set and endpoint map
+
+| Canonical operation | Wire call | Request (content type / schema) | Success response |
+|---|---|---|---|
+| `device_authorize` | `POST /oauth2/device_authorization?tenant_id=<uuid>` | `application/x-www-form-urlencoded` / `DeviceAuthorizationRequest` | `200` `DeviceAuthorizationResponse` |
+| `device_poll` | `POST /oauth2/token?tenant_id=<uuid>` with `grant_type=urn:ietf:params:oauth:grant-type:device_code` | `application/x-www-form-urlencoded` / `TokenRequest` | `200` `TokenResponse` |
+| `device_login` | the two above, composed — see [§14.3](#§143-device_login-the-composed-helper) | — | `200` `TokenResponse` |
+
+`device_authorize` is **unauthenticated**: a device that cannot show a browser also cannot
+hold a client secret. SDKs MUST NOT send `client_secret` on it, and MUST NOT refuse to call
+it from a client constructed without one.
+
+The §12.1 wire rules apply unchanged: form-encoded bodies, `tenant_id` as a **query**
+parameter and never a body field, `X-Tenant-ID` still emitted per §5 rule 2, no HTTP Basic.
+A slug-only client therefore cannot call either operation, exactly as for the five §12
+operations — same rule, same client-side error, same remedy.
+
+### §14.2 Polling (normative — the part implementations get wrong)
+
+`device_poll` maps the RFC 8628 §3.5 answer table. Every row is a `400` with an
+`OAuth2ErrorResponse` body, and only two of the five are terminal:
+
+| `error` | Meaning | SDK behaviour |
+|---|---|---|
+| `authorization_pending` | user has not decided yet | keep polling at the current interval |
+| `slow_down` | polling too fast | **add 5 s to the interval**, then keep polling |
+| `expired_token` | the grant's lifetime ran out | terminal — raise |
+| `access_denied` | the user refused | terminal — raise, and distinctly from `expired_token` |
+| `invalid_grant` | unknown/consumed device code | terminal — raise |
+
+1. **`slow_down` increases the interval permanently, and never resets it.** RFC 8628 §3.5
+   requires the increase; an SDK that backs off for one round and returns to the original
+   interval will be told to slow down again, forever. The increment is 5 s per occurrence,
+   added to the *current* interval.
+2. **The initial interval comes from the response, not from a constant.** `interval` is a
+   field of `DeviceAuthorizationResponse`; when the server omits it, default to **5 s**
+   (RFC 8628 §3.2). An SDK MUST NOT hard-code a faster floor.
+3. **The two refusals are distinct errors.** `access_denied` means a human said no;
+   `expired_token` means nobody answered. Collapsing them into one error loses the only
+   information the device can act on — retry versus stop asking.
+4. **Polling stops at `expires_in`.** The SDK MUST NOT poll past the deadline the
+   authorization response gave it even if the server has not yet answered `expired_token`;
+   the deadline is authoritative and the extra requests are pure load.
+5. **These five are not §2 taxonomy errors from the HTTP status.** All arrive as `400`,
+   which §2 would map to `ValidationError`. §14 overrides that for this grant: an SDK MUST
+   dispatch on the `error` field first. A `400` whose `error` is none of the five falls back
+   to the §2 mapping.
+6. **`5xx` and transport failures remain §2 `NetworkError`** and are **not** terminal —
+   they are retried under the bounded read-only retry policy of
+   [§16](#§16-retry-policy-d5), then surfaced. A server restart mid-flow must not lose a
+   grant the user has already approved. Per §16.2 that budget is **per poll attempt** and is
+   separate from this grant's own `expires_in` polling loop: an exhausted retry budget ends
+   that one poll, not the flow.
+
+### §14.3 `device_login` — the composed helper
+
+The one operation applications actually want: start the grant, hand the caller the user code
+and verification URI, poll to completion, and adopt the resulting session per the SDK's
+existing credential-adoption rule.
+
+Normative shape (naming per each language's §1 convention):
+
+1. Call `device_authorize`.
+2. Surface `user_code`, `verification_uri` and `verification_uri_complete` to the caller
+   **before** polling begins — via a callback, an emitted event, or a returned handle the
+   caller polls itself. An SDK MUST NOT print them to stdout on the caller's behalf, and MUST
+   NOT begin polling before the caller has had the chance to display them.
+3. Poll per [§14.2](#§142-polling-normative--the-part-implementations-get-wrong) until a
+   terminal outcome.
+4. On success, **return the token set**. Whether the SDK also adopts it as the client's own
+   credential is the **same MAY** as `login_client_credentials` adoption in §12.1, and an SDK
+   MUST follow whichever posture it already took there rather than inventing a second one.
+   A refresh token issued by this grant is refreshed through `oidc_refresh` and therefore
+   through the §9 single-flight guard, exactly like any other.
+
+   *(Errata, contract 1.7 — this rule previously read "adopt the tokens into the client's
+   session exactly as `oidc_exchange` does (§12.3)". That instruction was impossible to
+   follow: §12.3 rule 1 makes `oidc_exchange` **stateless by default**, so it adopts nothing,
+   and no SDK's `oidc_exchange` has ever adopted. An implementer reading the old text would
+   have had to pick a behaviour and call it "exactly as `oidc_exchange` does" — the improvised
+   per-language divergence this contract exists to prevent.)*
+
+`verification_uri_complete` embeds the user code so a device that *can* render a QR code
+does not make the user type anything. SDKs MUST surface it when present and MUST NOT
+synthesise it by concatenation when absent — its format is the server's to choose.
+
+### §14.4 Per-language naming map
+
+| Canonical | Rust | TypeScript | Python | Java | Kotlin | C# | PHP | Go | Swift | C | C++ |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `device_authorize` | `device_authorize` | `deviceAuthorize` | `device_authorize` | `deviceAuthorize` | `deviceAuthorize` | `DeviceAuthorizeAsync` | `deviceAuthorize` | `DeviceAuthorize` | `deviceAuthorize` | `axiam_device_authorize` | `device_authorize` |
+| `device_poll` | `device_poll` | `devicePoll` | `device_poll` | `devicePoll` | `devicePoll` | `DevicePollAsync` | `devicePoll` | `DevicePoll` | `devicePoll` | `axiam_device_poll` | `device_poll` |
+| `device_login` | `device_login` | `deviceLogin` | `device_login` | `deviceLogin` | `deviceLogin` | `DeviceLoginAsync` | `deviceLogin` | `DeviceLogin` | `deviceLogin` | `axiam_device_login` | `device_login` |
+
+Async-twin rules follow §1: Java/C# add their `*Async` companions, Kotlin uses `suspend`,
+Python exposes the same three names on both `AxiamClient` and `AsyncAxiamClient`.
+
+### §14.5 `Sensitive<T>` applicability
+
+`device_code` is a bearer credential for the duration of the grant and MUST be wrapped in
+`Sensitive<T>` (§7) wherever the SDK has that type, and MUST NOT appear in logs at any
+level. `user_code` is **not** wrapped: it is designed to be read aloud and typed by a human,
+and wrapping it would defeat the one thing it exists for. It still MUST NOT be logged —
+displaying is the caller's job.
+
+### §14.6 Required tests
+
+Interval honoured from the response; `slow_down` raises the interval and the raised interval
+persists across subsequent polls; `authorization_pending` loops rather than raising;
+`access_denied` and `expired_token` raise **distinct** errors; polling stops at `expires_in`;
+a `500` mid-poll is retried rather than treated as terminal; `device_login` surfaces the user
+code before its first poll (assert ordering, not just presence); a successful `device_login`
+returns a token set carrying the access token.
+
+An SDK that implements the [§14.3](#§143-device_login--the-composed-helper) rule-4 adoption
+MAY additionally assert the client is authenticated afterwards, and an SDK that gates adoption
+behind a flag MUST assert both states — adopted when set, untouched when not. An SDK that does
+not adopt MUST NOT be read as failing this section. *(Errata, contract 1.7: this test
+previously read "a successful `device_login` leaves the client authenticated", which
+contradicted the stateless posture §12.3 rule 1 requires of every non-adopting SDK.)*
+
+---
+
+## §15 Token Exchange (RFC 8693)
+
+**Requirement level: SHOULD (v1.0).** For service-to-service calls: a backend holding a
+user's access token exchanges it for a *narrower* one before calling the next service.
+
+Server documentation: [`docs/api/token-exchange.md`](../docs/api/token-exchange.md).
+
+**The rule an SDK must not paper over: an exchange only ever narrows.** The server enforces
+this; an SDK's job is to not hide the refusals, because every one of them is the server
+telling the caller their assumption about their own privileges was wrong.
+
+### §15.1 Canonical operation and endpoint map
+
+| Canonical operation | Wire call | Request (content type / schema) | Success response |
+|---|---|---|---|
+| `token_exchange` | `POST /oauth2/token?tenant_id=<uuid>` with `grant_type=urn:ietf:params:oauth:grant-type:token-exchange` | `application/x-www-form-urlencoded` / `TokenRequest` | `200` `TokenExchangeResponse` |
+
+Signature (canonical order; each language's §1 casing applies):
+
+```
+token_exchange(subject_token, subject_token_type, *, actor_token=None, scopes=None,
+               audience=None, resource=None)
+```
+
+`subject_token` is positional and first, and **`subject_token_type` is positional, second, and
+required**. Everything else is optional and keyword/named where the language has that, because
+four optional strings in positional order is a bug waiting to be written.
+
+**`subject_token_type` is required, and has no default.** Through contract 1.12 it was not a
+parameter at all: every SDK sent `…:access_token` unconditionally, which was true by
+construction while an AXIAM access token was the only admissible subject token. [§15.7](#§157-external-idp-subject-tokens-x4)
+ended that, and a defaulted type would mean the SDK guessing which kind of credential the
+caller holds — the one thing §15.7 forbids. Requiring it moves the guess to the only party who
+cannot get it wrong. Pass `urn:ietf:params:oauth:token-type:access_token` explicitly for the
+same-domain exchange this section describes.
+
+The exchanging client **authenticates** (`client_secret_post`, per §12.1 rule 3) — unlike
+§14's device, this is a confidential service. §12.1's `tenant_id`-as-query rule and the
+slug-only-client consequence apply unchanged.
+
+### §15.2 Semantics (normative)
+
+1. **`actor_token` selects delegation; its absence selects impersonation.** These are
+   different operations with different risk, and an SDK MUST NOT paper over the difference —
+   no default actor token, no "helpfully" reusing the client's own session token as the
+   actor. If the caller passed no actor token they asked for impersonation, and the server
+   will refuse unless the client holds the grant.
+2. **Surface `unauthorized_client` verbatim.** It means either "this client may not exchange
+   at all" or "this client may not impersonate". Both are registration facts an operator
+   must fix; an SDK that retries, downgrades, or reworks the request into a delegation is
+   sending a request the caller did not write.
+3. **`invalid_scope` is not a hint to retry with fewer scopes.** The server refuses rather
+   than silently narrowing precisely so the caller finds out here. An SDK MUST NOT
+   auto-narrow and re-send.
+4. **No refresh token comes back, ever.** `TokenExchangeResponse` has no `refresh_token`
+   field. An SDK MUST NOT synthesise one, MUST NOT feed the result into the §9 single-flight
+   refresh guard, and MUST document that re-running the exchange is how you get a fresh
+   token.
+5. **The exchanged token is not the client's session.** `token_exchange` MUST NOT adopt the
+   returned token as the SDK client's own credentials — not even in an SDK whose
+   `login_client_credentials` and [§14.3](#§143-device_login--the-composed-helper)
+   `device_login` do adopt, and not behind an opt-in flag. This is a MUST NOT where those are
+   a MAY. It is a token to *hand onward* in one outbound call; adopting it would
+   silently re-privilege every subsequent call the client makes.
+6. **`issued_token_type` MUST be surfaced on the result**, not dropped. It is mandatory in
+   RFC 8693 §2.2.1 so a client that asked for one type and received another can tell.
+7. **`scope` in the response is the granted set, which may be narrower than requested** even
+   on success (when `scope` was omitted and the client's registration bounds the subject's
+   own). Applications MUST be able to read what they actually got.
+
+### §15.3 Error mapping
+
+Extends §2. As in §14.2 rule 5, dispatch on the `error` field of `OAuth2ErrorResponse`
+before falling back to the status-code mapping:
+
+| `error` | Meaning |
+|---|---|
+| `invalid_request` | malformed, unsupported `subject_token_type`/`requested_token_type`, `audience`/`resource` disagree, or the `act` chain is already at depth 3 |
+| `invalid_grant` | subject or actor token invalid, expired, or from another tenant |
+| `invalid_scope` | a requested scope the subject does not hold, or an empty intersection |
+| `invalid_target` | `audience`/`resource` not registered to this client |
+| `unauthorized_client` | client not registered for the grant, or impersonation without the grant |
+| `invalid_client` | client authentication failed |
+
+**Cross-tenant answers `invalid_grant`, deliberately.** An SDK MUST NOT try to distinguish
+"wrong tenant" from "bad token" or report a guess to the caller — the server collapses them
+because telling them apart is a tenant-enumeration signal, and re-deriving the distinction
+client-side hands back what the server withheld.
+
+### §15.4 Per-language naming map
+
+| Canonical | Rust | TypeScript | Python | Java | Kotlin | C# | PHP | Go | Swift | C | C++ |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `token_exchange` | `token_exchange` | `tokenExchange` | `token_exchange` | `tokenExchange` | `tokenExchange` | `TokenExchangeAsync` | `tokenExchange` | `TokenExchange` | `tokenExchange` | `axiam_token_exchange` | `token_exchange` |
+
+### §15.5 `Sensitive<T>` applicability
+
+`subject_token`, `actor_token` and the returned `access_token` are all bearer credentials and
+MUST be wrapped in `Sensitive<T>` (§7) wherever the SDK has that type. None may be logged at
+any level, including in error paths — an exchange failure is exactly when a naive
+implementation logs the request body.
+
+### §15.6 Required tests
+
+A delegation narrows scopes and the result carries the granted set; omitting `scope` inherits
+the subject's; an impersonation request without the grant surfaces `unauthorized_client`
+unchanged (assert no retry and no request rewriting); `invalid_scope` is not auto-narrowed;
+the response carries no refresh token and the client's own session is unchanged after the
+call; `issued_token_type` is surfaced; a cross-tenant subject token surfaces `invalid_grant`
+with no attempt to refine it.
+
+### §15.7 External-IdP subject tokens (X4)
+
+**No new per-language surface.** `token_exchange`'s existing parameters already carry
+everything an external exchange needs; what changes is *which* subject tokens the server
+will accept and *what the refusals mean*. Server documentation:
+[`docs/api/federated-token-exchange.md`](../docs/api/federated-token-exchange.md).
+
+**The use case:** a partner runs their own IdP (Entra, Okta, Keycloak). Their service calls
+yours carrying *their* token. You present it here and get back an AXIAM token scoped to what
+the resolved AXIAM user may actually do.
+
+#### What to pass
+
+| Parameter | External exchange |
+|---|---|
+| `subject_token` | the **partner's** access token (a JWT) |
+| `subject_token_type` | `urn:ietf:params:oauth:token-type:jwt` — or `…:access_token`; both are accepted for an external issuer. **Required** (§15.1); there is no default to fall back on |
+| `actor_token` | **MUST be omitted.** Delegation across a trust boundary is not supported in v1 and is refused with `invalid_request` |
+| `scope` | as always: omit to get everything the trust configuration and the user's permissions allow, or name scopes to be told about any you cannot have |
+
+An SDK MUST NOT inspect the subject token to decide which `subject_token_type` to send, and
+MUST NOT default `subject_token_type` on the caller's behalf. Which kind of token the caller
+holds is something only the caller knows, and a wrong guess here is the difference between a
+request that is refused and one that is silently reinterpreted.
+
+**This is enforced by making the parameter required** ([§15.1](#§151-canonical-operation-and-endpoint-map)),
+not merely by documenting a prohibition. An optional parameter with a sensible-looking default
+is a default an SDK applies on every call where the caller said nothing — which is exactly the
+guess this clause forbids, relocated from the SDK's code into its signature. Where the language
+can refuse to compile a call that omits it, it MUST; where it cannot (a nullable field, a
+zero-initialised struct), the SDK MUST fail **client-side with no wire call**, the same way
+§15.1's missing-client-secret check does. A request that reaches the server with a type nobody
+chose is the failure mode this section exists to prevent.
+
+#### Which errors mean what
+
+`error` codes are unchanged (§15.3). One `error_description` is normative and an SDK MAY
+match on it:
+
+> `the subject token's issuer is not configured for token exchange`
+
+carried on `invalid_grant`. It is the **only** external failure that is distinguishable, and
+it means *fix the AXIAM trust configuration* (an operator must enable token exchange for
+that federation provider and list your audience) rather than *fix your token*. Every other
+external failure — bad signature, expired, too old, audience not accepted, wrong token kind,
+subject not linked — answers `invalid_grant` with a generic description, deliberately:
+which of a dozen checks refused a token is a map of the server's validation order, drawn one
+request at a time.
+
+Two refusals worth surfacing with their own guidance:
+
+- `invalid_request` naming a **refresh or ID token type**. A refresh token is a
+  re-authentication credential and an ID token is an assertion to a client about a login;
+  neither is a bearer credential for an API. An SDK MUST NOT retry as a different type.
+- `invalid_request` saying the subject token is **already the product of an exchange**.
+  Exchanges do not compose. An SDK MUST NOT attempt to re-exchange a token it obtained from
+  a previous `token_exchange` call, in either direction.
+
+#### The issued token
+
+Identical in shape to a same-domain exchange, with one additional claim:
+
+```json
+{ "ext_exchange": { "iss": "https://partner.example/" } }
+```
+
+A resource server MAY read it to tell a cross-domain token from a locally-issued one. An SDK
+MUST NOT treat its presence or absence as an authorization input — the `scope` claim and the
+server's own checks remain the authority — and MUST NOT strip it when forwarding.
+
+`§15.2` rules 4–7 apply verbatim: no refresh token, never adopted as the client's session,
+`issued_token_type` surfaced, and `scope` read as the granted set.
+
+#### Required tests (extends §15.6)
+
+An exchange with an external subject token and `subject_token_type=…:jwt` surfaces the
+result unchanged; passing an `actor_token` alongside an external subject token surfaces
+`invalid_request` with no retry and no rewriting; the `issuer is not configured` description
+reaches the caller intact; a token carrying `ext_exchange` is not re-exchanged by any helper.
+
+Two more pin the required parameter of §15.1. **A subject token that looks exactly like a JWT
+does not change what is sent** — without this, an SDK that sniffed the token and one that
+obeyed the caller are indistinguishable. And **an omitted type never reaches the wire**: either
+the call does not compile, or it fails client-side with no request sent. Assert whichever of
+the two the language admits.
+
+---
+
+## §16 Retry Policy (D5)
+
+**Requirement level: MUST (v1.0).**
+
+Two earlier clauses — [§11.2](#§112-semantics-normative-identical-in-all-sdks) rule 5 and
+[§14.2](#§142-polling-normative--the-part-implementations-get-wrong) — instruct SDKs to retry
+"under the SDK's existing bounded read-only retry policy". **No such policy was ever defined
+here.** The survey behind this section was wrong three times before it was right, and the
+way it was wrong is itself the argument for §16.7's wire-count requirement.
+
+**Only three SDKs actually retried a read-only failure: Java, Rust, Go.** Two more had a
+retry *surface* that no production path invoked, so they retried nothing while appearing to.
+The remaining six had neither — only §9's refresh-then-retry-once, a different mechanism.
+
+| SDK | Attempts | Base | Cap | Jitter | `Retry-After` | Actually retried? |
+|---|---|---|---|---|---|---|
+| Java | 3 | 200 ms | 5 s | full | floor | **yes** |
+| Rust | 3 | library default | — | none | ignored | **yes** |
+| Go | 3 | 100 ms | **none** | **none** | ignored | **yes** |
+| TypeScript | 3 | 1000 ms | 8 s | partial | **replaced** the backoff | **no** — helper never called |
+| C# | 3 | 200 ms | 5 s | yes | — | **no** — config never read |
+
+Four things in that table, each a different way the same clause goes wrong.
+
+*Go's row.* An uncapped, unjittered `backoff *= 2` is the shape this section most wants to
+eliminate: without a cap the wait is bounded by nothing but the attempt count, and without
+jitter every client retries in lockstep — the herd a backoff exists to prevent.
+
+*TypeScript's `Retry-After`.* `retryAfterMs ?? backoff(n)` means the hint **replaces** the
+computed backoff instead of flooring it, so a `Retry-After: 0` retries immediately. §16.1's
+"floor, never a ceiling" was written on principle and then found to describe shipped code.
+
+*The two "no" rows.* TypeScript's helper was exported and unit-tested; C#'s three settings
+were defaulted, documented and asserted in tests. Both suites were green. Neither SDK
+retried anything. **A tested surface nobody calls is worse than an absent one: the passing
+tests are exactly what stop anyone from looking.** Hence §16.7 — an SDK claiming §16
+conformance MUST assert the policy through its public `check_access` surface by counting
+requests **on the wire**, not against a helper in isolation.
+
+*C#'s configurability.* Its defaults matched this table, but `MaxRetryAttempts`,
+`RetryBaseDelay` and `RetryMaxDelay` were publicly settable upward. §16.1 permits *lowering*
+the cap or disabling retry, never raising either — a caller who can raise them turns one
+client into the herd. (Fixed by clamping, in that SDK's D5 change.)
+
+This section is the missing policy, so the two forward references resolve to one table
+instead of eleven guesses.
+
+### §16.1 The policy (normative — every value here is binding)
+
+| Parameter | Value | Why this value |
+|---|---|---|
+| Attempt cap | **3 total** (1 initial + 2 retries) | Bounds worst-case added latency at ~10 s. A caller who needs more can retry at their own layer, where they know the deadline. |
+| Base delay | **200 ms** | Long enough that a retry is not simply re-entering the same overload; short enough to be invisible on a recovery from a single dropped packet. |
+| Delay cap | **5 s** | The ceiling on any single wait. |
+| Backoff | `min(cap, base × 2^(attempt−1))` | attempt 1 → 200 ms, attempt 2 → 400 ms, both under the cap. |
+| Jitter | **full jitter** — the actual wait is uniform random in `[0, backoff]` | Not "backoff ± 10%". Full jitter is what stops a thundering herd: partial jitter keeps every client's retries clustered around the same instant, which is the failure mode retries cause rather than fix. |
+| `Retry-After` | **honored, as a floor**: wait = `max(jittered_backoff, retry_after)` | The server is telling you when it will be ready. Retrying sooner is not permitted; the value never *shortens* a wait either, so a `Retry-After: 0` cannot defeat the backoff. |
+| Randomness source | Any uniform PRNG. It need not be cryptographic. | The jitter is a load-spreading device, not a secret. |
+
+An SDK MUST NOT make the attempt cap, base, or cap configurable upward beyond these values in
+v1.0. It MAY expose a switch that disables retrying entirely — some callers own their own
+retry layer and want exactly one attempt — and MUST default that switch to **on**.
+
+### §16.2 What is eligible (normative)
+
+Retry applies **only to operations that change no server state**, and "idempotent" here means
+exactly that. It does **not** mean "HTTP GET": AXIAM's authorization check is a `POST` with a
+request body and is the single most important operation in this section. An SDK that gates
+retry on the HTTP verb will retry nothing that matters.
+
+**Eligible:**
+
+| Operation | Note |
+|---|---|
+| `check_access`, `can`, `batch_check` | `POST`, side-effect-free. The reason this section exists. |
+| JWKS fetch (§10.1) | Cache fill; pure read. |
+| OIDC discovery fetch (§12) | Pure read. |
+| `oidc_userinfo`, `get_user_info` (§1.1) | Pure reads. |
+| `oidc_introspect` | A read *about* a token; mints nothing. |
+| `device_poll` on a 5xx or transport failure (§14.2) | The clause that referenced this policy. The retry budget here is **per poll attempt**, and is separate from — and does not consume — the device grant's own `expires_in` polling loop. |
+
+**Not eligible, and an SDK MUST NOT retry them automatically:**
+
+`login`, `verify_mfa`, `logout`, `refresh`, `oidc_exchange`, `device_authorize`,
+`device_login`, `token_exchange`, `oidc_revoke`, and every mutation. Two distinct reasons,
+both disqualifying on their own:
+
+1. **They change state.** A transient failure after the server committed but before the
+   response arrived is indistinguishable, at the client, from one before it committed. A
+   silent retry then duplicates a side effect the caller never asked for twice.
+2. **Their credentials are single-use.** An authorization code, a device code at the moment
+   it is redeemed, and a rotating refresh token are each consumed by the attempt. Retrying
+   replays a spent credential, which the server correctly refuses — turning a recoverable
+   blip into a hard `invalid_grant` the caller cannot interpret.
+
+`refresh` is additionally out of scope because [§9](#§9-single-flight-refresh-guard) rule 3
+already forbids it by name ("no retry loop"). **§16 does not amend §9.** The two mechanisms
+compose in one direction only: the operation *inside* a §9 refresh-then-retry may itself be
+retried per §16 if it is eligible, but a §9 refresh MUST NOT be re-attempted under §16, and
+§16's budget MUST NOT be reset by a §9 refresh occurring mid-operation. One §9 refresh, one
+§16 budget, per logical call.
+
+Revocation deserves its own note because §12.1 records that the server treats it idempotently
+per RFC 7009. That is a statement about **server** behaviour — revoking an already-revoked
+token returns `200` rather than an error. It is not licence for the client to retry a
+mutation, and an SDK MUST NOT read it as one.
+
+### §16.3 Which failures retry (normative)
+
+| Condition | Retry? |
+|---|---|
+| Transport failure — connection refused, DNS, TLS handshake, read timeout | **Yes** |
+| `408`, `429` | **Yes** (`429` is exactly where `Retry-After` usually arrives) |
+| `5xx` | **Yes** |
+| `401` / `AuthError` | **No** — decisive, not transient. §9 owns the refresh path. |
+| `403` / `AuthzError` | **No** — the server has decided. |
+| `400`, `404`, `409`, and every other `4xx` | **No** — retrying an unacceptable request produces an identical rejection. |
+| `OAuthProtocolError` (§12.3 rule 3) | **No**, at any status. It is a protocol answer, not a transport failure. |
+
+The §2 taxonomy maps `408`/`429`/`5xx`/transport all to `NetworkError`, so "retry
+`NetworkError` only" is a correct and sufficient implementation of this table in an SDK whose
+errors carry no status. An SDK whose errors *do* carry the status MUST NOT retry a
+`NetworkError` that came from a row marked **No**.
+
+### §16.4 Interaction with the fail-closed rule
+
+[§11.2](#§112-semantics-normative-identical-in-all-sdks) rule 5 requires the route guard to
+**fail closed** — deny with `503 authz_unavailable` — when the authz endpoint is unreachable.
+§16 does not soften that. The retry budget is spent *first*; when it is exhausted the guard
+denies. An SDK MUST NOT extend the budget because the caller is a guard, and MUST NOT admit a
+request because retries were attempted.
+
+### §16.5 Observability
+
+Every retry MUST emit the `retry` telemetry event of [§19](#§19-telemetry-hooks-d5) when the
+caller has installed a hook. A retried-then-succeeded operation is otherwise **invisible** —
+the caller sees a slow success and no signal at all that the server is failing. That silence
+is the standing objection to automatic retry, and the hook is what answers it.
+
+Retries MUST NOT be logged at `info` or above by default. Redaction rules (§2, §11.2 rule 8)
+apply unchanged: a retry log line carries the operation and attempt number, never the token.
+
+### §16.6 Per-language naming map
+
+The policy is internal machinery; only the disable switch and the parameters are public
+surface, and only where the language's client builder already has a place for them.
+
+| Canonical | Rust | TypeScript | Python | Java | Kotlin | C# | PHP | Go | Swift | C | C++ |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `retry_enabled` | `retry_enabled` | `retryEnabled` | `retry_enabled` | `retryEnabled` | `retryEnabled` | `RetryEnabled` | `retryEnabled` | `RetryEnabled` | `retryEnabled` | `axiam_client_config_set_retry_enabled` | `retry_enabled` |
+
+### §16.7 Required tests
+
+Backoff and jitter MUST be tested with an **injected clock and an injected PRNG** — never by
+sleeping. A test that really waits 200 ms is a test nobody runs.
+
+Required: the attempt cap is honored exactly (a permanently failing eligible operation makes
+exactly 3 attempts, not 2, not 4); the delay sequence with jitter pinned to its maximum is
+`200 ms, 400 ms`; full jitter with the PRNG pinned to `0` waits `0` and with it pinned to `1`
+waits the full backoff — proving the range is `[0, backoff]` and not `backoff ± something`; a
+`Retry-After` longer than the backoff wins, and one shorter than the backoff does **not**
+shorten it; a `403` and a `401` each make exactly one attempt; a **non-idempotent operation
+makes exactly one attempt even when the failure is a `503`** (assert the request count on the
+wire, not just the raised error — this is the test that catches a retry wired at the transport
+layer instead of the operation layer); the guard still denies `503 authz_unavailable` after
+the budget is exhausted; a `retry` telemetry event is emitted per retry.
+
+---
+
+## §17 Client-Side Decision Memo (D5)
+
+**Requirement level: MAY (v1.0). Disabled by default.**
+
+[§11.2](#§112-semantics-normative-identical-in-all-sdks) rule 6 says helpers MUST NOT cache
+allow/deny decisions. **That rule stands as the default.** This section defines the single
+exception: an explicitly opt-in, TTL-bounded memo that a caller must switch on, having read
+what it costs them.
+
+The server already ships the same trade with the same shape — `AXIAM__AUTHZ__DECISION_CACHE_TTL_SECS`
+(default 5 s) and `AXIAM__AUTH__SESSION_VALIDATION_CACHE_TTL_SECS` (default `0`, off) — where
+the documented bound is that a revoked grant can still be served for up to the TTL. The SDK
+memo mirrors that bound rather than inventing a second staleness story.
+
+### §17.1 Semantics (normative)
+
+1. **Off by default.** The default TTL is `0`, which means disabled — not "cache for zero
+   seconds". An SDK MUST NOT enable it because it looks like an easy win.
+2. **Ceiling of 5 seconds, clamped.** A configured TTL above 5 s MUST be clamped to 5 s, and
+   the SDK MUST document that it clamps. This deliberately differs from the server, whose
+   equivalent setting is an unclamped `u64` — a known residual that lets an operator
+   configure a multi-hour staleness window. The client has no reason to repeat it.
+3. **Key.** `(subject_id, resource_id, action, scope)`, all four, with absent `scope` and
+   absent `subject_id` each forming a distinct key from any present value. A memo that
+   ignores `scope` answers a narrower question with a broader answer.
+4. **Allows and denies are cached identically.** Not "cache allows only", and not "cache
+   denies only". Asymmetric caching changes the *timing* of the two outcomes and so leaks
+   which one occurred to anyone who can observe latency, and it surprises every reader who
+   assumed a cache is a cache. Uniform is both safer to reason about and simpler to
+   implement.
+5. **`reason_code` is cached with the decision** (§11 rule 9) and MUST be returned from the
+   memo unchanged. A memo that returns `allowed` but drops the code would make the field
+   intermittently absent, which is worse than never having it.
+6. **The staleness bound is the TTL, in both directions.** A grant revoked on the server can
+   still read as `allowed` for up to the TTL, and a grant just *added* can still read as
+   denied for up to the TTL. **Read-your-own-writes is not guaranteed**, and every SDK
+   enabling this MUST say so in its documentation in those words. An admin UI that grants a
+   role and immediately re-checks is the case that breaks, and it breaks silently.
+7. **Never negative-cache a failure.** Only a decision the server actually returned is
+   memoized. A `NetworkError`, a `503`, an exhausted §16 retry budget — none of them are
+   entries. Caching a transport failure as a deny would turn a blip into a TTL-long outage,
+   and caching it as an allow is unthinkable.
+8. **Bounded, and safe to drop.** The memo MUST have an entry cap and MUST evict rather than
+   grow. It is a latency optimisation; dropping an entry is always correct, so eviction needs
+   no coordination.
+9. **Invalidated by identity change.** `login`, `logout`, `refresh` and any credential change
+   MUST clear the memo entirely. Entries are keyed by subject, not by session, so a
+   re-authentication as a different principal would otherwise read the previous principal's
+   decisions.
+10. **Not consulted by the guard's fail-closed path.** When the authz endpoint is unreachable
+    §11.2 rule 5 denies. An SDK MUST NOT serve a stale allow from the memo to paper over an
+    outage — that inverts fail-closed into fail-open at exactly the moment it matters.
+
+### §17.2 Per-language naming map
+
+| Canonical | Rust | TypeScript | Python | Java | Kotlin | C# | PHP | Go | Swift | C | C++ |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `decision_memo_ttl` | `decision_memo_ttl` | `decisionMemoTtl` | `decision_memo_ttl` | `decisionMemoTtl` | `decisionMemoTtl` | `DecisionMemoTtl` | `decisionMemoTtl` | `DecisionMemoTTL` | `decisionMemoTtl` | `axiam_client_config_set_decision_memo_ttl` | `decision_memo_ttl` |
+
+### §17.3 Required tests
+
+With an injected clock: a repeat check inside the TTL makes **no second wire call** and
+returns an equal decision including its `reason_code`; the same check after the TTL makes a
+fresh call; a deny is memoized exactly as an allow is (assert the wire-call count for both,
+not just the outcome); a TTL configured above 5 s is clamped to 5 s; differing `scope`,
+`action`, `resource_id` or `subject_id` each miss rather than collide, and absent-`scope`
+does not hit a present-`scope` entry; a `NetworkError` is not memoized (the next call reaches
+the wire); `logout` clears the memo; with the memo enabled and the endpoint unreachable the
+guard still denies `503 authz_unavailable` rather than serving a stale allow; and with the
+default configuration **every** repeat check reaches the wire, proving off-by-default.
+
+---
+
+## §18 Deterministic Shutdown (D5)
+
+**Requirement level: MUST (v1.0).**
+
+Every SDK client owns things the runtime will not reclaim promptly on its own: a connection
+pool, a cookie jar, a JWKS refresh timer, an AMQP consumer thread, a gRPC channel. Without an
+explicit shutdown the caller has no way to know when those are released, which shows up as
+sockets held open past the end of a test, a process that will not exit, and — in the C++ SDK's
+D2 investigation — lifecycle gaps that were only visible under load.
+
+### §18.1 Semantics (normative)
+
+1. **Every SDK MUST expose a deterministic shutdown** in whatever form its language already
+   uses. Not a new invented spelling: `Drop` plus an explicit `close()` in Rust, a context
+   manager in Python, `AutoCloseable` in Java, `IDisposable`/`IAsyncDisposable` in C#, a
+   `Closeable` in Kotlin, `Close() error` in Go, `close()` in TypeScript and PHP, a `deinit`
+   plus explicit `close()` in Swift, `axiam_client_free` in C, a destructor plus `close()` in
+   C++.
+2. **Idempotent.** Closing twice MUST NOT raise, double-free, or double-release. Cleanup code
+   runs from error paths, and an error path that itself throws hides the original failure.
+3. **Releases everything.** Connections closed, pools drained, background threads and timers
+   joined or cancelled, the cookie jar cleared. After `close()` returns, the client holds no
+   OS handle.
+4. **Use after close is an error, not undefined.** A call on a closed client MUST raise the
+   SDK's own error type with a message naming the cause. It MUST NOT silently reopen, and MUST
+   NOT be undefined behaviour in the manual-memory languages.
+5. **Close does not log out.** Shutting down a client releases *local* resources; it MUST NOT
+   issue a `logout`, revoke a token, or otherwise reach the network. The session outlives the
+   client object, which is what lets a process restart and resume. An SDK that logged out on
+   close would silently end sessions on every deploy.
+6. **`Sensitive<T>` material is zeroed where the language allows it** (§7), on the same path.
+
+### §18.2 Per-language naming map
+
+| Canonical | Rust | TypeScript | Python | Java | Kotlin | C# | PHP | Go | Swift | C | C++ |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `close` | `close` (+ `Drop`) | `close` | `close` / `__exit__` | `close` (`AutoCloseable`) | `close` (`Closeable`) | `Dispose` / `DisposeAsync` | `close` | `Close` | `close` (+ `deinit`) | `axiam_client_free` | `close` (+ destructor) |
+
+### §18.3 Required tests
+
+Close is idempotent (twice, no raise); a call after close raises the SDK's error type rather
+than reconnecting; the language's scope-based form releases on both the normal and the
+exception path (a context manager on a raised exception, a `try`-with-resources on a throw, a
+`defer Close()` on an early return); **no network request is issued by close** (assert against
+the transport, which is what catches a `logout` accidentally wired in); and — where the
+language can observe it — no thread or timer outlives the call.
+
+---
+
+## §19 Telemetry Hooks (D5)
+
+**Requirement level: SHOULD (v1.0).**
+
+A caller who wants metrics currently has to wrap every SDK method or monkey-patch the
+transport. This section defines an optional callback surface so they can wire OpenTelemetry,
+Prometheus, or a log line **without this SDK taking a dependency on any of them**. No SDK
+ships an OTel dependency in v1.0; each ships an OTel adapter as an `examples/` entry, where it
+costs nothing to anyone who does not want it.
+
+### §19.1 Events (normative)
+
+| Event | Fired | Carries |
+|---|---|---|
+| `request_start` | Before an outbound call leaves the SDK | operation name, HTTP method, path template, attempt number |
+| `request_end` | After it completes, success or failure | the `request_start` fields, plus status code (or `None`), duration, outcome |
+| `retry` | Before each §16 retry wait | operation name, attempt number, the delay about to be taken, the failure that triggered it |
+| `refresh` | Around a §9 single-flight refresh | whether this caller performed the refresh or waited on another's |
+| `config_clamped` | At client construction, once per clamped setting | the setting's name, the value the caller asked for, the value in force, and the §-reference for the limit |
+
+`path template` means `/api/v1/authz/check`, not the URL with ids substituted in — a metric
+label with a UUID in it is a cardinality bomb.
+
+### §19.2 Rules (normative)
+
+1. **Off unless installed.** No hook, no cost beyond a null check.
+2. **A hook MUST NOT be able to break the SDK.** An exception thrown by a caller's hook MUST
+   be caught and swallowed by the SDK. Telemetry is not permitted to fail an authorization
+   check. An SDK MAY report the swallowed error through its own debug log; it MUST NOT
+   propagate it.
+3. **No secrets, ever.** Hook payloads MUST NOT carry tokens, credentials, `Sensitive<T>`
+   contents, request bodies, or `Authorization` headers. This surface exists to be shipped to
+   a metrics backend, which is the last place a bearer token should land. What a hook carries
+   is the fixed list in §19.1 and nothing else.
+4. **Synchronous and fast, by contract.** Hooks are invoked on the calling path. The SDK MUST
+   document that a hook must not block, and MUST NOT introduce a queue or thread to defend
+   against one — a caller who needs async delivery buffers on their side, where they can pick
+   the policy.
+5. **Ordering.** `request_start` precedes its `request_end`. A retried operation emits one
+   `request_start`/`request_end` pair **per attempt**, with the attempt number distinguishing
+   them, plus one `retry` between consecutive pairs. A caller must be able to count real wire
+   calls from these events, so one pair per logical operation would be wrong.
+
+6. **A clamped setting MUST be reported, not swallowed.** Wherever this contract requires an
+   SDK to clamp a caller-supplied value rather than reject it — §16.1's attempt cap, base
+   delay and delay cap; §17.1 rule 2's memo TTL — the SDK MUST emit one `config_clamped`
+   event per clamped setting at construction.
+
+   Clamping is the right behaviour: rejecting would break a caller whose configuration was
+   merely optimistic, and honoring would let one client become the herd §16 exists to
+   prevent. But *silently* clamping means an operator who set a 60-second memo TTL believes
+   they have one, and their staleness reasoning is wrong by a factor of twelve with nothing
+   anywhere to say so. The event is what makes the clamp discoverable at the only moment it
+   can be acted on.
+
+   `config_clamped` is exempt from §19.1's "no cost when uninstalled" framing only in the
+   sense that it fires at construction rather than per request; with no hook installed it is
+   still a null check and nothing more. It MUST NOT be emitted for a value that was already
+   within the limit — an event that fires when nothing happened trains its reader to ignore it.
+
+### §19.3 Per-language naming map
+
+| Canonical | Rust | TypeScript | Python | Java | Kotlin | C# | PHP | Go | Swift | C | C++ |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `telemetry_hook` | `telemetry_hook` | `telemetryHook` | `telemetry_hook` | `telemetryHook` | `telemetryHook` | `TelemetryHook` | `telemetryHook` | `TelemetryHook` | `telemetryHook` | `axiam_client_config_set_telemetry_hook` | `telemetry_hook` |
+
+### §19.4 Required tests
+
+Events fire in order for a successful call; a failing call still emits `request_end` carrying
+the failure; a retried call emits one `request_start`/`request_end` pair per attempt with
+distinct attempt numbers and a `retry` between them; **a hook that throws does not fail the
+operation** and does not escape; no event payload contains the access token, the refresh
+token, or any `Sensitive<T>` content (assert by scanning the serialized payload for the
+fixture token value, the same discipline §12/§14/§15 use for error paths); and a client with
+no hook installed behaves identically to one before this section existed.
+
+---
+
+## §20 UMA 2.0 — Protection API and Ticket Grant (X2)
+
+**Requirement level: SHOULD (v1.0).** For the **resource-server** side of a
+User-Managed Access deployment: a service that guards resources on someone else's behalf
+registers them, asks the authorization server what a caller would need, and exchanges the
+resulting ticket for a Requesting Party Token.
+
+Server documentation: [`docs/api/uma.md`](../docs/api/uma.md). Wire reference:
+`/.well-known/uma2-configuration`.
+
+**The rule an SDK must not paper over: a permission ticket is single-use and is not
+retryable.** Every other refusal in this contract can be re-sent after the caller fixes
+something. This one cannot — the ticket is spent whether or not the exchange succeeded, and
+re-sending it is not a retry but a second, different request. See §20.2 rule 6.
+
+### §20.1 Canonical operations and endpoint map
+
+| Canonical operation | Wire call | Request | Success response |
+|---|---|---|---|
+| `uma_register_resource` | `POST /uma2/rreg/resource_set` | `application/json` / `ResourceSet` | `201` `ResourceSet` (carries `_id`) |
+| `uma_read_resource` | `GET /uma2/rreg/resource_set/{id}` | — | `200` `ResourceSet` |
+| `uma_update_resource` | `PUT /uma2/rreg/resource_set/{id}` | `application/json` / `ResourceSet` | `200` `ResourceSet` |
+| `uma_delete_resource` | `DELETE /uma2/rreg/resource_set/{id}` | — | `204` |
+| `uma_list_resources` | `GET /uma2/rreg/resource_set` | — | `200` array of ids |
+| `uma_request_ticket` | `POST /uma2/perm` | `application/json` / array of `RequestedPermission` | `201` `{ "ticket": "…" }` |
+| `uma_exchange_ticket` | `POST /oauth2/token?tenant_id=<uuid>` with `grant_type=urn:ietf:params:oauth:grant-type:uma-ticket` | `application/x-www-form-urlencoded` | `200` `TokenResponse` (the RPT) |
+
+Signatures (canonical order; each language's §1 casing applies):
+
+```
+uma_register_resource(name, *, type=None, resource_scopes=[])
+uma_request_ticket(permissions)            # [(resource_id, [scope, …]), …]
+uma_exchange_ticket(ticket, claim_token)
+```
+
+**The Protection API is bearer-authenticated; the ticket grant is client-authenticated.**
+The five `rreg` operations and `uma_request_ticket` carry a **PAT** — an ordinary access
+token obtained through `login_client_credentials` with the `uma_protection` scope — in the
+`Authorization` header. `uma_exchange_ticket` instead authenticates the client at the token
+endpoint (`client_secret_post`, per §12.1 rule 3), because it is a token-endpoint grant.
+§12.1's `tenant_id`-as-query rule and its slug-only-client consequence apply to
+`uma_exchange_ticket` unchanged.
+
+### §20.2 Semantics (normative)
+
+1. **A PAT is a client-credentials token, not a user token.** The server requires the
+   subject to be an OAuth2 client, because a minted ticket is bound to the `client_id` that
+   minted it. An SDK MUST NOT offer a user access token as a PAT, and MUST NOT silently fall
+   back to the client's ordinary session token if that session is a user session.
+
+2. **`claim_token` is required, though UMA 2.0 §3.3.1 marks it optional.** AXIAM v1
+   implements neither incremental authorization nor claims-gathering, so it is the only
+   channel that names a requesting party. An SDK MUST make it a required parameter rather
+   than defaulting it — in particular MUST NOT default it to the resource server's own PAT,
+   which would mint an RPT for the resource server instead of for the user.
+
+3. **Partial grants are refused whole. An SDK MUST NOT auto-narrow and re-ask.** If a ticket
+   names three pairs and the requesting party may have two, the answer is `access_denied` for
+   the whole ticket. Re-requesting a smaller ticket is a decision for the calling application,
+   not for the SDK: the SDK cannot know whether two-of-three is useful or useless to it, and a
+   library that quietly obtains a lesser authority than was asked for has answered a question
+   nobody posed. Same shape as §15.2 rule 3.
+
+4. **The RPT is not the client's session.** As in §15.2 rule 5, `uma_exchange_ticket` MUST
+   NOT adopt the returned token as the SDK client's own credentials — not behind a flag. It
+   is the requesting party's token, to be handed onward or checked; adopting it would
+   re-privilege every later call the resource server makes as that user.
+
+5. **No refresh token comes back, ever.** The grant deliberately issues none, so an RPT
+   cannot outlive the ticket that authorised it. An SDK MUST NOT synthesise one, MUST NOT
+   feed the result into the §9 single-flight refresh guard, and MUST document that re-running
+   the grant is how you get a fresh RPT.
+
+6. **A permission ticket MUST NOT be retried.** This is an exception to §16, and it is the
+   one rule in this section whose violation is a security bug rather than a usability one.
+   The ticket is consumed *before* the request is evaluated, so a failed exchange has still
+   spent it. An SDK MUST exclude `uma_exchange_ticket` from any automatic retry — including
+   §16's idempotent-retry path, including on timeout, and including on `5xx` — and MUST
+   surface the failure so the caller can request a **new** ticket.
+
+   Two reasons. The first stands alone and always holds: a retried ticket answers
+   `invalid_grant`, so the retry is useless — it can only turn a clear failure into a
+   confusing one. The second is why violating this is a security bug rather than a usability
+   one.
+
+   That second reason is that single-use is a property of the *server's deployment*, not of
+   the protocol. The server decides the race with a transaction its storage engine must
+   arbitrate, plus a redemption nonce read back after that transaction commits
+   (ilpanich/axiam#302). It holds on a persistent storage engine, which an AXIAM deployment
+   is required to run — but an SDK is talking to a server it did not deploy and **cannot
+   attest**, and against one running an in-memory datastore the guarantee does not hold. An
+   SDK that retries is deliberately generating the concurrent redemption such a server can
+   admit twice.
+
+   So an SDK MUST NOT weaken this rule on the grounds that a particular server is well
+   deployed. It has no way to know that, the first reason applies either way, and there is
+   nothing to gain from the retry even when the second does not apply. Do not retry.
+
+7. **The `permissions` claim is a record, not a capability.** An RPT carries the pairs the
+   engine allowed **at mint time**. An SDK that exposes them MUST NOT present them as a live
+   authorization answer, and MUST NOT cache them beyond the RPT's own `exp`: a grant revoked
+   after issuance does not empty a live RPT, which is exactly why its lifetime is bounded to
+   the minimum of the subject token's remaining life, the server's ceiling, and 300 s.
+
+8. **Registration replaces the scope list; it does not merge.** `uma_update_resource` sends
+   the resource set's new state. An SDK MUST NOT read-modify-write the existing scopes into
+   the payload as a convenience, because that would make removing a scope impossible through
+   the SDK.
+
+### §20.3 The `WWW-Authenticate: UMA` challenge
+
+A resource server that refuses a request SHOULD tell the caller how to obtain authority, per
+UMA 2.0 §3.2. Two halves, and an SDK may ship either:
+
+- **Emit (resource-server side).** A helper that, given the required `(resource, scopes)`,
+  calls `uma_request_ticket` and formats the header:
+  `WWW-Authenticate: UMA realm="<realm>", as_uri="<issuer>", ticket="<ticket>"`.
+- **Consume (client side).** A helper that parses that header into its three fields.
+
+**The consuming helper MUST NOT automatically exchange the ticket it parsed.** Parsing a
+challenge and acting on it are separate decisions: the `as_uri` names an authorization
+server the client has not necessarily chosen to trust, and auto-exchanging would send the
+user's `claim_token` to whatever host the 403 asked it to. Return the parsed challenge and
+let the caller decide.
+
+### §20.4 Error mapping
+
+Extends §2. As in §14.2 rule 5, dispatch on the `error` field of `OAuth2ErrorResponse`
+before falling back to the status-code mapping.
+
+| Where | `error` / status | Meaning |
+|---|---|---|
+| `/uma2/perm`, `/uma2/rreg/*` | `401` | PAT missing, malformed, or expired |
+| `/uma2/perm`, `/uma2/rreg/*` | `403` | the token is not a PAT — wrong subject kind, or missing the `uma_protection` scope |
+| `/uma2/perm` | `400` | a requested scope the resource has not declared |
+| ticket grant | `invalid_request` | `ticket` or `claim_token` absent, or an unsupported `claim_token_format` |
+| ticket grant | `invalid_grant` | ticket unknown, expired, already used, or presented by a client other than the one that minted it; or `claim_token` invalid, expired, or from another tenant |
+| ticket grant | `access_denied` (**HTTP 403**) | the requesting party is not authorized for every requested pair |
+| ticket grant | `invalid_client` | client authentication failed |
+
+**`access_denied` answers 403, not 400.** UMA 2.0 §3.3.6 specifies it, and it is how a
+conforming resource server tells "you may not have this" from "your request was malformed".
+An SDK MUST map on the `error` field rather than the status, so this stays correct if either
+moves.
+
+**No grant-local mapper is needed for this, as of contract 1.12.** The shared `/oauth2/*`
+mapper §2 and [§12.3](#§123-cross-cutting-rules-normative-identical-in-all-sdks) rule 3 now
+describe already dispatches on the `error` field at any status, which is exactly what the
+paragraph above asks for — so the ticket grant uses the same mapper as every other
+token-endpoint grant. It did not, between contracts 1.10 and 1.11: §12.3 rule 3 enumerated
+`400` and `401`, and nine of the eleven SDKs answered by writing a private mapper for this one
+grant rather than widening a shared one every other endpoint depended on. Those private mappers
+are now removable, and an SDK that still carries one is carrying dead weight rather than a
+divergence.
+
+Note the boundary this does not cross. The `/uma2/perm` and `/uma2/rreg/*` rows above are mapped
+**by status**, and stay that way: those are Protection API refusals rather than OAuth2 protocol
+errors, they carry no `OAuth2ErrorResponse` body, and a `403` there means "this token is not a
+PAT" — an authorization failure, which is what `AuthzError` is for.
+
+**The four ticket refusals are one error, deliberately.** Unknown, expired, consumed and
+wrong-client all answer `invalid_grant` with one message. An SDK MUST NOT attempt to
+re-derive which one occurred or report a guess: the server collapses them because telling
+them apart lets a caller probe for live ticket handles, and reconstructing the distinction
+client-side hands back exactly what the server withheld. Same discipline as §15.3's
+cross-tenant note.
+
+### §20.5 Per-language naming map
+
+| Canonical | Rust | TypeScript | Python | Java | Kotlin | C# | PHP | Go | Swift | C | C++ |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `uma_register_resource` | `uma_register_resource` | `umaRegisterResource` | `uma_register_resource` | `umaRegisterResource` | `umaRegisterResource` | `UmaRegisterResourceAsync` | `umaRegisterResource` | `UmaRegisterResource` | `umaRegisterResource` | `axiam_uma_register_resource` | `uma_register_resource` |
+| `uma_read_resource` | `uma_read_resource` | `umaReadResource` | `uma_read_resource` | `umaReadResource` | `umaReadResource` | `UmaReadResourceAsync` | `umaReadResource` | `UmaReadResource` | `umaReadResource` | `axiam_uma_read_resource` | `uma_read_resource` |
+| `uma_update_resource` | `uma_update_resource` | `umaUpdateResource` | `uma_update_resource` | `umaUpdateResource` | `umaUpdateResource` | `UmaUpdateResourceAsync` | `umaUpdateResource` | `UmaUpdateResource` | `umaUpdateResource` | `axiam_uma_update_resource` | `uma_update_resource` |
+| `uma_delete_resource` | `uma_delete_resource` | `umaDeleteResource` | `uma_delete_resource` | `umaDeleteResource` | `umaDeleteResource` | `UmaDeleteResourceAsync` | `umaDeleteResource` | `UmaDeleteResource` | `umaDeleteResource` | `axiam_uma_delete_resource` | `uma_delete_resource` |
+| `uma_list_resources` | `uma_list_resources` | `umaListResources` | `uma_list_resources` | `umaListResources` | `umaListResources` | `UmaListResourcesAsync` | `umaListResources` | `UmaListResources` | `umaListResources` | `axiam_uma_list_resources` | `uma_list_resources` |
+| `uma_request_ticket` | `uma_request_ticket` | `umaRequestTicket` | `uma_request_ticket` | `umaRequestTicket` | `umaRequestTicket` | `UmaRequestTicketAsync` | `umaRequestTicket` | `UmaRequestTicket` | `umaRequestTicket` | `axiam_uma_request_ticket` | `uma_request_ticket` |
+| `uma_exchange_ticket` | `uma_exchange_ticket` | `umaExchangeTicket` | `uma_exchange_ticket` | `umaExchangeTicket` | `umaExchangeTicket` | `UmaExchangeTicketAsync` | `umaExchangeTicket` | `UmaExchangeTicket` | `umaExchangeTicket` | `axiam_uma_exchange_ticket` | `uma_exchange_ticket` |
+| `uma_parse_challenge` | `uma_parse_challenge` | `umaParseChallenge` | `uma_parse_challenge` | `umaParseChallenge` | `umaParseChallenge` | `UmaParseChallenge` | `umaParseChallenge` | `UmaParseChallenge` | `umaParseChallenge` | `axiam_uma_parse_challenge` | `uma_parse_challenge` |
+
+`uma_parse_challenge` is synchronous in every language — it parses a string — so it takes no
+`Async` suffix in C# and returns no future.
+
+### §20.6 `Sensitive<T>` applicability
+
+The **ticket**, the **`claim_token`**, the **PAT** and the returned **RPT** are all bearer
+credentials and MUST be wrapped in `Sensitive<T>` (§7) wherever the SDK has that type. None
+may be logged at any level, including in error paths.
+
+The ticket deserves explicit mention because its 60-second lifetime invites treating it as
+harmless. It is not: for those 60 seconds it is the credential that converts into an RPT, and
+a ticket in a log line is a live credential in a log line.
+
+`resource_scopes`, the resource `_id` and the `permissions` claim are **not** sensitive and
+MUST remain readable — an application cannot act on an RPT whose contents it may not inspect.
+
+### §20.7 Required tests
+
+Registration round-trips and the returned `_id` is usable as the `resource_id` of a
+subsequent `uma_request_ticket`; an update that omits a previously declared scope removes it
+(assert the SDK did not merge); a ticket request naming an undeclared scope surfaces the
+`400` unchanged; a happy-path exchange returns an RPT whose `permissions` carry the requested
+pairs; **a failed exchange is not retried** — assert exactly one outbound request for a
+`5xx`, for a timeout, and for `invalid_grant`, since this is the §16 exception; the RPT is
+not adopted as the client's credentials (assert the client's own token is unchanged after the
+call) and carries no refresh token; a `403 access_denied` is surfaced as such and not
+auto-narrowed into a smaller ticket request; a user token offered as a PAT is refused by the
+SDK or surfaces the server's `403` unchanged; `uma_parse_challenge` parses a well-formed
+header and does **not** perform an exchange (assert zero outbound requests); and no ticket,
+`claim_token`, PAT or RPT value appears in any log or error payload (scan the serialized
+payload for the fixture value, as §12/§14/§15 require).
+
+---
+
 ## Closing Notes
 
 ### Conformance Statement
@@ -1469,8 +2952,49 @@ An SDK that additionally ships the §12 OIDC/SSO relying-party helpers updates i
 
 > "This SDK conforms to CONTRACT.md §1–§12."
 
-The three SDKs that defer §12 ([§12.6](#§126-deferred-sdks-swift-c-c)) keep their existing
-statement and MUST NOT claim §12.
+An SDK that additionally ships the §13 webhook-signature verifier updates its statement to:
+
+> "This SDK conforms to CONTRACT.md §1–§13."
+
+An SDK that additionally ships the §12.7 logout helpers states them by name
+alongside its §12 claim, e.g.:
+
+> "This SDK conforms to CONTRACT.md §1–§13 and §12.7."
+
+§12.7 is named rather than folded into the §1–§12 range because it landed after
+several SDKs had already stated §12: an SDK claiming §1–§12 today means what it
+meant when it was written, and silently widening that range would turn a true
+statement into a false one without anyone editing it.
+
+§14 (device authorization grant) and §15 (token exchange) are **independent** SHOULD-level
+sections, not a continuation of the §1–§13 run: an SDK may ship either, both, or neither.
+Because of that, they are stated by name rather than by extending the range — an SDK that
+ships both writes:
+
+> "This SDK conforms to CONTRACT.md §1–§13, §14 and §15."
+
+and one that ships only the device grant names only §14. Writing "§1–§15" would claim the
+other section by implication, which is the failure mode a range invites.
+
+Swift, C and C++ claimed no §12 through contract 1.10. Since their 1.11 port
+([§12.6](#§126-swift-c-and-c-ported--contract-111)) they state it like everyone else — but only
+once the port has actually landed in that repository: the statement follows the code, never the
+contract's expectation of it.
+
+§16 (retry policy) and §18 (deterministic shutdown) are **MUST**-level and land with contract
+1.8, so unlike §14/§15 they are not optional and are not named in the statement — an SDK is
+either conformant or it is not. Neither was implemented anywhere when 1.8 was written: §16
+formalizes a policy §11.2 rule 5 and §14.2 had been *requiring by reference* since before it
+existed (two SDKs had improvised one and disagreed; nine had none), and §18 was absent
+everywhere except the TypeScript and Python gRPC clients and C's `axiam_client_free`. Both
+reach conformance through the D6 re-sync fan-out, one repo at a time, exactly as §12.7, §14
+and §15 did. Until a given SDK lands them it is non-conformant on those two sections, and
+its README MUST NOT imply otherwise.
+
+§17 (decision memo, MAY) and §19 (telemetry hooks, SHOULD) are optional and, like §14/§15, are
+stated by name when shipped:
+
+> "This SDK conforms to CONTRACT.md §1–§13, §14, §15, §17 and §19."
 
 Phase acceptance criteria in each SDK plan include: "CONTRACT.md §1–§10 conformance
 verified." (and §1–§11 where the §11 helpers are shipped, §1–§12 where the §12 helpers are
@@ -1489,9 +3013,12 @@ three defer it and are unchanged:
 | C# | §1–§12 | `*Async` throughout except the deliberate synchronous `OidcBegin` |
 | PHP | §1–§12 | — |
 | Go | §1–§12 | — |
-| Swift | unchanged (no §12) | [§12.6](#§126-deferred-sdks-swift-c-c) deferral |
-| C | unchanged (no §12) | [§12.6](#§126-deferred-sdks-swift-c-c) deferral |
-| C++ | unchanged (no §12) | [§12.6](#§126-deferred-sdks-swift-c-c) deferral |
+| Swift | unchanged (no §12) | [§12.6](#§126-swift-c-and-c-ported--contract-111) deferral — **lifted in contract 1.11** |
+| C | unchanged (no §12) | [§12.6](#§126-swift-c-and-c-ported--contract-111) deferral — **lifted in contract 1.11** |
+| C++ | unchanged (no §12) | [§12.6](#§126-swift-c-and-c-ported--contract-111) deferral — **lifted in contract 1.11** |
+
+The table above is a snapshot of contract 1.5 and is kept as written; the three deferrals in it
+were lifted by contract 1.11, and each of those SDKs states §1–§12 once its port lands.
 
 `login_client_credentials` credential adoption is a §12.1 **MAY**: TypeScript, PHP, and Go
 implement it as an opt-in flag; Rust, Python, Java, and Kotlin skip it; C# exposes the flag and
@@ -1652,8 +3179,8 @@ recorded here until one exists.
   `error_description`), plus two endpoint-qualified rows in the HTTP-status mapping; the three
   existing top-level error types are unchanged. No existing signature changes. The eight
   backend-capable SDKs (Rust, TypeScript, Python, Java, Kotlin, C#, PHP, Go) add the operations
-  and state "§1–§12"; the device-oriented SDKs (Swift, C, C++) document §12 as a deferred
-  follow-up and keep their existing statement (§12.6).
+  and state "§1–§12"; the device-oriented SDKs (Swift, C, C++) documented §12 as a deferred
+  follow-up and kept their existing statement (§12.6 — deferral lifted in contract 1.11).
 
 - **2026-07 (§1.1 gRPC userinfo, contract 1.3)** — **non-breaking / additive.** Added a new
   canonical operation `get_user_info` (§1 naming map + §1.1 normative semantics), served only
@@ -1694,12 +3221,886 @@ recorded here until one exists.
   `check_access` could not already carry `subject_id` (Java `checkAccess` subjectId
   overload, Go `CheckAccessAs`), both additive alongside the unchanged existing signatures.
 
+- **2026-08 (§20 UMA 2.0)** — **non-breaking / additive.** Added §20 defining the
+  resource-server side of User-Managed Access: the Protection API (`uma_register_resource`
+  and the rest of the `rreg` family, `uma_request_ticket`), the `uma-ticket` grant
+  (`uma_exchange_ticket`), and the `WWW-Authenticate: UMA` challenge helpers. Purely
+  additive — no existing signature changes, and SDKs remain conformant to §1–§19 without it.
+  Two rules in it are load-bearing rather than stylistic: **§20.2 rule 6 makes the ticket
+  grant an explicit exception to §16's retry policy** (a permission ticket is spent even on
+  failure, and retrying it is a concurrent redemption against a server the SDK cannot
+  attest — see contract 1.14, which restated the second half of that reasoning), and
+  **§20.3 forbids the challenge-parsing helper from auto-exchanging** the ticket it parsed,
+  since the `as_uri` names a host the client has not chosen to trust.
+
+- **2026-08 (§12.6 deferral lifted for Swift, C and C++)** — **non-breaking / additive**, with
+  one narrow widening. §12.6 previously required `axiam-swift-sdk`, `axiam-c-sdk` and
+  `axiam-cplusplus-sdk` to defer §12 in its entirety, forbade partial implementation, and
+  forbade their conformance statements from claiming it. Contract 1.11 reverses that: all three
+  implement §12 — and, with it, §12.7 — using the names §12.2 had already reserved for them,
+  satisfying §12.1–§12.5 unchanged.
+
+  The deferral reasoned from persona (device- and IoT-oriented SDKs have no browser to redirect),
+  which is true of `oidc_begin`/`oidc_exchange` and of nothing else in the section:
+  `login_client_credentials` is the machine-to-machine login an embedded consumer actually wants,
+  `introspect`/`revoke` are ordinary token-endpoint calls about a device's own credentials, and
+  §12.6 itself recorded "adding `login_client_credentials` alone to C/C++" as an open follow-up.
+  §14 and §20 then settled it from the other side: §14 exists because a device cannot show a
+  browser and lists all three, and §20 gave all three a `/oauth2/token` call and a discovery
+  document of their own. By 1.10 the "second, parallel OIDC stack" the deferral warned about had
+  arrived anyway, in pieces. Porting §12 removes a divergence rather than adding one.
+
+  **The one widening:** §7's C and C++ rows no longer read "no public accessor". That wording was
+  load-bearing only while those SDKs handed their callers no token material; §12 returns tokens
+  *to* the caller, so rule 3's **single** explicit accessor now applies to them — `expose()` in
+  C++, `axiam_sensitive_reveal()` in C — exactly as contract 1.5 resolved the same collision for
+  the other eight. Every redaction surface (`operator<<`/`to_string`, log output) is unchanged.
+
+  No existing signature changes anywhere, and no SDK that already shipped §12 is affected. A
+  conformance statement still follows the code: each of the three claims §1–§12 only once its own
+  port has landed.
+
+- **2026-08 (SDK-Q10 — one decision shape, contract 1.19)** — **non-breaking on the
+  wire; one deprecation with a named removal.** The gRPC decision called its
+  human-readable reason `deny_reason` and the REST decision called the same string
+  `reason`. SDK-Q10 had been deferred three times because every way of closing it
+  looked like a break; the answer taken is **deprecate-and-add**, and it breaks
+  nothing today.
+  - `CheckAccessResponse` gains **`reason` (field 4, explicit presence)** — the
+    canonical name, absent on an allow and present on every refusal, matching the
+    REST body exactly. `deny_reason` (field 2) is marked `[deprecated = true]`,
+    still carries the identical string, and is **removed at AXIAM 2.0** — the only
+    dated removal in this log, and the point of writing it down.
+  - The migration rule is stated in [§11.2](#§112-semantics-normative-identical-in-all-sdks)
+    rule 9's amendment: read `reason`; fall back to `deny_reason` only when
+    `reason` is absent on a refusal; expose **one** reason accessor, not two.
+  - The same amendment settles two shape questions the SDKs had answered
+    inconsistently: the decision has exactly `allowed` + `reason_code` + `reason`
+    and **no `resource_type`/`resourceType`** (the server has never had one — a TS
+    `AccessCheck` declaring it must drop it), and gRPC `subject_id` is now optional
+    the way REST's is, with an **empty** value meaning "the token's subject".
+  - Not done, deliberately: renaming the field and taking a major bump, and
+    marking `subject_id` proto3 `optional`. Both are wire- or codegen-breaking for
+    no behavioural gain; `buf breaking` refuses the second outright (cardinality
+    change), which is the same constraint §10.3 records for `CnfClaim`.
+
+## §21 FAPI 2.0 Profile and mTLS Client Credentials (X5)
+
+AXIAM 1.0-alpha24 adds a per-client **security profile** and RFC 8705 mutual-TLS
+client credentials. Most of this is server-side and invisible to an SDK. This
+section states the parts that are not, so that eleven SDKs do not each invent
+their own answer.
+
+### §21.1 What an SDK MUST do (normative)
+
+Exactly one thing is mandatory, and it is **§10.1 rule 9** — verifying the `cnf`
+sender constraint when it is present. Everything else in this section is
+informative or optional.
+
+That asymmetry is deliberate. The mechanism's security depends entirely on the
+*relying party*: the authorization server can stamp `cnf` into every token it
+issues, and it buys nothing at all if resource servers ignore the claim.
+Issuing is the easy half.
+
+### §21.2 Client registration fields (informative)
+
+`POST /api/v1/oauth2-clients` and `PATCH /api/v1/oauth2-clients/{id}` accept:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `profile` | `"standard"` \| `"fapi2"` | The security posture. Default `"standard"` — what every client registered before this contract version already is. |
+| `token_endpoint_auth_method` | `"client_secret_post"` \| `"tls_client_auth"` \| `"self_signed_tls_client_auth"` \| `"private_key_jwt"` | Default `"client_secret_post"`. `private_key_jwt` arrived with §21.8 in contract 1.16 and was missing from this row. |
+| `tls_client_auth_subject_dn` | string | RFC 8705 §2.1.2. Exactly one of the three `tls_client_auth_*` parameters may be set. |
+| `tls_client_auth_san_dns` | string | RFC 8705 §2.1.2. |
+| `tls_client_auth_san_uri` | string | RFC 8705 §2.1.2. |
+| `self_signed_tls_client_auth_thumbprints` | string[] | Accepted `x5t#S256` values for `self_signed_tls_client_auth`. More than one permits an overlapping rotation. |
+| `tls_client_certificate_bound_access_tokens` | bool | RFC 8705 §3.4. Default `false`. Independent of the auth method — a client MAY authenticate with a secret and still receive bound tokens. |
+
+`profile: "fapi2"` is a **switch, not a label**: the server refuses the
+registration unless it also sets `require_par`, an mTLS
+`token_endpoint_auth_method`, and `tls_client_certificate_bound_access_tokens`.
+An SDK exposing client management SHOULD surface the server's `400` message
+verbatim rather than pre-validating the combination itself — the bundle is the
+server's to define, and a client-side copy of it will drift.
+
+### §21.3 Authenticating as an mTLS client (informative)
+
+An SDK acting as an OAuth2 **client** against a `tls_client_auth` or
+`self_signed_tls_client_auth` registration presents its certificate through the
+same transport configuration §6.1 already defines for device mTLS, and sends
+**no** `client_secret`. The server selects the credential from the
+*registration*, never from the request, so sending a secret as well is neither
+required nor harmful — but omitting the certificate is fatal, and produces the
+same uniform `invalid_client` as every other client-authentication failure.
+
+SDKs are NOT required to implement mTLS client authentication. Where an SDK does
+not, it MUST NOT claim §21 conformance for the client role; §10.1 rule 9 (the
+guard role) is required of everyone regardless.
+
+### §21.4 RFC 9207 `iss` on authorization responses (informative, act on it)
+
+Every AXIAM authorization response — success and error, for every client,
+whatever its profile — now carries an `iss` query parameter naming the issuer.
+Discovery advertises `authorization_response_iss_parameter_supported: true`.
+
+An SDK implementing the §12 relying-party flow **SHOULD** compare it against the
+issuer it began the flow with and reject a mismatch. That comparison is the
+entire defence against the **mix-up attack**, in which a response minted by one
+authorization server is delivered to a client's callback as though it came from
+another. This is a SHOULD only because an SDK that ignores an unknown query
+parameter is not *broken* — but an SDK that talks to more than one issuer and
+skips it is exposed, and the check is three lines.
+
+**It must be checked on the error redirect too.** One variant of the attack works
+by injecting an error response; a client that validates `iss` on success and
+skips it on failure has left ajar the door it just closed.
+
+### §21.5 Discovery additions (informative)
+
+| Field | Value | Meaning |
+|---|---|---|
+| `authorization_response_iss_parameter_supported` | `true` | §21.4 |
+| `tls_client_certificate_bound_access_tokens` | `true` | The server can issue bound tokens. Whether a *given* client receives them is that client's registration and is deliberately not discoverable — this document is scoped to the server, and a per-client answer here would leak one client's posture to every reader. |
+| `token_endpoint_auth_methods_supported` | includes `tls_client_auth`, `self_signed_tls_client_auth`, and (contract 1.16) `private_key_jwt` | Advertised unconditionally; whether an mTLS listener is reachable is a deployment's listener configuration, discovered at connect time. `private_key_jwt` needs nothing from the listeners at all. |
+| `dpop_signing_alg_values_supported` | `["PS256", "ES256", "EdDSA"]` (contract 1.16) | RFC 9449 §5.1. Its **presence** is what says DPoP is supported — the RFC defines no separate boolean. Note the omission of `RS256`: a client library defaulting to RSA-PKCS#1 will be refused, and this list is where it should find that out. |
+
+### §21.6 What is NOT in this contract version
+
+Contract 1.15 listed `private_key_jwt` and DPoP here as absent server-side. Both
+landed in contract 1.16; §21.7 and §21.8 replace those two entries. What remains
+out of scope:
+
+- **FAPI Message Signing** (JARM, signed request objects, signed introspection
+  responses): a separate optional OIDF certification and out of scope for this
+  pass. `response_mode=jwt` is not accepted by this server.
+- **Certificate-bound *refresh* tokens.** Only access tokens carry `cnf`.
+- **Sender-constrained token exchange.** RFC 8693 exchange deliberately does not
+  inherit or mint a `cnf` — the exchanging client is a different party from the
+  subject, so copying the constraint would bind the new token to a key its
+  holder does not have. An SDK MUST NOT synthesise one.
+
+### §21.7 DPoP sender-constrained tokens (contract 1.16, RFC 9449)
+
+**This section is normative for the resource-server role and informative for the
+client role.** The normative part is small and it is already stated: §10.1 rule
+9's table. This section says what "verify a DPoP proof" means, so that an SDK
+which chooses to implement it does so correctly, and so that one which does not
+knows exactly what it is declining.
+
+#### §21.7.1 What a DPoP-bound request looks like
+
+```http
+GET /api/v1/whoami HTTP/1.1
+Host: rs.example
+Authorization: DPoP eyJhbGciOiJFZERTQSJ9...        <- the access token, scheme DPoP not Bearer
+DPoP: eyJ0eXAiOiJkcG9wK2p3dCIsImFsZyI6...          <- a proof, freshly signed for THIS request
+```
+
+Two consequences an SDK guard MUST handle:
+
+1. **The scheme is `DPoP`, not `Bearer`.** A guard that only ever splits on
+   `Bearer ` will not find the token at all. Scheme comparison MUST be
+   case-insensitive (RFC 9110 §11.1).
+2. **The token endpoint's response says `"token_type": "DPoP"`.** A client that
+   hard-codes `Bearer` when building its own outbound `Authorization` header will
+   be refused by every DPoP-aware resource server.
+
+#### §21.7.2 Verifying a proof (normative for any SDK that claims to)
+
+An SDK that verifies DPoP proofs MUST perform **all** of the following. Partial
+verification is worse than none, because it produces a guard that reports
+success:
+
+| # | Check | Why |
+|---|---|---|
+| 1 | `typ` header is exactly `dpop+jwt` (case-insensitive) | Without it, an access token or ID token signed by the same key is replayable as a proof |
+| 2 | `alg` is `PS256`, `ES256` or `EdDSA`, **taken from the embedded `jwk`, not believed from the header** | `alg: none` and RSA-public-key-as-HMAC-secret are both "the token told the verifier how to check the token" |
+| 3 | The header carries a public `jwk`, and the signature verifies under it | |
+| 4 | The `jwk` carries **no private key material** (`d`, `p`, `q`, `dp`, `dq`, `qi`, `oth`, `k`) — reject if it does | RFC 9449 §4.3. Many JWK libraries silently drop these when parsing into a public-key type, so the check MUST be made against the raw header JSON |
+| 5 | `htm` equals the request method | |
+| 6 | `htu` equals the request URI **with query and fragment removed**, compared without further normalisation | A normalising comparison is where two unequal URIs become equal |
+| 7 | `iat` is within a small window of now, in **both** directions (RECOMMENDED 60 s, a named constant) | |
+| 8 | `jti` is present, non-empty, and **single-use within that window** | Freshness bounds the window; the `jti` guard is what makes the window unusable. An SDK that cannot store `jti` MUST document that it does not prevent replay within the freshness window |
+| 9 | `ath` equals the base64url-unpadded SHA-256 of the access token | Without it, a proof captured on one request can be re-aimed at another token held by the same key |
+| 10 | The `jkt` (RFC 7638 thumbprint of the `jwk`) equals the token's `cnf.jkt` | This is the step that ties the proof to the token; the other nine are what make the proof mean anything |
+
+A server may answer `use_dpop_nonce` with a `DPoP-Nonce` response header. A
+**client**-role SDK SHOULD retry once with the supplied nonce in the proof's
+`nonce` claim; retrying more than once on the same nonce is a loop, not a retry,
+and §16's policy applies. A **resource-server**-role SDK is not required to
+issue nonces.
+
+#### §21.7.3 Declining is a supported answer
+
+Client-side proof *generation* is a per-language judgement call. An SDK whose
+role is resource-server-only, or whose language lacks a usable JOSE
+implementation for the three permitted algorithms, MAY decline to implement this
+section. Declining means, exactly:
+
+- `jkt`-bound tokens are **rejected**, per §10.1 rule 9 (never accepted as
+  bearer tokens);
+- the SDK's README says so, in the section that documents token validation; and
+- the required negative test for "a `jkt`-bound token is rejected" is present.
+
+What declining does **not** mean is shipping a stub that returns "verified".
+§21.9's per-SDK table records which SDKs implement §21.7.2 and which decline.
+
+### §21.8 `private_key_jwt` client authentication (contract 1.16, RFC 7523 §2.2)
+
+**Informative.** The server now accepts `private_key_jwt` as the second FAPI
+client-authentication family. A client registers `token_endpoint_auth_method:
+"private_key_jwt"` plus **exactly one** of `jwks` (inline) or `jwks_uri`
+(RFC 7591 §2 permits at most one), and authenticates by posting:
+
+| Parameter | Value |
+|---|---|
+| `client_assertion_type` | `urn:ietf:params:oauth:client-assertion-type:jwt-bearer` |
+| `client_assertion` | a JWT with `iss` = `sub` = `client_id`, `aud` = the issuer or the token endpoint URL, a future `exp` within 3600 s, and a unique `jti` |
+
+Signed with `PS256`, `ES256` or `EdDSA`. The server takes the algorithm from the
+**registered key**, not the assertion header, so an assertion whose header
+disagrees with the registered key is refused rather than reinterpreted. The
+`jti` is single-use.
+
+This is optional for every SDK: the client role may keep using
+`client_secret_post` or mTLS. An SDK that implements it MUST NOT default the
+`aud` to anything — an assertion minted for another authorization server is a
+cross-AS replay, and guessing the audience is how one gets minted by accident.
+
+### §21.9 Per-SDK DPoP posture
+
+Each SDK records here whether it implements §21.7.2 proof verification, proof
+generation, both, or neither. "Neither" is a supported answer (§21.7.3); an
+unrecorded row is not.
+
+| SDK | Verifies proofs (RS role) | Generates proofs (client role) |
+|---|---|---|
+| rust | yes | yes |
+| typescript | yes | yes |
+| python | yes | yes |
+| go | yes | yes |
+| java | yes | yes |
+| kotlin | yes | yes |
+| csharp | yes | yes |
+| php | yes | no — see its README |
+| swift | yes | no — see its README |
+| c | verification of `cnf` shape only; declines §21.7.2 | no |
+| cplusplus | verification of `cnf` shape only; declines §21.7.2 | no |
+
+The two "declines" rows are not oversights. Both SDKs' role in this contract is
+resource-server-side validation, and neither ships a JOSE implementation
+covering PS256/ES256/EdDSA that could verify a proof without adding a
+dependency this contract does not otherwise require. They therefore **reject**
+`jkt`-bound tokens, which is what §10.1 rule 9 requires of them, and their
+READMEs say so.
+
+---
+
+## §22 Reactors — AMQP Extension Actors (X1)
+
+**Requirement level: SHOULD (v1.0)** for the eight managed-runtime SDKs (rust,
+typescript, python, java, kotlin, csharp, go, php). **The wire protocol below is
+normative for anything that speaks it**, including a hand-rolled integrator on a
+runtime this contract defers (§22.11).
+
+A **Reactor** is an external process that subscribes to named hook events on the
+AMQP bus and answers back — allow, deny, or a field-allow-listed mutation —
+inside a timeout the server declared. It is AXIAM's answer to Zitadel Actions
+and Keycloak SPIs, and the difference is the whole design: those load third-party
+code *into* the authorization server, and this keeps it outside, reachable only
+through a signed reply schema the server validates before it believes a word of
+it.
+
+Server implementation: `crates/axiam-amqp/src/reactor/` (wire protocol and
+dispatch chain) and `crates/axiam-core/src/models/reactor.rs` (the event
+registry, which is the single source of truth this section restates).
+
+**The rule an SDK must not paper over: a reply is an instruction to change a
+token or refuse a login, so an unsigned reply is not a weak reply — it is not a
+reply at all.** Both directions are signed, with the same §8 v2 primitives and
+the same tenant subkey. A reactor runtime that consumes an event without
+verifying it, or emits a reply without signing it, is not partially conformant;
+it is a hole in the authorization server it is attached to.
+
+§22 is stated **by name**, like §14, §15, §17 and §19 — it is not a continuation
+of the §1–§13 run. An SDK that ships a reactor runtime writes, for example:
+
+> "This SDK conforms to CONTRACT.md §1–§13, §14, §15 and §22."
+
+### §22.1 Topology
+
+| Element | Value |
+|---|---|
+| Exchange | `axiam.reactor.events`, type **topic** |
+| Routing key | `<tenant_id>.<event>` — e.g. `11111111-1111-1111-1111-111111111111.token.pre_issue` |
+| Per-reactor queue | `axiam.reactor.q.<tenant_id>.<reactor_id>`, durable, **declared by the server** |
+| Reply correlation | `correlation_id`, inside the signed reply body |
+
+`routing_key()` and `queue_name()` in
+`crates/axiam-amqp/src/reactor/protocol.rs` are the definitions; the fixture in
+§22.13 carries both rendered for a known tenant so an SDK can assert against them
+rather than reimplement the format string.
+
+**Actors consume; they never declare topology.** The server declares the
+exchange, the queue, and the bindings from the registration's `events`. An SDK
+reactor runtime MUST NOT declare, redeclare or bind its own queue, and MUST NOT
+derive a queue name for a reactor other than the one it is configured as. This
+is not tidiness: a reactor that can bind is a reactor that can bind itself to
+`*.token.pre_issue` and read another tenant's issuance events. Refusing to hold
+that capability at all is cheaper than proving each actor does not misuse it.
+
+**Reply addressing.** The reply is published back to the reply queue named in
+the delivery's AMQP `reply_to` basic property, echoing the delivery's
+`correlation_id` property — standard AMQP RPC. What the **server** authenticates
+is not either property but the `correlation_id` field inside the signed reply
+body (§22.3), which is the single-use handle binding one reply to one event. An
+SDK MUST copy `correlation_id` from the event body into the reply body; copying
+it only into the AMQP property produces a reply the server discards.
+
+*Scope note, accurate as of contract 1.18: the server's lapin
+`ReactorTransport` implementation is not yet merged (the trait is defined in
+`dispatcher.rs`; the dispatch chain is broker-free and fully tested against it).
+The signed bodies, their field order, and every validation rule below are
+implemented and locked. The two AMQP basic properties named in this paragraph
+are the standard RPC convention the transport will use and are the one part of
+this section not yet pinned by a running implementation — an SDK that echoes
+`reply_to`/`correlation_id` from the delivery will be correct either way.*
+
+### §22.2 Message security — §8 in both directions
+
+**§8 and §8b apply to the reactor exchange verbatim, and this section adds no
+new cryptography.** The key, the derivation, the canonicalization rule and the
+freshness window are the ones §8's "v2 — Replay Protection" subsection already
+defines:
+
+- the signing key is the tenant's HKDF-derived AMQP subkey —
+  `HKDF-SHA256(salt = "axiam-amqp-hkdf-salt-v1", ikm = master_key, info =
+  "axiam-amqp-v1" || key_version || tenant_id_16_raw_bytes)`;
+- the MAC is `HMAC-SHA256(subkey, canonical_bytes)`, hex-encoded, compared in
+  constant time;
+- `key_version` is `2` and a body carrying less than `2` is refused before
+  anything else about it is considered;
+- `issued_at` must lie within ±`DEFAULT_FRESHNESS_SKEW_SECS` (300 s) of the
+  verifier's clock, in **both** directions — a future timestamp is not "extra
+  fresh", it is the shape of a captured message held for later;
+- `nonce` is a fresh UUIDv4 per message and is **inside** the signed bytes.
+
+What is new here is that the signing is **symmetric in direction**. The server
+signs the event with the tenant subkey; the reactor signs its reply with the
+same subkey. There is no second key and no asymmetric variant in v1.
+
+**What exactly is signed.** The message serialized to JSON in its declared field
+order, with `hmac_signature` present and set to **`null`** — not omitted. This
+differs from `AuthzRequest` and `AuditEventMessage` in §8, whose
+`hmac_signature` is *absent* from their canonical bytes, and it is the single
+most likely place for an SDK to produce a MAC that will not verify. The §22.13
+vectors carry `canonical_signed_json` for every message so the difference is
+testable rather than memorable.
+
+Field order, event (server → reactor):
+
+`tenant_id`, `event`, `correlation_id`, `payload`, `timeout_ms`, `key_version`,
+`nonce`, `issued_at`, `hmac_signature` (**`null` while signing**).
+
+Field order, reply (reactor → server):
+
+`correlation_id`, `tenant_id`, `event`, `decision`, `reason` (omitted when
+absent), `patch` (omitted when absent), `require_mfa` (**omitted when
+`false`**), `key_version`, `nonce`, `issued_at`, `hmac_signature` (**`null`
+while signing**).
+
+The three conditionally-omitted fields are load-bearing. A reply that serializes
+`"require_mfa": false` rather than omitting it produces different canonical
+bytes and therefore a different MAC; an SDK MUST reproduce the omission rule,
+not merely the values.
+
+**Replay, precisely.** On an event a reactor consumes, §8's v2 consumer
+obligations apply unchanged: reject `key_version < 2`, reject a stale or future
+`issued_at`, and reject a `nonce` already seen inside the freshness window. On a
+**reply**, the server's protection is the freshness window plus the
+`correlation_id` binding — the correlation is minted per dispatch and the
+dispatcher reads exactly one reply for it, so a captured reply re-presented
+against any other event is refused as `wrong_correlation` even though its
+signature is perfectly valid. The server does **not** maintain a durable
+nonce-dedup store for reactor replies the way it does for `AuthzRequest` and
+`AuditEventMessage`. An SDK MUST still emit a fresh nonce per reply. It is
+inside the signed bytes, so a unique one is what keeps two replies from being
+byte-identical — which is what makes a captured reply distinguishable from a
+fresh one, and it is the field a server-side dedup store would key on if one is
+added. Emitting a constant nonce is not a small deviation; it removes the only
+uniqueness the reply body carries beyond its timestamp. §22.13's
+`nonce_binding` vector is two replies differing in nothing but the nonce, with
+different MACs, so this is assertable.
+
+**§8b transport rules apply.** Reactors connect across a trust boundary:
+`amqps://`, a supplied CA bundle, no verification-skip switch, no plaintext
+fallback. HMAC does not substitute for TLS and TLS does not substitute for HMAC.
+
+### §22.3 The event (server → reactor)
+
+```json
+{
+  "tenant_id": "11111111-1111-1111-1111-111111111111",
+  "event": "token.pre_issue",
+  "correlation_id": "22222222-2222-2222-2222-222222222222",
+  "payload": { "sub": "alice", "client_id": "portal" },
+  "timeout_ms": 500,
+  "key_version": 2,
+  "nonce": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+  "issued_at": "2026-07-10T12:00:00Z",
+  "hmac_signature": "…"
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `event` | A registry name (§22.5). Also the second half of the routing key. |
+| `correlation_id` | The single-use handle for this dispatch. Echo it in the reply body. |
+| `payload` | Event-specific body. **Never carries a credential, a token, or a signing key** — a reactor is told what is being decided, not handed the means to act on it elsewhere. |
+| `timeout_ms` | How long the server will actually wait for *this* dispatch. It is inside the signed body, so it cannot be widened in transit. |
+
+`timeout_ms` is sent so an actor can **shed load rather than answer into a
+closed window**. An SDK runtime SHOULD surface it to the handler and SHOULD stop
+work and skip the reply when the window has already passed — a late reply is
+discarded, and the CPU spent producing it was spent for nothing.
+
+**Chained events carry `_reactor_patch`.** When an earlier reactor in the chain
+returned a mutation, the server inserts the accumulated patch into the payload
+object under the key `_reactor_patch` before dispatching to the next reactor, so
+a later reactor decides against the state that will actually be committed. A
+handler MUST treat it as read-only context; echoing it back inside its own
+`patch` is not how a field is preserved (the server merges, §22.6).
+
+**What an SDK runtime MUST do before invoking a handler**, in order: reject
+`key_version < 2`; verify the MAC; check freshness; check the nonce against its
+seen-set. Only then decode the payload. A runtime that hands an unverified
+payload to user code has already lost — the handler will act on it, and "we
+checked afterwards" is not a check.
+
+### §22.4 The reply (reactor → server)
+
+```json
+{
+  "correlation_id": "22222222-2222-2222-2222-222222222222",
+  "tenant_id": "11111111-1111-1111-1111-111111111111",
+  "event": "token.pre_issue",
+  "decision": "mutate",
+  "patch": { "ext.cost_center": "42", "ext.department": "eng" },
+  "key_version": 2,
+  "nonce": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+  "issued_at": "2026-07-10T12:00:00Z",
+  "hmac_signature": "…"
+}
+```
+
+| Field | Type | Rules |
+|---|---|---|
+| `decision` | `"allow"` \| `"deny"` \| `"mutate"` | Lowercase, closed set. |
+| `reason` | string, optional | Audited on a `deny`. A deny with no reason still denies — the reason is for the audit trail, not for the decision. The server substitutes `"denied by reactor"` when it is absent. |
+| `patch` | flat map of **string → string**, optional | `mutate` only, and only on a mutable event. Values are strings; there is no nested or typed patch in v1. |
+| `require_mfa` | bool, optional (omitted when false) | `login.post_auth` **only**. |
+
+**The server's validation order is fixed: identity, then freshness, then
+signature, then semantics.** Checking the patch allow-list before the signature
+would spend allow-list logic on bytes nobody authenticated, and would let an
+unauthenticated party learn which fields are accepted by watching which
+rejections come back differently. The rejections, in the order they can occur:
+
+| # | Rejection | Cause |
+|---|---|---|
+| 1 | `wrong_correlation` | `correlation_id` is not the one dispatched |
+| 2 | `tenant_mismatch` | reply names another tenant |
+| 3 | `event_mismatch` | reply names another event |
+| 4 | `key_version_too_old` | `key_version < 2` |
+| 5 | `stale` | `issued_at` outside ±300 s, in either direction |
+| 6 | `bad_signature` | missing or wrong MAC |
+| 7 | `require_mfa_not_supported` | `require_mfa` on any event other than `login.post_auth` — checked before the decision, so it refuses a `deny` carrying it too |
+| 8 | `not_mutable` | `mutate` on a veto-only event |
+| 9 | `forbidden_patch_field` | a patch key outside the event's allow-list; the offending key is named in the audit record |
+| 10 | `malformed_mutation` | `mutate` with no patch, `mutate` with an empty patch, or `allow` carrying a patch |
+
+**Every rejection resolves to the registration's failure policy** (§22.8) and
+every rejection is audited. A rejected reply is not a softer failure than no
+reply at all: a reactor that answers with a forbidden patch has failed, and its
+policy decides what that costs.
+
+Three consequences an SDK's reply builder must encode structurally rather than
+by documentation:
+
+1. **No partial application.** One forbidden key rejects the *whole* patch,
+   including the fields that would have been fine. An SDK MUST NOT filter a
+   handler's patch down to the allowed subset before sending — doing so leaves
+   the reactor author believing a field was set when it was dropped, which is
+   the exact failure the server refuses to produce.
+2. **`allow` and `patch` are mutually exclusive.** A patch attached to an
+   `allow` is a reply whose author and whose reader disagree about what will
+   happen; it is refused rather than resolved. A handler that returns a
+   mutation MUST produce `decision: "mutate"`.
+3. **`require_mfa` rides on `allow`.** `allow` + `require_mfa: true` on
+   `login.post_auth` resolves to *proceed only after step-up*. It is not a
+   separate decision value, and it MUST NOT be sent on any other event.
+
+### §22.5 The event registry and the mutable-field allow-lists
+
+Five interceptable events in v1. The list is served live at
+`GET /api/v1/reactors/events`, which is the copy an SDK or admin UI SHOULD read;
+the table below is the same data, stated here because a wire contract that
+requires a network call to be understood is not a contract.
+
+| Event | Mutable | Mutable fields (the complete allow-list) | Default failure policy |
+|---|---|---|---|
+| `token.pre_issue` | yes | **`ext.` namespace only** | `fail_open` |
+| `login.post_auth` | no | — (veto, or `require_mfa`) | `fail_closed` |
+| `user.pre_create` | yes | `username`, `email`, `metadata.` namespace | `fail_closed` |
+| `user.pre_update` | yes | `username`, `email`, `metadata.` namespace | `fail_closed` |
+| `grant.pre_assign` | no | — (veto only) | `fail_closed` |
+
+**`login.post_auth` covers every interactive sign-in, not only password login
+(clarified 2026-08, SEC-095).** The event fires on password authentication, on
+SAML ACS (`POST /api/v1/auth/federation/saml/acs`) and on the OIDC callback
+(`POST /api/v1/auth/federation/oidc/callback`) — in every case after the
+credentials verify and before any session or token is issued, which is what the
+row above has always said. MFA completion and the WebAuthn
+`authenticate/finish` ceremony are **not** separate firings: both continue a
+login that was already gated at its first step.
+
+One difference is worth stating because it is not discoverable from the table.
+The federated paths have no step-up branch — a SAML or OIDC sign-in completes in
+one round trip, with no `MfaRequired` result for the caller to act on — so a
+`require_mfa` answer on those paths is **refused** (the sign-in fails) rather
+than silently dropped. A reactor that needs step-up on federated logins must
+answer `deny` and drive enrolment out of band.
+
+**The namespace-prefix rule.** An allow-list entry ending in `.` is a namespace
+prefix, and it matches a field that starts with the entry **and has at least one
+character after the dot**. So `ext.` admits `ext.department` and `ext.a.b.c`,
+and refuses:
+
+- `ext.` itself — it names the namespace, not a claim, and admitting it would
+  let a reactor set a claim literally called `ext.`;
+- `ext` — not in the namespace;
+- `extra`, `external_id` — a prefix match on the *string* is not a match on the
+  namespace;
+- `evil.ext.department` — not a suffix match either.
+
+Everything else follows from that one rule. `token.pre_issue` cannot reach
+`iss`, `sub`, `aud`, `exp`, `iat`, `nbf`, `jti`, `scope`, `scp`, `azp`, `act`,
+`client_id` or any other standard claim, because none of them begins with
+`ext.`. A hook that can rewrite `sub` is a hook that can mint a token for
+anyone, and no amount of correct signing changes that — a **correctly signed**
+reply setting `sub` is refused exactly as a forged one is.
+
+`user.pre_create` / `user.pre_update` admit `username`, `email` and the
+`metadata.` namespace, and therefore refuse `password`, `password_hash`,
+`tenant_id`, `id`, `roles`, `is_admin` — and refuse bare `metadata`, per the
+prefix rule above.
+
+**Listeners.** `mode: "listen"` is fire-and-forget observation: the server never
+waits and never reads a reply, so a listener cannot affect any outcome. A
+listener MAY subscribe to **every** registered event, including any the registry
+marks non-interceptable — precisely because it cannot influence them. (All five
+v1 events happen to be interceptable, so the distinction has no effect today;
+the rule is stated because the registry carries the flag and a sixth event may
+use it.) An SDK listener handler
+MUST NOT publish a reply, and MUST be written idempotently — a redelivery after
+a broker hiccup is normal, and a listener that double-counts is a listener that
+was assuming exactly-once delivery it was never promised.
+
+### §22.6 Ordering, mutation merge, and the chain
+
+Interceptors registered for one event run **sequentially, in ascending
+`priority`, ties broken by reactor id** — a total order that is stable across
+restarts and does not depend on message timing.
+
+1. **Deny short-circuits.** Once any reactor refuses, no later reactor is
+   consulted. There is no allow-override at any priority, so calling them would
+   spend the caller's latency to learn nothing.
+2. **Patches accumulate; later wins per key.** Each reactor sees the prior patch
+   (as `_reactor_patch`, §22.3) and the merged result is a union with
+   last-write-wins, so the reactor with the higher priority number is the one
+   whose value survives a contested key.
+3. **`require_mfa` is sticky.** Once any reactor demands step-up, no later
+   reactor can clear it. A step-up demand a later registration could overrule
+   would be a security control with a race in it.
+4. **A listener registered on an intercepted event is not consulted** and is
+   never waited on.
+5. **An event outside the registry dispatches to nothing** and resolves to
+   `allow` — no reactor could have been validly registered for it, so there is
+   nothing to wait for. This is what makes §22.7's hot-path exclusion structural
+   rather than advisory.
+
+The chain's composed result is `deny` if any reactor denied; otherwise
+`require_mfa` if any demanded it; otherwise `mutate` with the merged patch if
+any mutated; otherwise `allow`.
+
+### §22.7 Hot-path exclusion (normative MUST NOT)
+
+**`authz.check`, `authz.check_batch` and `token.introspect` are not hookable,
+and no SDK may present them as such.** They are absent from the registry, a
+registration naming one is refused at `POST /api/v1/reactors` as an unknown
+event, and the dispatcher resolves an unregistered event to `allow` without
+contacting anything.
+
+The reason is arithmetic, not policy. A reactor round-trip is milliseconds; the
+check path's budget is microseconds, and the benchmark matrix runs it at
+1 000–12 000 req/s. Hooking it would not produce a slower check, it would
+produce a different product.
+
+An SDK MUST NOT:
+
+- expose `authz.check`, `authz.check_batch` or `token.introspect` in any
+  reactor-event enum, constant list, or documentation example;
+- offer a client-side interceptor, middleware hook or callback that presents
+  itself as the reactor equivalent for those operations;
+- work around the exclusion by registering a listener on a decision event and
+  blocking the calling path on it.
+
+An application that needs external input on an authorization decision writes a
+**deny grant**, which the engine evaluates in the hot path at hot-path cost.
+That is the supported answer, and it is a better one.
+
+### §22.8 Timeouts, failure policy, and the budget
+
+| Setting | Value |
+|---|---|
+| `timeout_ms` default | **500** |
+| `timeout_ms` accepted range | **1 … 5 000** — `0` and anything above 5 000 are refused at registration |
+| Chain wall-clock ceiling | **5 000 ms** |
+| Effective per-reactor budget | `min(timeout_ms, 5000 − elapsed)` |
+| Total per-event budget | `min(sum of the chain's timeouts, 5 000 ms)` |
+| Per-tenant in-flight interceptions | **64** by default |
+
+`failure_policy` is per registration, and takes one of two values:
+
+| Value | Effect when the reactor produces no usable reply |
+|---|---|
+| `fail_open` | proceed as if the reactor had replied `allow` |
+| `fail_closed` | deny the underlying operation, with an audited reason naming the failure |
+
+"No usable reply" is one closed set, and **every member takes the same path**:
+timeout, transport failure, budget exhausted before this reactor was reached,
+in-flight cap breached, and every §22.4 rejection — including a valid signature
+carrying a forbidden patch field.
+
+**The defaults are pinned per event, and the strictest wins.** A registration
+that names no `failure_policy` gets `fail_closed` if *any* of its events
+defaults to `fail_closed`, and `fail_open` only when all of them default open.
+A reactor registered for both `token.pre_issue` (open) and `login.post_auth`
+(closed) can veto a login, so it inherits `fail_closed` — in either array order.
+An SDK or admin UI MUST NOT reimplement this composition as "take the first
+event's default": that lets the order of a JSON array decide whether an
+unreachable fraud check passes.
+
+**The budget is wall-clock, not a sum, and running out of it is not a way to
+skip a check.** Each reactor gets the smaller of its own `timeout_ms` and what
+remains of the 5 000 ms ceiling. When the ceiling is exhausted the remaining
+reactors are **not contacted**, and each of their own failure policies is
+applied anyway — so an unreached `fail_closed` veto still denies. Registering
+slow reactors ahead of a veto does not starve the veto; it only makes the whole
+event fail.
+
+**Back-pressure is immediate, not queued.** The per-tenant in-flight cap is
+enforced with a non-blocking acquire: breaching it fails the interception at
+once and applies the failure policy. Queueing behind the cap would turn a
+concurrency bound into an unbounded latency bound, which is the failure the cap
+exists to prevent.
+
+**Failures are audited even when they are invisible in the outcome.** A
+`fail_open` timeout produces `allow` *and* an audit record naming the reactor —
+that pair is the whole difference between "no reactor was configured" and "the
+reactor never answered". An SDK surfacing reactor health MUST NOT infer health
+from the outcome alone.
+
+### §22.9 Registration (informative — the admin surface)
+
+Reactors are registered through the admin REST API; an SDK that exposes reactor
+management mirrors these shapes. Every endpoint below is permission-gated
+(`reactors:list`, `reactors:create`, `reactors:get`, `reactors:update`,
+`reactors:delete`) and tenant-scoped from the caller's token — a caller never
+names the tenant, and cannot reach another one's reactors.
+
+| Operation | Wire call | Success |
+|---|---|---|
+| list hookable events | `GET /api/v1/reactors/events` | `200` array of event descriptors |
+| register | `POST /api/v1/reactors` | `201` reactor |
+| list | `GET /api/v1/reactors` | `200` paginated reactors |
+| read | `GET /api/v1/reactors/{id}` | `200` reactor |
+| update | `PUT /api/v1/reactors/{id}` | `200` reactor |
+| delete | `DELETE /api/v1/reactors/{id}` | `204` |
+
+Registration body:
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | string | Non-blank. |
+| `description` | string | Optional, defaults to empty. |
+| `events` | string[] | Non-empty; every entry must be a registry name. |
+| `mode` | `"intercept"` \| `"listen"` | An `intercept` registration naming a non-interceptable event is refused. |
+| `priority` | int | Optional, defaults `0`. Ascending; ties break by id. |
+| `timeout_ms` | int | Optional. Omit to take **500**. Refused outside 1…5 000. |
+| `failure_policy` | `"fail_open"` \| `"fail_closed"` | Optional. Omit to take the strictest default among `events` (§22.8). |
+| `enabled` | bool | Optional, defaults `true`. A disabled reactor keeps its registration and its queue and is simply never dispatched to — the routing table is built from the enabled rows only. |
+
+The response adds `id`, `tenant_id`, `created_at`, `updated_at`, and
+`last_seen_at` — the last time this reactor consumed from its queue, `null` when
+it has never connected, which an admin UI shows differently from "connected
+once, silent since". An SDK runtime keeps that field moving by consuming; it is
+a heartbeat derived from real work, not a separate ping.
+
+Two behaviours a client MUST NOT re-derive locally:
+
+1. **`PUT` validates the merged registration**, not the request. A `PUT` setting
+   only `mode: "intercept"` is valid in isolation and invalid against a stored
+   `events` list containing a listen-only event. Send the change and surface the
+   server's `400`; do not pre-validate one field against nothing.
+2. **Replacing `events` without naming a `failure_policy` re-derives it.** A
+   reactor that was enrichment-only and is now also registered for
+   `login.post_auth` must not keep passing when unreachable. An SDK MUST NOT
+   preserve the old stored policy on the client side to "avoid a surprise".
+
+### §22.10 The SDK runtime helper
+
+The eight managed runtimes expose one helper. It connects (TLS per §8b and
+§6.1), consumes the server-declared queue, and for each delivery: verifies §8 v2
+(key version, MAC, freshness, nonce), decodes the event, dispatches to a
+user-supplied handler, then signs and publishes the reply. It maintains
+reconnect and heartbeat, and drains in-flight events on shutdown per §18.
+
+The handler contract is one function from an event to one of three answers —
+`Allow`, `Deny(reason)`, `Mutate(patch)` — with `require_mfa` available on
+`login.post_auth` as a flag on the allow answer, expressed in whatever way the
+language makes natural.
+
+| Canonical | Rust | TypeScript | Python | Java | Kotlin | C# | PHP | Go | Swift | C | C++ |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `reactor_serve` | `reactor_serve` | `reactorServe` | `reactor_serve` | `reactorServe` | `reactorServe` | `ReactorServeAsync` | `reactorServe` | `ReactorServe` | — (§22.11) | — (§22.11) | — (§22.11) |
+
+Two of those eight do not speak AMQP today: §8's scope list names six SDKs, and
+Kotlin's §8 deferral is a documented pre-existing carve-out. Shipping
+`reactor_serve` in Kotlin or C# means implementing §8 and §8b first — a reactor
+runtime **is** an AMQP consumer, and there is no reactor-shaped subset of §8 that
+would let one arrive without the other.
+
+Four rules on the helper itself:
+
+1. **It MUST NOT declare topology** (§22.1). It consumes a queue whose name it
+   was given or derives from its own configured `reactor_id`, and nothing else.
+2. **It MUST fail closed on its own errors.** A handler that throws, or a
+   payload the runtime cannot decode, MUST result in *no reply* — letting the
+   server's `failure_policy` decide — rather than a synthesized `allow`. An SDK
+   that answers `allow` on behalf of a handler that crashed has overridden the
+   operator's `fail_closed` setting from inside the library.
+3. **It MUST NOT filter a patch** to the allowed subset (§22.4 rule 1).
+4. **It SHOULD honour `timeout_ms`** by abandoning work whose window has closed
+   rather than replying late (§22.3).
+
+### §22.11 Deferred runtimes — Swift, C and C++
+
+**No bundled reactor runtime in v1, and this is a scope decision rather than a
+capability claim.** `axiam-swift-sdk`, `axiam-c-sdk` and `axiam-cplusplus-sdk`
+ship no `reactor_serve`: there is no maintained AMQP client for those targets
+this project is willing to vendor onto embedded and mobile deployments — which
+is the same reason §8 scopes itself to the six SDKs that speak AMQP and has
+never listed these three.
+
+**What still binds them.** §22.1–§22.8 is a wire protocol, and a wire protocol
+does not become optional because no helper wraps it. An integrator hand-rolling
+a reactor on these runtimes against a third-party AMQP client MUST satisfy every
+normative rule in those subsections — the §8 v2 verification set on the event,
+the signed reply shape with its omission rules, the allow-lists, and the
+hot-path exclusion. The §22.13 vectors are the conformance surface, and they need
+no SDK to run against.
+
+The three SDKs' conformance statements MUST NOT claim §22 while they ship no
+runtime, and their READMEs SHOULD point at this subsection so an integrator
+finds the wire chapter rather than concluding reactors are unavailable.
+
+A **non-normative** C++ sample against a commonly-used AMQP client
+(`examples/reactor/`) is planned for `axiam-cplusplus-sdk`. It is an example,
+not a contract surface: this section governs, and the sample conforms to it or
+is wrong.
+
+This is the same shape as, and follows the precedent of, the §12.6 deferral that
+contract 1.11 lifted — deferred because no maintained dependency existed to
+carry the feature, not because the feature does not apply. §12.6's lesson is
+recorded here deliberately: that deferral cut across the wrong seam by deferring
+a whole section when only two operations genuinely assumed a browser. This one
+is cut at the seam between *protocol* (binding on everyone) and *runtime
+convenience* (deferred), which is why the chapter above is normative for these
+three SDKs and only the helper is not. Revisit when a vendorable AMQP client
+exists for these targets; the wire protocol will not need to change for it.
+
+### §22.12 `Sensitive<T>` applicability
+
+The tenant AMQP **signing key** is a credential and MUST be wrapped in
+`Sensitive<T>` (§7) wherever the SDK has that type, exactly as §8's key already
+is. It MUST NOT be logged at any level, and MUST NOT appear in a reconnect
+diagnostic.
+
+The event `payload`, the `patch`, the `reason` and the `decision` are **not**
+sensitive in the §7 sense and MUST remain readable — a handler that cannot
+inspect the event cannot decide anything. They are, however, tenant business
+data: an SDK MUST NOT log the payload at info level by default, and its
+"Writing a Reactor" documentation SHOULD say so. The `nonce`, `correlation_id`
+and `hmac_signature` are not secrets and may be logged for correlation.
+
+### §22.13 Required tests
+
+Against the vectors in
+`crates/axiam-amqp/tests/fixtures/reactor_v2_reference_vectors.json` (generated
+by the server's own sign path; the same master key, tenant and derived subkey as
+the §8 fixture, so one loader serves both):
+
+**Sign direction.** For each committed reply vector, building the reply from its
+fields reproduces `canonical_signed_json` byte-for-byte and recomputes
+`hmac_signature_hex` — including the `"hmac_signature": null` placeholder inside
+the signed bytes, the omission of `reason`/`patch` when absent, and the omission
+of `require_mfa` when false. Assert the omission rules directly: a reply built
+with `require_mfa = false` MUST NOT serialize the field.
+
+**Verify direction.** Each committed event vector verifies under the derived
+subkey and fails under any other key; tampering with `payload`, `timeout_ms`,
+`tenant_id` or `nonce` after signing invalidates it; a `key_version` below 2 is
+refused before the signature is even computed; an `issued_at` outside ±300 s is
+refused in **both** directions (stale and future).
+
+**Replay.** The committed `correlation_replay` vector — the accepted reply
+verbatim, valid signature, inside the freshness window — is refused when
+presented against a different `correlation_id`. And the `nonce_binding` pair:
+two replies differing only in `nonce` carry different MACs.
+
+**Reply construction.** A handler returning a mutation produces
+`decision: "mutate"` and never `allow` + `patch`; a handler returning a
+mutation containing a forbidden key sends it **unfiltered** (assert the SDK did
+not silently drop `sub` from a `token.pre_issue` patch); `require_mfa` is
+rejected client-side, or sent and surfaced as the server's rejection, on any
+event other than `login.post_auth`.
+
+**Registry.** `token.pre_issue` accepts `ext.department` and `ext.a.b.c` and
+rejects `ext.`, `ext`, `extra`, `external_id`, `evil.ext.department` and every
+standard claim; `user.pre_create` accepts `email` and `metadata.source` and
+rejects `password`, `tenant_id`, `roles` and bare `metadata`; `login.post_auth`
+and `grant.pre_assign` accept no patch field at all.
+
+**Hot path.** `authz.check`, `authz.check_batch` and `token.introspect` are
+absent from every event constant the SDK exposes — assert on the enum/list, not
+on a comment.
+
+**Runtime.** A handler that throws produces **no reply** (assert zero published
+messages, not an `allow`); the runtime declares no exchange, queue or binding
+(assert against the AMQP client's declare calls); shutdown drains in-flight
+events per §18; and the signing key never appears in any log line or error
+payload (scan the serialized output for the fixture value, as §12/§14/§15/§20
+require).
+
+---
+
 ### OpenAPI Export Feature Flag
 
 `openapi.json` (kept in this directory, and mirrored into every SDK repo) is generated with `--no-default-features` (SAML endpoints excluded). Both the committed spec and the CI drift gate use identical flags. SDK consumers requiring SAML endpoint documentation should build AXIAM with the `saml` feature enabled and export locally.
 
 ---
 
-*Contract version: 1.6 — Phase 15 (sdk-foundation); §11 declarative authorization helpers added 2026-07; §6.1 mTLS client certificates and Kotlin/Swift/C/C++ SDK columns added 2026-07; §1.1 gRPC-only `get_user_info` operation added 2026-07; §12 OIDC/SSO relying-party helpers and the `OAuthProtocolError` taxonomy sub-type added 2026-07; §7 accessor rules, §9 rule 5, and the §12 cross-SDK clarifications from the eight-SDK conformance review added 2026-07; §9 rule 6 single-flight implementation invariants and the extended §9 test requirement added 2026-07*
+*Contract version: 1.19 — Phase 15 (sdk-foundation); §11 declarative authorization helpers added 2026-07; §6.1 mTLS client certificates and Kotlin/Swift/C/C++ SDK columns added 2026-07; §1.1 gRPC-only `get_user_info` operation added 2026-07; §12 OIDC/SSO relying-party helpers and the `OAuthProtocolError` taxonomy sub-type added 2026-07; §7 accessor rules, §9 rule 5, and the §12 cross-SDK clarifications from the eight-SDK conformance review added 2026-07; §9 rule 6 single-flight implementation invariants and the extended §9 test requirement added 2026-07; §8b AMQP transport, §10.2 gRPC revocation modes, §12.7 logout helpers, §14 device authorization grant and §15 token exchange added 2026-08; §14.3 rule 4 / §14.6 credential-adoption errata 2026-08 (contract 1.7); §16 retry policy, §17 decision memo, §18 deterministic shutdown and §19 telemetry hooks added 2026-08, with §11.2 rules 5–6 and §14.2 rule 6 amended to point at them (contract 1.8); §16 preamble errata + §19 `config_clamped` event 2026-08 (contract 1.9) — the divergence table rewritten from wire-counting conformance tests rather than greps, and a clamped setting must now be reported through §19 rather than applied silently; §20 UMA 2.0 Protection API and ticket grant added 2026-08 (contract 1.10), carrying the one documented exception to §16 retry policy; §12.6's Swift/C/C++ deferral lifted 2026-08 (contract 1.11), porting §12 and §12.7 to those three SDKs and widening §7's C/C++ rows to rule 3's single explicit accessor; §2's `/oauth2/*` error rows and §12.3 rule 3 rewritten to dispatch on the `error` field at any status rather than enumerating 400/401 2026-08 (contract 1.12), so §20.4's 403 `access_denied` reaches the shared mapper and the nine grant-local mappers it forced become removable; §15.1's signature gains a REQUIRED `subject_token_type` and §15.7's prohibition on defaulting it becomes structural rather than documentary 2026-08 (contract 1.13) — a breaking change to all eleven SDKs, taken because an optional parameter with a default is the same guess §15.7 forbids, moved from the SDK's code into its signature; §20.2 rule 6's second reason restated 2026-08 (contract 1.14) — **documentation only, no SDK behaviour changes and no signature moves**. ilpanich/axiam#302 closed: the server now decides the ticket race with a transaction the storage engine arbitrates plus a nonce read back after it commits, so the "measured residual of roughly 1 in 640" the rule cited no longer exists. The rule is unchanged and its first reason (a spent ticket makes the retry useless) was always sufficient on its own; what changes is that the second reason now rests on what an SDK can actually know — it is talking to a server whose storage engine it cannot attest, and the guarantee is conditional on that engine being persistent; **§10.1 rule 9 (sender-constrained tokens) and §21 (FAPI 2.0 profile, mTLS client credentials, RFC 9207 `iss`) added 2026-08 (contract 1.15)** — one new normative rule for every SDK: a token carrying `cnf` is not a bearer token and MUST NOT be accepted as one, and a `cnf` naming a confirmation method the SDK cannot check MUST be refused rather than read as unconstrained. No signature moves and no breaking change to any existing call; the compatibility risk runs the other way, and the required positive regression test (an **unbound** token is still accepted with or without a certificate) is there because the likeliest wrong implementation of rule 9 is one that starts demanding certificates from every caller. Everything else in §21 is informative: mTLS client authentication is optional for the client role, and RFC 9207 `iss` validation is a SHOULD that any SDK talking to more than one issuer should treat as a MUST; **§10.1 rule 9 extended for DPoP and §21.6–§21.9 added 2026-08 (contract 1.16)** — the server gained the second half of two X5.1 rows, `private_key_jwt` client authentication (RFC 7523 §2.2) and DPoP sender-constrained tokens (RFC 9449), and rule 9's four-row table becomes a ten-row one **extended in place** rather than duplicated. The SDK-visible surface is the resource-server side only: a `cnf` may now carry `jkt`, an SDK that cannot verify a DPoP proof MUST refuse such a token rather than accept it as a bearer, and a `cnf` naming **both** methods is a conjunction — "check whichever we can" is forbidden, as is reading an empty `cnf` as unbound. No signature moves and no breaking change to any existing call; the compatibility risk again runs the other way, and the positive regression test is widened to say an **unbound** token must still be accepted with no certificate *and* no proof. Client-side proof generation is a per-language judgement call and §21.7.3 makes declining a supported answer with exactly three obligations (reject, document, test) — §21.9 records each SDK's posture, and the C and C++ SDKs decline §21.7.2 deliberately rather than by omission. §21.8 (`private_key_jwt`) is informative throughout: the client role may keep using `client_secret_post` or mTLS; **§10.3 (sender-constrained tokens over gRPC) added 2026-08 (contract 1.17)** — the X5 work landed REST-first, and gRPC introspection was found to carry no `cnf` at all, which meant an SDK validating through `TokenService` could not satisfy rule 9 detail 4 even in principle: it had no way to tell a bound token from a bearer one and was forced into the exact downgrade rule 9 exists to prevent. `ValidateTokenResponse` and `IntrospectTokenResponse` now carry `cnf` and `token_type`, and introspection additionally gains the RFC 7662 §2.2 fields it had always been missing (`scope`, `client_id`) plus `permissions` (§20 UMA RPT) and `ext_exchange_iss` (X4 provenance). All additive proto fields, so an older client keeps working and simply does not see them — which is the risk, and why §10.3 is normative rather than informative. One wire-level subtlety has its own rule: proto3 cannot distinguish an absent string from an empty one, so an **empty** `CnfClaim` must be refused rather than read as unbound, exactly as rule 9's "names neither" row requires. SDKs must NOT copy the server's own gRPC-side refusal of DPoP-bound tokens — AXIAM's interceptor declines them because a tonic interceptor sees neither `htm` nor `htu`, whereas an SDK guarding a real endpoint knows both; **§22 (Reactors — AMQP extension actors) added 2026-08 (contract 1.18)** — **non-breaking / additive**, and additive in the strongest sense: no existing signature moves, no existing rule changes, and an SDK that ships no reactor runtime is exactly as conformant as it was under 1.17. The chapter documents a server surface that already exists (`crates/axiam-amqp/src/reactor/`, `crates/axiam-core/src/models/reactor.rs`): a Reactor is an external process that subscribes to hook events on the AMQP bus and answers allow/deny/mutate under a signed, timeout-bounded, field-allow-listed protocol — Zitadel-Actions parity without loading third-party code into the security kernel. Two things in it are new obligations rather than new options. The first is that §8's HMAC now runs in **both directions** on one exchange: the server signs the event, the reactor signs the reply with the same tenant subkey, and an unsigned or stale reply is discarded as though the reactor had never answered — with one canonicalization difference that will cost an implementer a day if it is not stated, namely that `hmac_signature` is serialized as `null` inside a reactor body rather than omitted as it is in §8's own two message types. That is why §22.13's vectors ship beside the §8 vectors, in the same fixture directory and under the same master key, tenant and derived subkey: one loader serves both, and the difference is a test rather than a paragraph to remember. The second is the hot-path exclusion (§22.7), written as a **MUST NOT** rather than a note — `authz.check`, `authz.check_batch` and `token.introspect` are not hookable and no SDK may present them as such, because a reactor round-trip is milliseconds and the check path's budget is microseconds; an application needing external input on a decision writes a deny grant, which the engine evaluates at hot-path cost. Swift, C and C++ ship no runtime (§22.11) for the same reason §8 has never listed them among the SDKs that speak AMQP — no vendorable client for those targets — but §22.1–§22.8 binds a hand-rolled integrator on them in full, a split that follows the §12.6 precedent contract 1.11 lifted while cutting at the seam between protocol and convenience rather than across a whole section. One scope note travels with the chapter: the server's lapin transport is not yet merged, so the two AMQP basic properties §22.1 names for reply addressing are the standard RPC convention rather than an implemented one — every signed body, field order, allow-list and validation rule in the chapter is implemented and tested today. Recorded here and not in the Breaking Changes Log above, which is untouched, because nothing breaks; **SDK-Q10 closed 2026-08 (contract 1.19)** — the last deferred contract item, and the one that had been deferred because every closure looked like a break. The gRPC decision's `deny_reason` and the REST decision's `reason` were the same string under two names, so an SDK speaking both transports reconciled them in its own mapper and the two same-named `AccessDecision` types could disagree about their own field list. Closed by **deprecate-and-add**: `CheckAccessResponse` gains `reason` (field 4, explicit presence — absent on an allow, present on every refusal, exactly the REST shape), `deny_reason` is marked `[deprecated = true]` and keeps carrying the identical string until it is **removed at AXIAM 2.0**, and §11.2 rule 9's amendment states the one migration rule: read `reason`, fall back to `deny_reason` only when `reason` is absent on a refusal, expose one reason accessor rather than two. Nothing breaks on the wire today and no signature moves. The same amendment settles the two shapes that went with it — the decision is `allowed` + `reason_code` + `reason` and carries no `resource_type`/`resourceType` (the server has never had one), and gRPC `subject_id` becomes optional the way REST's is, with an **empty** value meaning "the subject in the verified token". That last one is deliberately not proto3 `optional`: `buf breaking` refuses the cardinality change, so empty carries the meaning proto3 cannot express as absence — the same constraint §10.3 already records for an empty `CnfClaim`*
 *Binding since: 2026-06-30*
 *Reference: D-09, D-10 in `.planning/phases/15-sdk-foundation/15-CONTEXT.md`*

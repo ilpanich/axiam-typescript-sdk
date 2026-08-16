@@ -14,9 +14,9 @@
 <section class="tsd-panel tsd-comment">
 <div class="tsd-comment tsd-typography"><p>Verified claims carried by an AXIAM access token (the JWT payload <a href="middleware.Verifier.html#verifyaccesstoken" class="tsd-kind-method">Verifier.verifyAccessToken</a> returns).</p>
 </div></section>
-<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">AxiamClaims</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#aud">aud</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#exp">exp</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#iat">iat</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#iss">iss</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#jti">jti</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#org_id">org_id</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#scope">scope</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#sub">sub</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#tenant_id">tenant_id</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
+<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">AxiamClaims</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#aud">aud</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#cnf">cnf</a><span class="tsd-signature-symbol">?:</span> <a href="middleware.CnfClaim.html" class="tsd-signature-type tsd-kind-interface">CnfClaim</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#exp">exp</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#iat">iat</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#iss">iss</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#jti">jti</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#org_id">org_id</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#scope">scope</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#sub">sub</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#tenant_id">tenant_id</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/node/jwks.ts#L34">src/node/jwks.ts:34</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/node/jwks.ts#L34">src/node/jwks.ts:34</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -25,6 +25,7 @@
 <section class="tsd-index-section">
 <h3 class="tsd-index-heading tsd-anchor-link" id="properties">Properties<a href="#properties" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-index-list"><a href="#aud" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>aud?</span></a>
+<a href="#cnf" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>cnf?</span></a>
 <a href="#exp" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>exp</span></a>
 <a href="#iat" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>iat?</span></a>
 <a href="#iss" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>iss</span></a>
@@ -43,63 +44,78 @@
 <div class="tsd-comment tsd-typography"><p>Token audience — &quot;axiam:user&quot; | &quot;axiam:m2m&quot;.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/node/jwks.ts#L50">src/node/jwks.ts:50</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/node/jwks.ts#L50">src/node/jwks.ts:50</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="cnf"><code class="tsd-tag">Optional</code><span>cnf</span><a href="#cnf" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">cnf</span><span class="tsd-signature-symbol">?:</span> <a href="middleware.CnfClaim.html" class="tsd-signature-type tsd-kind-interface">CnfClaim</a></div>
+<div class="tsd-comment tsd-typography"><p>RFC 7800 / RFC 8705 §3.1 confirmation claim — present <strong>only</strong> on a
+sender-constrained token (<a href="http://CONTRACT.md">CONTRACT.md</a> §10.1 rule 9, contract 1.15).</p>
+<p>Its presence changes what the token <em>is</em>. Without it, the token is a
+bearer credential: whoever holds it may use it. With it, the token names
+a key, and accepting it without proving the caller holds that key
+converts it straight back into a bearer token.</p>
+<p><a href="middleware.Verifier.html#verifyaccesstoken" class="tsd-kind-method">Verifier.verifyAccessToken</a> does <strong>not</strong> check this — it cannot,
+having no access to the connection's client certificate. Use
+<a href="../functions/middleware.verifyCertificateBinding.html" class="tsd-kind-function">verifyCertificateBinding</a>.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/node/jwks.ts#L66">src/node/jwks.ts:66</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="exp"><span>exp</span><a href="#exp" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">exp</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>Expiry time (epoch seconds); the verifier rejects the token once it has passed.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/node/jwks.ts#L46">src/node/jwks.ts:46</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/node/jwks.ts#L46">src/node/jwks.ts:46</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="iat"><code class="tsd-tag">Optional</code><span>iat</span><a href="#iat" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">iat</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>Issued-at time (epoch seconds), if present.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/node/jwks.ts#L44">src/node/jwks.ts:44</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/node/jwks.ts#L44">src/node/jwks.ts:44</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="iss"><span>iss</span><a href="#iss" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">iss</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Issuer — the AXIAM authorization server that minted the token.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/node/jwks.ts#L42">src/node/jwks.ts:42</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/node/jwks.ts#L42">src/node/jwks.ts:42</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="jti"><code class="tsd-tag">Optional</code><span>jti</span><a href="#jti" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">jti</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Unique token ID / session id — needed for logout().</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/node/jwks.ts#L48">src/node/jwks.ts:48</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/node/jwks.ts#L48">src/node/jwks.ts:48</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="org_id"><code class="tsd-tag">Optional</code><span>org_<wbr/>id</span><a href="#org_id" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">org_id</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Organization ID (UUID), if present.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/node/jwks.ts#L40">src/node/jwks.ts:40</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/node/jwks.ts#L40">src/node/jwks.ts:40</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="scope"><code class="tsd-tag">Optional</code><span>scope</span><a href="#scope" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">scope</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>OAuth2 scopes (space-separated).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/node/jwks.ts#L52">src/node/jwks.ts:52</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/node/jwks.ts#L52">src/node/jwks.ts:52</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="sub"><span>sub</span><a href="#sub" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">sub</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Subject — user ID (UUID).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/node/jwks.ts#L36">src/node/jwks.ts:36</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/node/jwks.ts#L36">src/node/jwks.ts:36</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="tenant_id"><span>tenant_<wbr/>id</span><a href="#tenant_id" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">tenant_id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Tenant ID (UUID).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/828402ecaa8e23882375674a9124c9c65d9dbbfc/src/node/jwks.ts#L38">src/node/jwks.ts:38</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/487c51e638a2e98111286435919ce83a05fd2637/src/node/jwks.ts#L38">src/node/jwks.ts:38</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -116,7 +132,7 @@
 <h3>On This Page</h3></summary>
 <div class="tsd-accordion-details">
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Properties</summary>
-<div><a href="#aud"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>aud</span></a><a href="#exp"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>exp</span></a><a href="#iat"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>iat</span></a><a href="#iss"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>iss</span></a><a href="#jti"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>jti</span></a><a href="#org_id"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>org_<wbr/>id</span></a><a href="#scope"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>scope</span></a><a href="#sub"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>sub</span></a><a href="#tenant_id"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>tenant_<wbr/>id</span></a></div></details></div></details></div>
+<div><a href="#aud"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>aud</span></a><a href="#cnf"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>cnf</span></a><a href="#exp"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>exp</span></a><a href="#iat"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>iat</span></a><a href="#iss"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>iss</span></a><a href="#jti"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>jti</span></a><a href="#org_id"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>org_<wbr/>id</span></a><a href="#scope"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>scope</span></a><a href="#sub"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>sub</span></a><a href="#tenant_id"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>tenant_<wbr/>id</span></a></div></details></div></details></div>
 <div class="site-menu">
 <nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
