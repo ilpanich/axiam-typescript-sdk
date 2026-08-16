@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-alpha25] - 2026-08-16
+
+### Added
+
+- Ship the CONTRACT.md §22 reactor runtime (R2.5) (#60)
+- Extend §10.1 rule 9 for DPoP and implement §21.7.2 (#58)
+- SubjectTokenType is required (contract 1.13)
+- §15.7 — external-IdP subject tokens at the exchange (X4)
+- Wire §20.3 challenge emission into the §11 guards, plus the example pair (#52)
+- §20 — UMA 2.0 Protection API and ticket grant
+- Report clamped settings via §19 ConfigClampedEvent (contract 1.9)
+- §16 retry, §17 memo, §18 close(), §19 telemetry (D5) (#47)
+- Device grant, token exchange, logout helpers; re-vendor (D6)
+
+### Changed
+
+- Re-vendor CONTRACT.md 1.19, openapi.json and proto/ from main (R5.8) (#59)
+- Contract 1.15 — §10.1 rule 9, sender-constrained access tokens (#57)
+- Add the §20.7 required timeout assertion
+- Retire the "measured residual" justification (contract 1.14)
+- Re-sync to contract 1.14 (#302 closed)
+- Bump the minor-patch group with 3 updates
+- Bump github/codeql-action from 4.37.4 to 4.37.6
+
+### Fixed
+
+- Re-export the §20 types from the middleware entry point
+- Re-export the §12.7/§14/§15 types from the middleware entry point
+
 ## [Unreleased]
 
 ### Added
