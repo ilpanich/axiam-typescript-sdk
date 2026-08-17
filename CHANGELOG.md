@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **§8b transport security is now enforced, not just documented.** `consume()`
+  and `reactorServe()` both called `amqp.connect(url)` with no scheme check and
+  no TLS options, while their own doc comments stated that the URL "must be
+  `amqps://` (§8b) — there is no verification-skip switch and no plaintext
+  fallback". A plaintext `amqp://` URL connected without complaint, so signed
+  but readable authorization requests, audit events and reactor replies could
+  cross the wire in cleartext with nothing in the SDK objecting.
+
+  Both entry points now validate the URL **before** opening a socket and refuse
+  every scheme but `amqps://` (rules 1 and 5). Documented-but-unenforced is the
+  worst of the three states: it reads as a guarantee at review time and behaves
+  as an invitation at runtime.
+
+### Added
+
+- **A CA bundle and client identity for the broker connection (§8b rules 2 and
+  3).** Both entry points take an optional `tls` option carrying `caCert` (a
+  privately issued broker certificate — the common in-cluster case, and why
+  rule 2 is a MUST) and `clientCert`/`clientKey` for mutual TLS. Rule 2 was
+  previously unimplementable here: there was no way to supply a CA at all.
+
+  The certificate/key pair is validated by the same §6.1 helper the REST and
+  gRPC transports use, so half an identity is refused before dialling on every
+  transport this SDK speaks rather than once per protocol.
+
+  There is still deliberately no verification-skip option under any name
+  (rule 4). `amqplib` would accept `rejectUnauthorized` in its socket options,
+  which is why the SDK constructs that object itself from the three fields
+  above rather than forwarding a caller-supplied one.
+
+- `assertAmqpsUrl()` and `buildAmqpConnectOptions()`, exported from
+  `axiam-sdk/amqp`, so a broker URL can be validated at config-load time rather
+  than at first connect.
+
 ## [1.0.0-alpha25] - 2026-08-16
 
 ### Added

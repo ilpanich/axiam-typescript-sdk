@@ -28,6 +28,7 @@ import type { Channel, ConsumeMessage } from 'amqplib';
 import type { Sensitive } from '../../core/index.js';
 import { TelemetryDispatcher, type TelemetryHook } from '../../core/index.js';
 import { InMemoryNonceStore, type NonceStore } from '../consumer.js';
+import { buildAmqpConnectOptions, type AmqpTlsOptions } from '../transport.js';
 import {
   REACTOR_FRESHNESS_SKEW_MS,
   buildReactorReply,
@@ -456,10 +457,22 @@ function withDeadline<T>(work: T | Promise<T>, timeoutMs: number): Promise<T> {
 /** How to reach the broker and which reactor this process is (§22.1, §22.9). */
 export interface ReactorConfig {
   /**
-   * Broker URL. Must be `amqps://` for any routable host (§8b) — there is no
-   * verification-skip switch and no plaintext fallback.
+   * Broker URL. Must be `amqps://` (§8b rules 1 and 5) — there is no
+   * verification-skip switch and no plaintext fallback, and this is now
+   * *enforced* before the socket opens rather than merely stated here.
    */
   readonly amqpUrl: string;
+  /**
+   * TLS material for {@link amqpUrl} (§8b).
+   *
+   * Optional. With none supplied the broker is verified against Node's bundled
+   * roots, which is correct for a publicly-issued broker certificate. Set
+   * {@link AmqpTlsOptions.caCert} for a privately-issued one — the common case
+   * for an in-cluster broker, and why §8b rule 2 is a MUST — and
+   * `clientCert`/`clientKey` together for mutual TLS toward the broker
+   * (rule 3).
+   */
+  readonly tls?: AmqpTlsOptions;
   /** The tenant this reactor is registered in. */
   readonly tenantId: string;
   /**
@@ -566,7 +579,16 @@ export async function reactorServe(config: ReactorConfig, handler: ReactorHandle
     telemetry: config.telemetryHook ? new TelemetryDispatcher(config.telemetryHook) : undefined,
   };
 
-  const connection = await amqp.connect(config.amqpUrl);
+  // §8b: a reactor connects across a trust boundary, and its reply is an
+  // instruction to allow, deny or rewrite a token. Validated before dialling —
+  // a plaintext URL or half a client identity is a configuration fault, and
+  // discovering it as a connect-time network error tells nobody what to fix.
+  const socketOptions = buildAmqpConnectOptions(
+    config.amqpUrl,
+    config.tls,
+    'reactorServe() amqpUrl',
+  );
+  const connection = await amqp.connect(config.amqpUrl, socketOptions);
   const channel: Channel = await connection.createChannel();
 
   // NOTE: there is no assertQueue / assertExchange / bindQueue here, and there

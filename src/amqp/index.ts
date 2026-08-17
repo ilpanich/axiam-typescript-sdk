@@ -11,6 +11,10 @@ export { Sensitive } from '../core/index.js';
 export * from './hmac.js';
 export * from './messages.js';
 export * from './consumer.js';
+// §8b transport security: the amqps://-only guard and the TLS material both
+// AMQP entry points accept. Exported so a caller can validate a broker URL
+// (and fail at config-load time) without opening a connection first.
+export * from './transport.js';
 // CONTRACT.md §22 reactor runtime. The same §8 HMAC, now in BOTH directions —
 // the server signs the hook event, the reactor signs the allow/deny/mutate
 // reply — with one canonicalization difference (`hmac_signature` is serialized
