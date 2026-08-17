@@ -24,6 +24,7 @@ import amqp from 'amqplib';
 import type { Channel, ConsumeMessage } from 'amqplib';
 import type { Sensitive } from '../core/index.js';
 import { verifyPayload } from './hmac.js';
+import { buildAmqpConnectOptions, type AmqpTlsOptions } from './transport.js';
 
 /**
  * Default freshness skew for `issued_at` acceptance (NEW-4): a message is
@@ -161,6 +162,16 @@ export interface ConsumeOptions {
    * must pass the same store explicitly for dedup to take effect.
    */
   nonceStore?: NonceStore;
+  /**
+   * TLS material for the `amqps://` broker connection (CONTRACT.md §8b).
+   *
+   * Optional, and omitting it does not weaken anything: the URL must be
+   * `amqps://` either way, and with no material supplied the broker is verified
+   * against Node's bundled roots. Set {@link AmqpTlsOptions.caCert} when the
+   * broker certificate comes from a private CA — the common case for an
+   * in-cluster broker, and the reason §8b rule 2 is a MUST.
+   */
+  tls?: AmqpTlsOptions;
 }
 
 /**
@@ -285,6 +296,11 @@ export async function verifyAndDispatch(
  *
  * This function owns the full ack/nack loop; `handler` MUST NOT itself call
  * ack/nack (there is no delivery handle exposed to it).
+ *
+ * `amqpUrl` MUST be `amqps://` (CONTRACT.md §8b). It is checked before any
+ * socket is opened, so a plaintext URL fails with a message naming the rule
+ * rather than connecting and quietly putting signed-but-readable authorization
+ * requests and audit events on the wire.
  */
 export async function consume(
   amqpUrl: string,
@@ -293,7 +309,11 @@ export async function consume(
   handler: (event: Record<string, unknown>) => Promise<void>,
   options: ConsumeOptions = {},
 ): Promise<void> {
-  const connection = await amqp.connect(amqpUrl);
+  // §8b: validated BEFORE dialling. A bad URL or half a client identity is a
+  // configuration fault, and finding out at connect time turns it into a
+  // network error message that says nothing about what to fix.
+  const socketOptions = buildAmqpConnectOptions(amqpUrl, options.tls, 'consume() amqpUrl');
+  const connection = await amqp.connect(amqpUrl, socketOptions);
   const channel: Channel = await connection.createChannel();
   await channel.assertQueue(queue, { durable: true });
 

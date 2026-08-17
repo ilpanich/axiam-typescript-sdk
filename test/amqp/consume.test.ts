@@ -20,6 +20,14 @@ const { Sensitive } = await import('../../src/core/index.js');
 
 const SIGNING_KEY = Buffer.from('consume-test-key', 'utf8');
 
+// Shape-only PEM fixtures for the §8b tests below. Nothing here is parsed by a
+// TLS stack — amqplib is mocked — so these only need to satisfy the SDK's own
+// PEM-marker validation, which is exactly what is under test.
+const CA_PEM = '-----BEGIN CERTIFICATE-----\nZmFrZS1jYQ==\n-----END CERTIFICATE-----\n';
+const CLIENT_CERT_PEM =
+  '-----BEGIN CERTIFICATE-----\nZmFrZS1jbGllbnQ=\n-----END CERTIFICATE-----\n';
+const CLIENT_KEY_PEM = '-----BEGIN PRIVATE KEY-----\nZmFrZS1rZXk=\n-----END PRIVATE KEY-----\n';
+
 interface FakeChannel {
   assertQueue: ReturnType<typeof vi.fn>;
   consume: ReturnType<typeof vi.fn>;
@@ -86,9 +94,9 @@ afterEach(() => {
 describe('consume() wiring', () => {
   it('connects, declares the queue durable, and registers a consumer', async () => {
     const handler = vi.fn().mockResolvedValue(undefined);
-    await consume('amqp://broker.test', 'axiam.authz.request', new Sensitive(SIGNING_KEY), handler);
+    await consume('amqps://broker.test', 'axiam.authz.request', new Sensitive(SIGNING_KEY), handler);
 
-    expect(connectMock).toHaveBeenCalledWith('amqp://broker.test');
+    expect(connectMock).toHaveBeenCalledWith('amqps://broker.test', undefined);
     expect(connection.createChannel).toHaveBeenCalledOnce();
     expect(channel.assertQueue).toHaveBeenCalledWith('axiam.authz.request', { durable: true });
     expect(channel.consume).toHaveBeenCalledOnce();
@@ -100,7 +108,7 @@ describe('consume() wiring', () => {
       handled.push(event);
     });
 
-    await consume('amqp://broker.test', 'q', new Sensitive(SIGNING_KEY), handler);
+    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler);
     await channel.deliver(signedDelivery());
 
     expect(handler).toHaveBeenCalledOnce();
@@ -113,7 +121,7 @@ describe('consume() wiring', () => {
 
   it('ignores a null delivery (consumer cancellation) without ack/nack', async () => {
     const handler = vi.fn();
-    await consume('amqp://broker.test', 'q', new Sensitive(SIGNING_KEY), handler);
+    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler);
     await channel.deliver(null);
 
     expect(handler).not.toHaveBeenCalled();
@@ -123,7 +131,7 @@ describe('consume() wiring', () => {
 
   it('shares one nonce store across deliveries so a replayed nonce is nacked', async () => {
     const handler = vi.fn().mockResolvedValue(undefined);
-    await consume('amqp://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, {
+    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, {
       nonceStore: new InMemoryNonceStore(),
     });
 
@@ -133,5 +141,84 @@ describe('consume() wiring', () => {
 
     expect(channel.ack).toHaveBeenCalledOnce();
     expect(channel.nack).toHaveBeenCalledOnce();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §8b — transport security
+// ---------------------------------------------------------------------------
+//
+// These assert on `connectMock` NOT having been called, which is the whole
+// point: §8b rule 5 forbids falling back to plaintext, and the way to be sure
+// there is no fallback is to prove no socket was opened at all. A test that
+// only checked the thrown message would still pass if the implementation
+// dialled first and threw afterwards.
+
+describe('consume() transport security (§8b)', () => {
+  it('refuses a plaintext amqp:// URL before opening a socket', async () => {
+    const handler = vi.fn();
+    await expect(
+      consume('amqp://broker.test:5672', 'q', new Sensitive(SIGNING_KEY), handler),
+    ).rejects.toThrow(/amqps:\/\//);
+    expect(connectMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses every other scheme too, and is not fooled by an amqps prefix', async () => {
+    const handler = vi.fn();
+    for (const url of ['http://broker.test', 'amqpsomething://broker.test', 'broker.test']) {
+      await expect(
+        consume(url, 'q', new Sensitive(SIGNING_KEY), handler),
+      ).rejects.toThrow(/amqps:\/\//);
+    }
+    expect(connectMock).not.toHaveBeenCalled();
+  });
+
+  it('accepts AMQPS:// case-insensitively — an operator who wrote it meant TLS', async () => {
+    const handler = vi.fn();
+    await consume('AMQPS://broker.test', 'q', new Sensitive(SIGNING_KEY), handler);
+    expect(connectMock).toHaveBeenCalledOnce();
+  });
+
+  it('passes a supplied CA bundle through as tls socket options (rule 2)', async () => {
+    const handler = vi.fn();
+    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, {
+      tls: { caCert: CA_PEM },
+    });
+    expect(connectMock).toHaveBeenCalledWith('amqps://broker.test', { ca: CA_PEM });
+  });
+
+  it('never sends rejectUnauthorized — there is no verification-skip path (rule 4)', async () => {
+    const handler = vi.fn();
+    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, {
+      tls: { caCert: CA_PEM, clientCert: CLIENT_CERT_PEM, clientKey: CLIENT_KEY_PEM },
+    });
+    const [, socketOptions] = connectMock.mock.calls[0];
+    expect(socketOptions).not.toHaveProperty('rejectUnauthorized');
+    expect(Object.keys(socketOptions).sort()).toEqual(['ca', 'cert', 'key']);
+  });
+
+  it('rejects half a client identity before dialling (rule 3)', async () => {
+    const handler = vi.fn();
+    await expect(
+      consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, {
+        tls: { clientCert: CLIENT_CERT_PEM },
+      }),
+    ).rejects.toThrow(/together/);
+    await expect(
+      consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, {
+        tls: { clientKey: CLIENT_KEY_PEM },
+      }),
+    ).rejects.toThrow(/together/);
+    expect(connectMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a caCert that is not PEM', async () => {
+    const handler = vi.fn();
+    await expect(
+      consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, {
+        tls: { caCert: '/etc/ssl/certs/broker-ca.pem' },
+      }),
+    ).rejects.toThrow(/PEM/);
+    expect(connectMock).not.toHaveBeenCalled();
   });
 });

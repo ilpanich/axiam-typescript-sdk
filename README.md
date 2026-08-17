@@ -221,13 +221,42 @@ import { consume, Sensitive } from 'axiam-sdk/amqp';
 
 const signingKey = new Sensitive(Buffer.from(process.env.AXIAM_AMQP_SIGNING_KEY ?? '', 'hex'));
 
-await consume('amqp://localhost:5672', 'axiam.audit.events', signingKey, async (event) => {
-  // Only a verified event ever reaches this closure — HMAC-SHA256
-  // signature checked and stripped by the SDK before your handler runs
-  // (CONTRACT.md §8). Verification failures are nacked-without-requeue.
-  console.log('verified audit event:', event);
-});
+await consume(
+  // §8b: amqps:// only, enforced — a plaintext URL is refused before a socket
+  // opens, and there is no fallback for it to take.
+  'amqps://localhost:5671',
+  'axiam.audit.events',
+  signingKey,
+  async (event) => {
+    // Only a verified event ever reaches this closure — HMAC-SHA256
+    // signature checked and stripped by the SDK before your handler runs
+    // (CONTRACT.md §8). Verification failures are nacked-without-requeue.
+    console.log('verified audit event:', event);
+  },
+  // Optional. The PEM bundle for a privately issued broker certificate — the
+  // common in-cluster case (§8b rule 2), and the only TLS knob this SDK has.
+  { tls: { caCert: readFileSync('/etc/axiam/broker-ca.pem', 'utf8') } },
+);
 ```
+
+#### Transport security (§8b)
+
+`consume()` and `reactorServe()` both require `amqps://` and enforce it before
+any socket is opened. HMAC signing (§8) gives authenticity and replay
+protection across broker hops; TLS gives confidentiality. Both are required and
+neither substitutes for the other — a signed `AuthzRequest` still names its
+subject, resource and action in cleartext on an unencrypted wire.
+
+| Option | Meaning |
+|---|---|
+| `tls.caCert` | PEM bundle for a privately issued broker certificate. Omit for a publicly issued one (Node's bundled roots verify it). |
+| `tls.clientCert` + `tls.clientKey` | Mutual TLS toward the broker. All-or-nothing: half an identity is rejected before dialling. |
+
+There is deliberately no verification-skip option, under any name (§8b rule 4).
+A switch like that appears in a dev compose file, works, and travels unchanged
+into production, where it turns TLS into an expensive no-op against precisely
+the attacker TLS exists to stop. `caCert` covers the legitimate reason people
+reach for one.
 
 ### Node — reactors, AMQP extension actors (`axiam-sdk/amqp`, CONTRACT.md §22)
 

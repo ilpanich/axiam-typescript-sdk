@@ -373,3 +373,101 @@ describe('reactorServe', () => {
     await expect(served).resolves.toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// §8b — transport security, as required by §22.2's closing paragraph
+// ---------------------------------------------------------------------------
+//
+// "Reactors connect across a trust boundary: `amqps://`, a supplied CA bundle,
+// no verification-skip switch, no plaintext fallback."
+//
+// Each refusal asserts that `connectMock` was never called. That is the
+// substance of rule 5: proving no socket was opened is proving there is no
+// fallback, where checking only the error message would still pass an
+// implementation that dialled first and complained second.
+
+describe('reactorServe transport security (§8b)', () => {
+  const CA_PEM = '-----BEGIN CERTIFICATE-----\nZmFrZS1jYQ==\n-----END CERTIFICATE-----\n';
+  const CLIENT_CERT_PEM =
+    '-----BEGIN CERTIFICATE-----\nZmFrZS1jbGllbnQ=\n-----END CERTIFICATE-----\n';
+  const CLIENT_KEY_PEM =
+    '-----BEGIN PRIVATE KEY-----\nZmFrZS1rZXk=\n-----END PRIVATE KEY-----\n';
+
+  // This describe needs its own fixture: the one above lives inside its own
+  // `describe`, so nothing here would reset `connectMock` between cases and the
+  // "was never called" assertions would see the previous test's call.
+  beforeEach(() => {
+    connectMock.mockReset();
+    connectMock.mockResolvedValue(new FakeConnection());
+  });
+
+  /**
+   * Start a reactor and stop it again immediately.
+   *
+   * The abort is what makes the resolving cases terminate — `reactorServe`
+   * otherwise runs until the connection closes or the signal fires, and a test
+   * asserting on the connect arguments has no interest in either.
+   */
+  function serve(amqpUrl: string, tls?: Record<string, string>) {
+    const controller = new AbortController();
+    const served = reactorServe(
+      {
+        amqpUrl,
+        tenantId: TENANT,
+        reactorId: REACTOR_ID,
+        signingKey: new Sensitive(SUBKEY),
+        signal: controller.signal,
+        ...(tls ? { tls } : {}),
+      },
+      () => allow(),
+    );
+    // Abort on the next tick so a connection that DID open still gets torn
+    // down; a rejected promise is unaffected by it.
+    void Promise.resolve().then(() => controller.abort());
+    return served;
+  }
+
+  it('refuses a plaintext amqp:// broker URL before opening a socket', async () => {
+    await expect(serve('amqp://broker.example.com:5672')).rejects.toThrow(/amqps:\/\//);
+    expect(connectMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses every other scheme, and an amqps-prefixed impostor', async () => {
+    for (const url of [
+      'http://broker.example.com',
+      'amqpsomething://broker.example.com:5671',
+      'broker.example.com:5671',
+      '',
+    ]) {
+      await expect(serve(url)).rejects.toThrow(/amqps:\/\//);
+    }
+    expect(connectMock).not.toHaveBeenCalled();
+  });
+
+  it('passes a private-CA bundle to the TLS socket (rule 2)', async () => {
+    await serve('amqps://broker.example.com:5671', { caCert: CA_PEM });
+    expect(connectMock).toHaveBeenCalledWith('amqps://broker.example.com:5671', { ca: CA_PEM });
+  });
+
+  it('carries a client identity for mutual TLS, and nothing else (rules 3 and 4)', async () => {
+    await serve('amqps://broker.example.com:5671', {
+      caCert: CA_PEM,
+      clientCert: CLIENT_CERT_PEM,
+      clientKey: CLIENT_KEY_PEM,
+    });
+    const [, socketOptions] = connectMock.mock.calls[0];
+    // Rule 4 is an assertion about what is ABSENT: no key here may weaken
+    // verification, under this or any other name.
+    expect(Object.keys(socketOptions).sort()).toEqual(['ca', 'cert', 'key']);
+  });
+
+  it('rejects half a client identity before dialling (rule 3)', async () => {
+    await expect(
+      serve('amqps://broker.example.com:5671', { clientCert: CLIENT_CERT_PEM }),
+    ).rejects.toThrow(/together/);
+    await expect(
+      serve('amqps://broker.example.com:5671', { clientKey: CLIENT_KEY_PEM }),
+    ).rejects.toThrow(/together/);
+    expect(connectMock).not.toHaveBeenCalled();
+  });
+});
