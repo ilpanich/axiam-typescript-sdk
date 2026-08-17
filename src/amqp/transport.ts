@@ -42,15 +42,21 @@ const PEM_CERT_MARKER = '-----BEGIN CERTIFICATE-----';
  * two cases that store cannot serve — a privately-issued broker certificate,
  * and mutual TLS toward the broker.
  *
- * # There is deliberately no `rejectUnauthorized: false`
+ * # There is deliberately no verification-skip option
  *
- * Not as an omission to be filled in later. §8b rule 4 forbids surfacing a
- * verification-skip option under any name, and the reasoning is that such a
- * switch is the single most reliably misused option in TLS: it appears in a
- * dev compose file, it works, and it travels unchanged into production, where
- * it turns TLS into an expensive no-op against precisely the attacker TLS
- * exists to stop. {@link caCert} covers the legitimate reason people reach for
- * it (rule 2) without covering the rest.
+ * Not as an omission to be filled in later. §8b rule 4 forbids surfacing one
+ * under any name, and the reasoning is that such a switch is the single most
+ * reliably misused option in TLS: it appears in a dev compose file, it works,
+ * and it travels unchanged into production, where it turns TLS into an
+ * expensive no-op against precisely the attacker TLS exists to stop.
+ * {@link caCert} covers the legitimate reason people reach for it (rule 2)
+ * without covering the rest.
+ *
+ * This paragraph names no concrete bypass flag, and that is not squeamishness:
+ * CI greps `src/` for the literal disabling forms and fails the build on a hit.
+ * A comment explaining why the SDK does not do the thing would trip the same
+ * grep as code doing it — the check cannot tell prose from an assignment — so
+ * the prose stays abstract and the check stays blunt. Both are better that way.
  *
  * `amqplib` would happily accept `rejectUnauthorized` in its socket options,
  * which is exactly why {@link buildAmqpConnectOptions} constructs that object
