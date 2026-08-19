@@ -64,12 +64,26 @@ type SrpVerifyWire = (LoginSuccessResponseWire | MfaRequiredResponseWire) & {
 
 /** The verifier and its parameters, for any endpoint that sets a password. */
 export interface SrpEnrollment {
+  /** RFC 5054 group name the verifier lives in, e.g. `rfc5054_4096`. */
   group: string;
+  /** KDF used to derive `x`: `argon2id` or `pbkdf2_sha256`. */
   kdf: string;
+  /** Argon2id memory cost in KiB; absent for PBKDF2. */
   memory_kib?: number;
+  /** KDF iteration (PBKDF2) or time (Argon2id) cost. */
   iterations: number;
+  /** Argon2id lane count; absent for PBKDF2. */
   parallelism?: number;
+  /**
+   * The 32-byte enrolment salt, lowercase hex. Freshly generated per enrolment
+   * (§23.3 rule 11): a reused salt would make every verifier in a tenant
+   * attackable with one precomputation.
+   */
   salt: string;
+  /**
+   * `v = g^x mod N`, lowercase hex. The only password-derived value the server
+   * ever receives, and computationally infeasible to invert.
+   */
   verifier: string;
 }
 
@@ -80,12 +94,17 @@ export interface SrpEnrollmentOptions {
    * hands back. Passing an email produces a verifier no login can ever satisfy.
    */
   identity: string;
+  /** The plaintext password being set. It never leaves this process. */
   password: string;
   /** From the tenant's policy (`GET /api/v1/auth/me`, or the reset context). */
   group: string;
+  /** The KDF the tenant enrols under: `argon2id` or `pbkdf2_sha256`. */
   kdf: string;
+  /** KDF cost; defaults to AXIAM's own for the chosen KDF when omitted. */
   iterations?: number;
+  /** Argon2id memory cost in KiB; ignored for PBKDF2. */
   memoryKib?: number;
+  /** Argon2id lane count; ignored for PBKDF2. */
   parallelism?: number;
 }
 
