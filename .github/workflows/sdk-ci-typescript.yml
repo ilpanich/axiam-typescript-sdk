@@ -152,6 +152,12 @@ jobs:
     # Manual-on-tag, side-effecting job: only runs when a maintainer pushes a
     # vX.Y.Z tag. It is never triggered by a PR, so NPM_TOKEN is never exposed
     # to PR-triggered jobs (T-17-26).
+    # [TRUSTED PUBLISHING] The npm trusted-publisher configuration for this
+    # package points at THIS workflow. If that configuration names a GitHub
+    # environment, this job must declare the same one or the OIDC claim will not
+    # match and the publish fails with an opaque authentication error. Uncomment
+    # and set it to whatever was configured npm-side.
+    # environment: npm-publish
     permissions:
       contents: read
       id-token: write   # required for npm provenance (OIDC), D-21
@@ -162,6 +168,13 @@ jobs:
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
+
+      # Trusted Publishing needs npm >= 11.5.1, and Node 22 ships npm 10.x —
+      # which does not know about it at all and would silently fall back to
+      # looking for NODE_AUTH_TOKEN. Without this step, enabling Trusted
+      # Publishing appears to do nothing.
+      - name: Upgrade npm (Trusted Publishing needs >= 11.5.1)
+        run: npm install -g npm@latest && npm --version
 
       - name: Install buf
         uses: bufbuild/buf-action@8c6a16e16f12ba20b6470afa9c2ba9b5ba8c97c3  # v1.5.0
@@ -195,6 +208,11 @@ jobs:
         run: npm publish --dry-run
 
       - name: Publish to npm with provenance
+        # [TRUSTED PUBLISHING] Delete this `env:` block once Trusted Publishing
+        # is live. A token present takes precedence over OIDC, so leaving it
+        # would mean Trusted Publishing is configured and never used — the
+        # publish would keep working, from the token, and the configuration
+        # would be decorative.
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public --provenance

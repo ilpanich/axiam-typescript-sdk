@@ -17,7 +17,7 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19, §20, §21, §22 (including §6.1 mTLS
+This SDK conforms to CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19, §20, §21, §22, §23 (including §6.1 mTLS
 client certificates, the §10.1 minimum local-verification set, the §12 OIDC/SSO
 relying-party helpers, and the §13 `verifyWebhook` signature verifier).
 
@@ -706,6 +706,79 @@ try {
 strings.
 
 See `examples/express-oidc-login.ts` for a complete, runnable example.
+
+## Secure Remote Password (CONTRACT.md §23)
+
+`loginSrp` proves the password without sending it. What crosses the wire is `A`
+and a proof, neither of which is useful to anyone who does not already hold the
+account's verifier.
+
+```ts
+// Same LoginResult as login(), including the mfa_required branch.
+const result = await client.loginSrp('alice', 'correct horse battery staple');
+```
+
+Fall back to `login()` when the tenant does not offer SRP. That case is a
+`NetworkError` naming SRP, deliberately **not** an `AuthError`, so it cannot be
+mistaken for a bad password:
+
+```ts
+let result;
+try {
+  result = await client.loginSrp(user, password);
+} catch (err) {
+  if (err instanceof NetworkError && err.message.includes('does not offer Secure Remote Password')) {
+    result = await client.login(user, password);
+  } else {
+    throw err;
+  }
+}
+```
+
+### Enrolment
+
+The server cannot compute a verifier — it never sees the plaintext — so one has
+to be sent with any request that sets a password:
+
+```ts
+const srp = await client.srpEnrollment({
+  identity: 'alice',            // the USERNAME — see below
+  password: 'new password',
+  group: 'rfc5054_4096',
+  kdf: 'argon2id',
+});
+// send `srp` as the request's `srp` field
+```
+
+The tenant's group and KDF come from `GET /api/v1/auth/me` for an authenticated
+caller, or `GET /api/v1/auth/reset/context` for a reset-token holder.
+
+### Three things that will bite you
+
+**The identity is the username, always.** `x` is derived over
+`username ":" password`. A user may sign in with their email, but only the
+username is inside the KDF — which is why the challenge response carries an
+`identity` field and why `loginSrp` uses that rather than what was typed.
+Enrolling against an email produces a verifier no login can satisfy.
+
+**`loginSrp` is slow, on purpose.** It runs the tenant's KDF: Argon2id at
+19 MiB by default, tens to hundreds of milliseconds. That cost is what makes a
+stolen verifier expensive to attack offline. In a browser, consider a Web
+Worker.
+
+**What it protects, and what it does not.** A TLS-terminating proxy, an
+accidentally verbose request log, or a heap dump on the server can no longer
+capture a plaintext password, because the server never has one. It does **not**
+protect against a compromised AXIAM server, and in a browser it does not protect
+against AXIAM serving malicious JavaScript.
+
+### Runtime requirements
+
+WebCrypto (`globalThis.crypto.subtle`) — present in Node 18+, Deno, Bun and
+every browser — plus `hash-wasm` for Argon2id, which is a dependency rather than
+optional because §23.3 rule 4 makes both KDFs mandatory and `argon2id` is what
+AXIAM's default policy asks for. It is imported lazily, so a consumer who never
+calls SRP does not pay the wasm payload at module-load time.
 
 ## Device authorization grant (`axiam-sdk/node`, CONTRACT.md §14)
 

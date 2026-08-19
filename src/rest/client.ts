@@ -15,6 +15,7 @@ import type { RetryOptions } from './retry.js';
 import { createSession, SharedSession } from './session.js';
 import { installInterceptors } from './interceptors.js';
 import * as authMethods from './auth.js';
+import * as srpMethods from './srp.js';
 import * as authzMethods from './authz.js';
 import type { AccessCheck, AccessDecision, LoginResult } from './types.js';
 
@@ -143,6 +144,31 @@ export class AxiamClient {
   /** `POST /api/v1/auth/login` (§1, D-18). */
   login(email: string, password: string): Promise<LoginResult> {
     return authMethods.login(this, email, password);
+  }
+
+  /**
+   * SRP-6a login (§23) — the password never leaves this process.
+   *
+   * Returns the same `LoginResult` as {@link login}, including the
+   * `mfa_required` branch, so one result handler serves both. Rejects with a
+   * `NetworkError` naming SRP when the tenant has it disabled, so a caller can
+   * fall back to {@link login} rather than mistaking it for a bad password.
+   */
+  loginSrp(usernameOrEmail: string, password: string): Promise<LoginResult> {
+    return srpMethods.loginSrp(this, usernameOrEmail, password);
+  }
+
+  /**
+   * Compute an SRP verifier to send with any request that sets a password
+   * (§23). The server cannot derive one — it never sees the plaintext.
+   */
+  srpEnrollment(options: srpMethods.SrpEnrollmentOptions): Promise<srpMethods.SrpEnrollment> {
+    return srpMethods.srpEnrollment(options);
+  }
+
+  /** Whether this runtime can perform SRP (§23.1). Always true here. */
+  srpAvailable(): boolean {
+    return srpMethods.srpAvailable();
   }
 
   /** `POST /api/v1/auth/mfa/verify` (§1, D-18). Completes the two-phase flow started by login(). */
