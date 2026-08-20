@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The protocol is no longer implemented here.** `core/srp.ts` — 419 lines of
   modular exponentiation, `PAD()` and transcript hashing — is replaced by a
   loader around `@axiam/opaque-wasm`. §23.1 forbids an SDK from writing its own.
+- Re-vendor `openapi.json` at **1.0.0-alpha32**, matching the server. The
+  content was already byte-identical in every path and schema; only
+  `info.version` differed, which is what the cross-repo artifact-drift gate
+  reports as `STALE`.
 
 ### Added
 
