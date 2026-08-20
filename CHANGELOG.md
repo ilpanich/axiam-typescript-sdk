@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **BREAKING: `loginSrp` becomes `loginOpaque`** — CONTRACT.md §23 is now
+  OPAQUE (RFC 9807), and SRP-6a is removed from AXIAM entirely.
+  - `loginSrp` → `loginOpaque`, `srpEnrollment` → `opaqueEnrollment`,
+    `srpAvailable` → `opaqueAvailable`.
+  - `opaqueEnrollment` takes only a password and is **async**: it performs a
+    `register/start` round trip, because OPAQUE's envelope is sealed under the
+    server's oblivious PRF and there is no offline computation that produces a
+    valid record. The SRP version took four arguments including the account's
+    canonical username, and passing an email produced a verifier no login could
+    satisfy — a mistake that is no longer expressible.
+  - `opaqueAvailable` is **async** and can genuinely return `false`.
+  - The enrolment object has two fields where `SrpEnrollment` had seven.
+- **The protocol is no longer implemented here.** `core/srp.ts` — 419 lines of
+  modular exponentiation, `PAD()` and transcript hashing — is replaced by a
+  loader around `@axiam/opaque-wasm`. §23.1 forbids an SDK from writing its own.
+
+### Added
+
+- `@axiam/opaque-wasm` as an **optional peer dependency**. An installation that
+  never calls the OPAQUE path is not made to carry a WebAssembly module; when it
+  is absent, `opaqueAvailable()` resolves to `false` and `loginOpaque` rejects
+  with a `NetworkError`, so the documented fallback to `login()` works unchanged.
+- `OpaqueUnavailableError`, a `NetworkError` subclass, so a caller can tell "not
+  installed" from "the tenant has it disabled" while a caller that only catches
+  `NetworkError` needs no special case.
+
+### Removed
+
+- The server-proof check. RFC 9807's AKE authenticates the server during the
+  handshake, so opening `KE2` *is* the proof it holds the record. §23.3 rule 6
+  had to mandate an `M2` comparison in capitals because skipping it kept only
+  half the protocol; there is now nothing to skip.
+- The group-restart loop. SRP had to guess a group before the server named one
+  and re-run the exchange if it guessed wrong; `KE1` does not depend on the KSF,
+  so a login is always one round trip.
+- `hash-wasm` is no longer needed for the login path.
+- `srp-test-vectors.json`, replaced by the smaller `opaque-test-vectors.json` —
+  see CONTRACT §23.7 for why the fixture shrank rather than being ported.
+
+### Fixed
+
+- `OpaqueUnavailableError` re-sets its prototype after `super()`. `NetworkError`
+  pins its own to survive ES5 transpilation, which silently breaks `instanceof`
+  for anything extending it — the subclass would have been indistinguishable
+  from its parent, defeating the distinction it exists to draw.
+
 ## [1.0.0-alpha31] - 2026-08-20
 
 ### Fixed

@@ -7,10 +7,10 @@
 
 export { AxiamClient } from './client.js';
 export { SharedSession } from './session.js';
-// §23 Secure Remote Password. `loginSrp` is a method on AxiamClient; these are
+// §23 OPAQUE (RFC 9807). `loginOpaque` is a method on AxiamClient; these are
 // the standalone pieces an application needs for enrolment.
-export { srpEnrollment, srpAvailable } from './srp.js';
-export type { SrpEnrollment, SrpEnrollmentOptions } from './srp.js';
+export { opaqueEnrollment, opaqueAvailable, OpaqueUnavailableError } from './opaque.js';
+export type { OpaqueEnrollment } from './opaque.js';
 export { SKIP_REFRESH } from './interceptors.js';
 export { withRetry, backoffMs, delayMs, MAX_ATTEMPTS, BASE_DELAY_MS, MAX_DELAY_MS } from './retry.js';
 export type { RetryOptions } from './retry.js';
