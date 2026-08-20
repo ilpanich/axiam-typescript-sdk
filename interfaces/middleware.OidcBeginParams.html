@@ -16,7 +16,7 @@
 </div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">OidcBeginParams</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#configuration">configuration</a><span class="tsd-signature-symbol">:</span> <a href="middleware.OidcConfiguration.html" class="tsd-signature-type tsd-kind-interface">OidcConfiguration</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#extraparams">extraParams</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#redirecturi">redirectUri</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#scope">scope</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/dece0bb208da26ad8f3f45e482aa4f7e02981980/src/node/oidcTypes.ts#L123">src/node/oidcTypes.ts:123</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/03ac69663396068aa552a86962ec7b5c325f5a87/src/node/oidcTypes.ts#L123">src/node/oidcTypes.ts:123</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -38,7 +38,7 @@
 <div class="tsd-comment tsd-typography"><p>The discovery document, as returned by <code>oidcDiscover</code>. <code>authorization_endpoint</code> is taken from it and never hardcoded (§12.1 rule 5).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/dece0bb208da26ad8f3f45e482aa4f7e02981980/src/node/oidcTypes.ts#L125">src/node/oidcTypes.ts:125</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/03ac69663396068aa552a86962ec7b5c325f5a87/src/node/oidcTypes.ts#L125">src/node/oidcTypes.ts:125</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="extraparams"><code class="tsd-tag">Optional</code><span>extra<wbr/>Params</span><a href="#extraparams" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">extraParams</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span></div>
@@ -48,21 +48,21 @@ the SDK from adding any of its own beyond the mandated eight, so
 attempting to override one of those eight throws.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/dece0bb208da26ad8f3f45e482aa4f7e02981980/src/node/oidcTypes.ts#L136">src/node/oidcTypes.ts:136</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/03ac69663396068aa552a86962ec7b5c325f5a87/src/node/oidcTypes.ts#L136">src/node/oidcTypes.ts:136</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="redirecturi"><span>redirect<wbr/>Uri</span><a href="#redirecturi" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">redirectUri</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>The relying party's redirect URI, echoed back into <code>oidcExchange</code> unchanged.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/dece0bb208da26ad8f3f45e482aa4f7e02981980/src/node/oidcTypes.ts#L127">src/node/oidcTypes.ts:127</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/03ac69663396068aa552a86962ec7b5c325f5a87/src/node/oidcTypes.ts#L127">src/node/oidcTypes.ts:127</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="scope"><code class="tsd-tag">Optional</code><span>scope</span><a href="#scope" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">scope</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></div>
 <div class="tsd-comment tsd-typography"><p>Requested scope, as a string or an array. <code>openid</code> is added automatically when absent (§12.1 rule 4). Defaults to <code>openid</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/dece0bb208da26ad8f3f45e482aa4f7e02981980/src/node/oidcTypes.ts#L129">src/node/oidcTypes.ts:129</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/03ac69663396068aa552a86962ec7b5c325f5a87/src/node/oidcTypes.ts#L129">src/node/oidcTypes.ts:129</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
