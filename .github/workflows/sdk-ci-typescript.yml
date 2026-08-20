@@ -189,6 +189,47 @@ jobs:
       - name: Upgrade npm (Trusted Publishing needs >= 11.5.1)
         run: npm install -g npm@latest && npm --version
 
+      # Which credential will npm ACTUALLY use? Answer it here, in two seconds,
+      # instead of after `npm ci`, codegen and a full build — and answer it
+      # without printing the secret.
+      #
+      # "Trusted Publishing is configured" and "Trusted Publishing is being
+      # used" are different claims, and nothing else in this job distinguishes
+      # them. setup-node writes `_authToken` into the job's .npmrc from
+      # NODE_AUTH_TOKEN, and npm prefers an explicit token over OIDC — so while
+      # that secret is set, TP never engages however carefully it was set up on
+      # npmjs.com. A publish that "works" then proves nothing about TP, and a
+      # publish that fails after the token is revoked looks like an npm outage.
+      - name: Report which npm credential this job will use
+        env:
+          NPM_TOKEN_PRESENT: ${{ secrets.NPM_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          echo "npm version:       $(npm --version)"
+          echo "package:           $(node -p "require('./package.json').name")"
+          echo "job environment:   ${GITHUB_JOB} / production"
+          if [ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "OIDC token:        available"
+          else
+            echo "OIDC token:        NOT available (id-token: write missing?)"
+          fi
+          echo "NPM_TOKEN secret:  ${NPM_TOKEN_PRESENT}"
+          if [ "${NPM_TOKEN_PRESENT}" = "true" ]; then
+            echo "==> This job will authenticate with the NPM_TOKEN secret."
+            echo "    Trusted Publishing will NOT engage while that secret is set."
+            echo "    To actually switch to TP, delete the NODE_AUTH_TOKEN env block"
+            echo "    on the publish step below (marked [TRUSTED PUBLISHING] 2/3)."
+          elif [ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "==> No NPM_TOKEN secret: this job will authenticate via Trusted"
+            echo "    Publishing (OIDC). npmjs.com must have a trusted publisher for"
+            echo "    this package naming this repository, this workflow file, and"
+            echo "    the 'production' environment — the OIDC claim carries all three"
+            echo "    and a mismatch fails with an opaque authentication error."
+          else
+            echo "::error::No NPM_TOKEN secret and no OIDC token — this publish cannot authenticate."
+            exit 1
+          fi
+
       - name: Install buf
         uses: bufbuild/buf-action@8c6a16e16f12ba20b6470afa9c2ba9b5ba8c97c3  # v1.5.0
         with:
