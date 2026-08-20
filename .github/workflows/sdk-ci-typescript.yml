@@ -120,7 +120,20 @@ jobs:
       # without side effects. The publish job re-runs this same command
       # before the real `npm publish`.
       - name: Dry-run publish gate (SC#5)
-        run: npm publish --dry-run
+        run: |
+          set -euo pipefail
+          # Same --tag rule as the publish job below: this gate runs on
+          # whatever npm the runner image ships, so it passes today only
+          # because that is still 10.x. Derive the tag here too rather than
+          # wait for a runner bump to break the gate.
+          pkg_version="$(node -p "require('./package.json').version")"
+          case "${pkg_version}" in
+            *-*) pre="${pkg_version#*-}"; pre="${pre%%.*}"
+                 dist_tag="$(printf '%s' "${pre}" | sed 's/[0-9]*$//')"
+                 [ -n "${dist_tag}" ] || dist_tag="next" ;;
+            *)   dist_tag="latest" ;;
+          esac
+          npm publish --dry-run --tag "${dist_tag}"
 
   # Publishing to npm is IRREVERSIBLE — a version number can never be reclaimed.
   # Git tags are NOT branch-scoped, so without this gate a release tag cut on a
@@ -198,6 +211,28 @@ jobs:
           fi
           echo "OK: tag ${GITHUB_REF_NAME} matches package.json version ${pkg_version}."
 
+          # npm >= 11 refuses to publish a prerelease without an explicit
+          # --tag, and it is right to: without one the release would land on
+          # `latest`, so a plain `npm install @axiam/sdk` would hand every
+          # consumer an alpha. Derive the dist-tag from the version rather
+          # than hard-coding it, so the same workflow serves 1.0.0-alpha30
+          # (alpha), 1.0.0-rc.1 (rc) and 1.0.0 (latest) with no edit.
+          case "${tag_version}" in
+            *-*)
+              pre="${tag_version#*-}"     # 1.0.0-alpha30 -> alpha30, 1.0.0-rc.1 -> rc.1
+              pre="${pre%%.*}"            # rc.1 -> rc
+              dist_tag="$(printf '%s' "${pre}" | sed 's/[0-9]*$//')"   # alpha30 -> alpha
+              # A purely numeric prerelease (1.0.0-30) leaves nothing behind;
+              # `next` keeps it off `latest`, which is the property that matters.
+              [ -n "${dist_tag}" ] || dist_tag="next"
+              ;;
+            *)
+              dist_tag="latest"
+              ;;
+          esac
+          echo "NPM_DIST_TAG=${dist_tag}" >> "${GITHUB_ENV}"
+          echo "npm dist-tag: ${dist_tag}"
+
       # D-20: regenerate-and-bundle the compiled ts-proto stubs before
       # publishing so npm consumers (who cannot run buf) get a
       # self-contained package.
@@ -205,7 +240,7 @@ jobs:
         run: npm run generate && npm run build
 
       - name: Verify package before publish (SC#5)
-        run: npm publish --dry-run
+        run: npm publish --dry-run --tag "${NPM_DIST_TAG}"
 
       - name: Publish to npm with provenance
         # [TRUSTED PUBLISHING] Delete this `env:` block once Trusted Publishing
@@ -215,4 +250,4 @@ jobs:
         # would be decorative.
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public --provenance
+        run: npm publish --access public --provenance --tag "${NPM_DIST_TAG}"
