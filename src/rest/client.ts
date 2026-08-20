@@ -15,7 +15,7 @@ import type { RetryOptions } from './retry.js';
 import { createSession, SharedSession } from './session.js';
 import { installInterceptors } from './interceptors.js';
 import * as authMethods from './auth.js';
-import * as srpMethods from './srp.js';
+import * as opaqueMethods from './opaque.js';
 import * as authzMethods from './authz.js';
 import type { AccessCheck, AccessDecision, LoginResult } from './types.js';
 
@@ -147,28 +147,43 @@ export class AxiamClient {
   }
 
   /**
-   * SRP-6a login (§23) — the password never leaves this process.
+   * OPAQUE login (§23) — the password never leaves this process.
    *
    * Returns the same `LoginResult` as {@link login}, including the
    * `mfa_required` branch, so one result handler serves both. Rejects with a
-   * `NetworkError` naming SRP when the tenant has it disabled, so a caller can
-   * fall back to {@link login} rather than mistaking it for a bad password.
+   * `NetworkError` naming OPAQUE when the tenant has it disabled, so a caller
+   * can fall back to {@link login} rather than mistaking it for a bad password.
+   *
+   * **Only that case may fall back.** Any other rejection is a failed login,
+   * and retrying it over {@link login} would hand the plaintext to a server
+   * that just failed to prove it holds the record.
    */
-  loginSrp(usernameOrEmail: string, password: string): Promise<LoginResult> {
-    return srpMethods.loginSrp(this, usernameOrEmail, password);
+  loginOpaque(usernameOrEmail: string, password: string): Promise<LoginResult> {
+    return opaqueMethods.loginOpaque(this, usernameOrEmail, password);
   }
 
   /**
-   * Compute an SRP verifier to send with any request that sets a password
-   * (§23). The server cannot derive one — it never sees the plaintext.
+   * Build an OPAQUE registration record to send with any request that sets a
+   * password (§23). The server cannot build one — it never sees the plaintext.
+   *
+   * Asynchronous because it performs a `register/start` round trip: the
+   * envelope is sealed under the server's oblivious PRF, so unlike the SRP
+   * verifier this replaces there is no offline computation that produces a
+   * valid record.
    */
-  srpEnrollment(options: srpMethods.SrpEnrollmentOptions): Promise<srpMethods.SrpEnrollment> {
-    return srpMethods.srpEnrollment(options);
+  opaqueEnrollment(password: string): Promise<opaqueMethods.OpaqueEnrollment> {
+    return opaqueMethods.opaqueEnrollment(this, password);
   }
 
-  /** Whether this runtime can perform SRP (§23.1). Always true here. */
-  srpAvailable(): boolean {
-    return srpMethods.srpAvailable();
+  /**
+   * Whether this installation can perform OPAQUE (§23.2).
+   *
+   * Asynchronous, and genuinely able to answer `false`: `@axiam/opaque-wasm` is
+   * an optional peer dependency, so an installation that skipped it reports
+   * rather than throwing at login time.
+   */
+  opaqueAvailable(): Promise<boolean> {
+    return opaqueMethods.opaqueAvailable();
   }
 
   /** `POST /api/v1/auth/mfa/verify` (§1, D-18). Completes the two-phase flow started by login(). */

@@ -707,78 +707,116 @@ strings.
 
 See `examples/express-oidc-login.ts` for a complete, runnable example.
 
-## Secure Remote Password (CONTRACT.md §23)
+## OPAQUE (CONTRACT.md §23)
 
-`loginSrp` proves the password without sending it. What crosses the wire is `A`
-and a proof, neither of which is useful to anyone who does not already hold the
-account's verifier.
+`loginOpaque` proves the password without sending it. What crosses the wire is
+a blinded group element and a MAC, neither useful without the account's
+registration record **and** the tenant's OPRF seed.
 
 ```ts
-// Same LoginResult as login(), including the mfa_required branch.
-const result = await client.loginSrp('alice', 'correct horse battery staple');
+const result = await client.loginOpaque('alice', 'correct horse battery staple');
 ```
 
-Fall back to `login()` when the tenant does not offer SRP. That case is a
-`NetworkError` naming SRP, deliberately **not** an `AuthError`, so it cannot be
-mistaken for a bad password:
+It takes the same arguments as `login` and returns the same `LoginResult`, MFA
+branch included, so switching a tenant to OPAQUE needs no change to how the
+result is handled.
+
+### Falling back — and when not to
+
+Fall back to `login()` when the tenant does not offer OPAQUE, or when this
+installation cannot perform it. Both are a `NetworkError`, deliberately **not**
+an `AuthError`, so neither can be mistaken for a bad password:
 
 ```ts
 let result;
 try {
-  result = await client.loginSrp(user, password);
+  result = await client.loginOpaque(user, password);
 } catch (err) {
-  if (err instanceof NetworkError && err.message.includes('does not offer Secure Remote Password')) {
-    result = await client.login(user, password);
-  } else {
-    throw err;
-  }
+  if (!(err instanceof NetworkError)) throw err;   // <- not a fallback case
+  result = await client.login(user, password);
 }
 ```
 
+The `if` is the important line. **Any other error is a failed login**, and
+retrying it over `login()` would hand the plaintext to a server that just
+failed to prove it holds the record.
+
+### What this buys, and what it does not
+
+OPAQUE closes holes TLS 1.3 does not:
+
+- a TLS-terminating reverse proxy, ingress controller, CDN or service mesh sees
+  every plaintext password today; under OPAQUE it sees a blinded group element;
+- an accidental request-body log, a heap dump or a crash reporter can no longer
+  capture a plaintext password, because the server never has one;
+- **a stolen record database is not offline-crackable on its own.** Recovering a
+  password additionally requires the tenant's OPRF seed, encrypted at rest
+  separately. This is the property SRP could not offer, and the main reason
+  AXIAM replaced it.
+
+It does **not** protect against a compromised AXIAM server, and in a browser it
+does not protect against AXIAM serving malicious JavaScript.
+
 ### Enrolment
 
-The server cannot compute a verifier — it never sees the plaintext — so one has
-to be sent with any request that sets a password:
+The server cannot build a record — it never sees the plaintext — so one has to
+be sent with any request that sets a password:
 
 ```ts
-const srp = await client.srpEnrollment({
-  identity: 'alice',            // the USERNAME — see below
-  password: 'new password',
-  group: 'rfc5054_4096',
-  kdf: 'argon2id',
-});
-// send `srp` as the request's `srp` field
+const opaque = await client.opaqueEnrollment(newPassword);
+// send `opaque` as the request body's `opaque` field
 ```
 
-The tenant's group and KDF come from `GET /api/v1/auth/me` for an authenticated
-caller, or `GET /api/v1/auth/reset/context` for a reset-token holder.
+One argument, where the SRP verifier this replaces took four. There is no
+`identity` — a record binds to a credential identifier the server chooses, so
+enrolling against an email can no longer produce something no login can satisfy,
+and a later rename cannot invalidate it — and no group or KDF, because the
+server names them in its `register/start` response and this call honours what
+it names.
 
-### Three things that will bite you
+It is `async` because that response has to be fetched: OPAQUE's envelope is
+sealed under the server's oblivious PRF, so there is no offline computation that
+produces a valid record. The SRP verifier needed no network at all.
 
-**The identity is the username, always.** `x` is derived over
-`username ":" password`. A user may sign in with their email, but only the
-username is inside the KDF — which is why the challenge response carries an
-`identity` field and why `loginSrp` uses that rather than what was typed.
-Enrolling against an email produces a verifier no login can satisfy.
+### This SDK does not implement OPAQUE
 
-**`loginSrp` is slow, on purpose.** It runs the tenant's KDF: Argon2id at
-19 MiB by default, tens to hundreds of milliseconds. That cost is what makes a
-stolen verifier expensive to attack offline. In a browser, consider a Web
-Worker.
-
-**What it protects, and what it does not.** A TLS-terminating proxy, an
-accidentally verbose request log, or a heap dump on the server can no longer
-capture a plaintext password, because the server never has one. It does **not**
-protect against a compromised AXIAM server, and in a browser it does not protect
-against AXIAM serving malicious JavaScript.
+CONTRACT.md §23.1 forbids it. SRP was hand-written eleven times because it is
+modular arithmetic every language has; OPAQUE needs an oblivious PRF,
+`hash_to_curve`, `expand_message_xmd`, an envelope construction and a
+three-message AKE. `core/srp.ts` — 419 lines of it — is replaced by a loader
+around `@axiam/opaque-wasm`, the WebAssembly build of the same implementation
+the AXIAM server links and every other SDK binds.
 
 ### Runtime requirements
 
-WebCrypto (`globalThis.crypto.subtle`) — present in Node 18+, Deno, Bun and
-every browser — plus `hash-wasm` for Argon2id, which is a dependency rather than
-optional because §23.3 rule 4 makes both KDFs mandatory and `argon2id` is what
-AXIAM's default policy asks for. It is imported lazily, so a consumer who never
-calls SRP does not pay the wasm payload at module-load time.
+`@axiam/opaque-wasm` is an **optional peer dependency**:
+
+```bash
+npm install @axiam/opaque-wasm
+```
+
+Optional, because an installation that never touches the OPAQUE path should not
+be made to carry a WebAssembly module. When it is absent, `opaqueAvailable()`
+resolves to `false` and `loginOpaque` rejects with a `NetworkError` — reporting
+rather than throwing at login time is what §23.1 asks of an SDK whose native
+artifact did not load, and it is why the fallback above works unchanged.
+
+```ts
+if (!(await client.opaqueAvailable())) {
+  // use login() — this installation cannot do OPAQUE
+}
+```
+
+It is imported lazily and memoized, so a consumer who never calls OPAQUE does
+not pay the wasm payload at module-load time, and two concurrent logins do not
+instantiate it twice.
+
+### Cost
+
+`loginOpaque` runs the tenant's key-stretching function: Argon2id at 19 MiB and
+t=2 by default, tens to hundreds of milliseconds of synchronous work. That cost
+is the point — it is what makes a stolen record expensive to attack even by
+someone holding the OPRF seed. In a browser, consider a Web Worker.
 
 ## Device authorization grant (`axiam-sdk/node`, CONTRACT.md §14)
 

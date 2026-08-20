@@ -126,7 +126,8 @@
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
     "express": "^5.0.0",
-    "fastify": "^5.0.0"
+    "fastify": "^5.0.0",
+    "@axiam/opaque-wasm": "^1.0.0-alpha31"
   },
   "peerDependenciesMeta": {
     "@nestjs/common": {
@@ -139,6 +140,9 @@
       "optional": true
     },
     "fastify": {
+      "optional": true
+    },
+    "@axiam/opaque-wasm": {
       "optional": true
     }
   },
