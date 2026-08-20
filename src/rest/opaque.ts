@@ -45,7 +45,15 @@ interface RegisterStartWire extends OpaqueKsfFields {
  * cannot enrol a record against somebody else's account.
  */
 export interface OpaqueEnrollment {
+  /**
+   * The `opaque_session` from `register/start`, echoed **verbatim**.
+   *
+   * Opaque sealed server state carrying the credential identifier, the
+   * ciphersuite and the costs. Do not parse, cache, or reuse it across
+   * exchanges (§23.4 rule 8) — it is valid for 120 seconds.
+   */
   opaque_session: string;
+  /** Lowercase-hex serialized RFC 9807 `RegistrationRecord`. */
   registration_record: string;
 }
 
