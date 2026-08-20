@@ -163,13 +163,18 @@ jobs:
     needs: verify-tag-on-main
     runs-on: ubuntu-latest
     # Manual-on-tag, side-effecting job: only runs when a maintainer pushes a
-    # vX.Y.Z tag. It is never triggered by a PR, so NPM_TOKEN is never exposed
-    # to PR-triggered jobs (T-17-26).
-    # [TRUSTED PUBLISHING] The npm trusted-publisher configuration for this
-    # package points at THIS workflow. If that configuration names a GitHub
-    # environment, this job must declare the same one or the OIDC claim will not
-    # match and the publish fails with an opaque authentication error. Uncomment
-    # and set it to whatever was configured npm-side.
+    # vX.Y.Z tag. It is never triggered by a PR (T-17-26), so no publishing
+    # credential is ever reachable from a PR-triggered job.
+    #
+    # AUTHENTICATION: Trusted Publishing (OIDC). `axiam-sdk` has a trusted
+    # publisher configured on npmjs.com naming this repository, this workflow
+    # file, and the `production` environment below. There is no npm token in
+    # this job by design — npm prefers an explicit token over OIDC, so a token
+    # present would mean the trusted publisher is configured and never used.
+    #
+    # The environment name is part of the OIDC claim, so it must keep matching
+    # what is configured npm-side. Changing or removing it here fails the
+    # publish with an opaque authentication error rather than a useful one.
     environment: production
     permissions:
       contents: read
@@ -188,6 +193,41 @@ jobs:
       # Publishing appears to do nothing.
       - name: Upgrade npm (Trusted Publishing needs >= 11.5.1)
         run: npm install -g npm@latest && npm --version
+
+      # Prove the OIDC half of Trusted Publishing is actually present, here,
+      # in two seconds — rather than after `npm ci`, codegen and a full build.
+      #
+      # This job publishes with no token at all, so `id-token: write` and a new
+      # enough npm ARE the credential. If either is missing, npm reports a
+      # generic authentication failure that reads like a registry problem. Say
+      # it plainly instead.
+      - name: Verify this job can use Trusted Publishing
+        run: |
+          set -euo pipefail
+          npm_version="$(npm --version)"
+          echo "npm version:      ${npm_version}"
+          echo "package:          $(node -p "require('./package.json').name")"
+          echo "job environment:  production"
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "::error::No OIDC token available, so Trusted Publishing cannot run."
+            echo "::error::This job needs 'permissions: id-token: write'."
+            exit 1
+          fi
+          echo "OIDC token:       available"
+          # Trusted Publishing landed in npm 11.5.1 exactly. Below that npm
+          # does not know about it at all and silently looks for a token this
+          # job deliberately does not have. Compared with `sort -V` rather than
+          # by splitting on dots, so 11.5.0 — the one version a major/minor
+          # comparison waves through — is caught too.
+          if [ "$(printf '%s\n11.5.1\n' "${npm_version}" | sort -V | head -n1)" != "11.5.1" ]; then
+            echo "::error::npm ${npm_version} predates Trusted Publishing (needs >= 11.5.1)."
+            exit 1
+          fi
+          echo "==> Publishing via Trusted Publishing (OIDC), with no npm token."
+          echo "    npmjs.com must have a trusted publisher for this package naming"
+          echo "    this repository, .github/workflows/sdk-ci-typescript.yml and the"
+          echo "    'production' environment. The OIDC claim carries all three, and a"
+          echo "    mismatch surfaces as an authentication error, not a config error."
 
       - name: Install buf
         uses: bufbuild/buf-action@8c6a16e16f12ba20b6470afa9c2ba9b5ba8c97c3  # v1.5.0
@@ -242,12 +282,9 @@ jobs:
       - name: Verify package before publish (SC#5)
         run: npm publish --dry-run --tag "${NPM_DIST_TAG}"
 
+      # No `env:` block, and that is the point: npm prefers an explicit token
+      # over OIDC, so a NODE_AUTH_TOKEN here would mean the trusted publisher
+      # is configured and never used, and the provenance attestation — the
+      # reason for the whole exercise — would be decorative.
       - name: Publish to npm with provenance
-        # [TRUSTED PUBLISHING] Delete this `env:` block once Trusted Publishing
-        # is live. A token present takes precedence over OIDC, so leaving it
-        # would mean Trusted Publishing is configured and never used — the
-        # publish would keep working, from the token, and the configuration
-        # would be decorative.
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public --provenance --tag "${NPM_DIST_TAG}"
