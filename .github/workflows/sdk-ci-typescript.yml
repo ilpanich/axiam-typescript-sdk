@@ -157,7 +157,7 @@ jobs:
     # environment, this job must declare the same one or the OIDC claim will not
     # match and the publish fails with an opaque authentication error. Uncomment
     # and set it to whatever was configured npm-side.
-    # environment: npm-publish
+    environment: production
     permissions:
       contents: read
       id-token: write   # required for npm provenance (OIDC), D-21
