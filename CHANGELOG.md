@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
 ## [1.0.0-alpha31] - 2026-08-20
 
 ### Fixed
@@ -42,37 +44,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - §22.14 declarative reactor handler binding — reactorHandlers
-
-### Changed
-
-- Stop a doc comment tripping the TLS-bypass gate
-- Re-vendor CONTRACT.md 1.23 (§8b rules 7 and 8)
-- Re-vendor openapi.json for the SCIM provisioning-token endpoints
-- Re-vendor CONTRACT.md 1.22 from the server repo
-
-### Fixed
-
-- Enforce §8b instead of documenting it
-
-## [Unreleased]
-
-### Fixed
-
-- **§8b transport security is now enforced, not just documented.** `consume()`
-  and `reactorServe()` both called `amqp.connect(url)` with no scheme check and
-  no TLS options, while their own doc comments stated that the URL "must be
-  `amqps://` (§8b) — there is no verification-skip switch and no plaintext
-  fallback". A plaintext `amqp://` URL connected without complaint, so signed
-  but readable authorization requests, audit events and reactor replies could
-  cross the wire in cleartext with nothing in the SDK objecting.
-
-  Both entry points now validate the URL **before** opening a socket and refuse
-  every scheme but `amqps://` (rules 1 and 5). Documented-but-unenforced is the
-  worst of the three states: it reads as a guarantee at review time and behaves
-  as an invitation at runtime.
-
-### Added
-
 - **A CA bundle and client identity for the broker connection (§8b rules 2 and
   3).** Both entry points take an optional `tls` option carrying `caCert` (a
   privately issued broker certificate — the common in-cluster case, and why
@@ -94,9 +65,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Stop a doc comment tripping the TLS-bypass gate
+- Re-vendor CONTRACT.md 1.23 (§8b rules 7 and 8)
+- Re-vendor openapi.json for the SCIM provisioning-token endpoints
+- Re-vendor CONTRACT.md 1.22 from the server repo
 - Re-vendor `openapi.json` at 1.0.0-alpha27 — the copy was pinned at alpha26 and
   failing the cross-repo artifact-drift gate
 
+### Fixed
+
+- Enforce §8b instead of documenting it
+- **§8b transport security is now enforced, not just documented.** `consume()`
+  and `reactorServe()` both called `amqp.connect(url)` with no scheme check and
+  no TLS options, while their own doc comments stated that the URL "must be
+  `amqps://` (§8b) — there is no verification-skip switch and no plaintext
+  fallback". A plaintext `amqp://` URL connected without complaint, so signed
+  but readable authorization requests, audit events and reactor replies could
+  cross the wire in cleartext with nothing in the SDK objecting.
+
+  Both entry points now validate the URL **before** opening a socket and refuse
+  every scheme but `amqps://` (rules 1 and 5). Documented-but-unenforced is the
+  worst of the three states: it reads as a guarantee at review time and behaves
+  as an invitation at runtime.
 
 ## [1.0.0-alpha25] - 2026-08-16
 
@@ -111,26 +101,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Report clamped settings via §19 ConfigClampedEvent (contract 1.9)
 - §16 retry, §17 memo, §18 close(), §19 telemetry (D5) (#47)
 - Device grant, token exchange, logout helpers; re-vendor (D6)
-
-### Changed
-
-- Re-vendor CONTRACT.md 1.19, openapi.json and proto/ from main (R5.8) (#59)
-- Contract 1.15 — §10.1 rule 9, sender-constrained access tokens (#57)
-- Add the §20.7 required timeout assertion
-- Retire the "measured residual" justification (contract 1.14)
-- Re-sync to contract 1.14 (#302 closed)
-- Bump the minor-patch group with 3 updates
-- Bump github/codeql-action from 4.37.4 to 4.37.6
-
-### Fixed
-
-- Re-export the §20 types from the middleware entry point
-- Re-export the §12.7/§14/§15 types from the middleware entry point
-
-## [Unreleased]
-
-### Added
-
 - **CONTRACT.md §22 — Reactors (AMQP extension actors).** New `src/amqp/reactor/`
   and `reactorServe(config, handler)`, exported from `axiam-sdk/amqp`: it consumes
   the server-declared per-reactor queue, verifies every event (§8 v2 —
@@ -232,70 +202,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CONTRACT.md §21** — the FAPI 2.0 posture as an SDK sees it: client-registration
   fields, RFC 9207 `iss` on authorization responses, and the discovery additions. Only
   rule 9 above is normative for this SDK.
-
-### Changed
-
-- **Re-sync vendored `CONTRACT.md`, `openapi.json` and `proto/` to contract 1.19**
-  (upstream **R5.8**). The vendored copies had been pinned at the 1.15-era artifacts and
-  drifted three contract revisions behind `ilpanich/axiam@main`. All five files are now
-  byte-identical to upstream, and `proto/axiam/v1/reactor.proto` (contract 1.18 §22, the
-  AMQP reactor protocol) is vendored here for the first time.
-
-- **CONTRACT.md §11.2 rule 9 — the gRPC decision reads `reason`, not `deny_reason`**
-  (**SDK-Q10**, contract 1.19). `CheckAccessResponse` gains `reason` (proto field 4,
-  explicit presence) carrying the same string the REST decision body has always called
-  `reason`; `deny_reason` (field 2) is now `[deprecated = true]` and is removed at AXIAM
-  2.0. The mirrored `WireCheckAccessResponse` gains an optional `reason` and marks
-  `deny_reason` `@deprecated`, and the decision mapper reads `reason`, falling back to
-  `deny_reason` only when `reason` is **absent on a refusal** — which is exactly what a
-  pre-SDK-Q10 server sends. `AccessDecision` still exposes one `reason`, so this is not a
-  breaking change for callers and nothing changes on the wire today.
-
-  **Known residual, deliberately not taken here:** contract 1.19 also relaxes gRPC
-  `subject_id` to optional (an *empty* value meaning "the subject in the verified token").
-  `CheckAccessRequest.subjectId` stays required — relaxing it is a breaking signature move
-  and belongs in its own change. The type's doc comment now records the gap.
-
-
-### Changed
-
-- **Re-sync vendored `CONTRACT.md` to contract 1.14** — documentation only, no code change.
-  §20.2 rule 6 (a permission ticket MUST NOT be retried) cited a "measured residual
-  (ilpanich/axiam#302) … roughly 1 in 640" as its second reason. That residual is closed: the
-  server now decides the ticket race with a transaction its storage engine arbitrates plus a
-  redemption nonce read back after the commit. **The rule is unchanged, and this SDK's
-  behaviour is unchanged** — `uma_exchange_ticket` stays excluded from every automatic retry
-  path. What changed is the reasoning: the first reason (a spent ticket makes the retry
-  useless) always stood alone, and the second now rests on what an SDK can actually know —
-  it is talking to a server whose storage engine it cannot attest, and the guarantee is
-  conditional on that engine being persistent.
-- **BREAKING (contract 1.13): `TokenExchangeParams.subjectTokenType` is now required.** It
-  shipped optional, defaulting to `ACCESS_TOKEN_TYPE` when omitted — which satisfied §15.7's
-  "never inspect the subject token" while leaving the rule it serves unenforced: an optional
-  field with a default *is* a default the SDK applies whenever the caller says nothing. §15.1
-  now makes it required.
-
-  TypeScript is one of the languages that can refuse the call outright, so it does: omitting
-  the field is a **compile error**, not a runtime one. A `@ts-expect-error` test asserts that,
-  so reintroducing the default would fail the build rather than pass silently.
-
-  **Migration** — one line, naming what you were previously getting by silence:
-
-  ```ts
-  const exchanged = await oidc.tokenExchange({
-    subjectToken: new Sensitive(userToken),
-    subjectTokenType: ACCESS_TOKEN_TYPE, // <- add this
-    scopes: ['orders:read'],
-  });
-  ```
-
-  This closes a gap rather than opening one: `subject_token_type` has always been required *on
-  the wire*, and the SDK was covering for that with a constant which stopped being the only
-  legal value when X4 landed. For a caller who actually held a refresh token, the old default
-  traded the `invalid_request` that names the type for a generic `invalid_grant`.
-
-### Added
-
 - **§15.7 external-IdP subject tokens (X4).** `tokenExchange` can now exchange a token minted
   by a trusted external IdP — a partner's Entra, Okta or Keycloak — for an AXIAM token scoped
   to what the resolved AXIAM user may actually do. No new operation: the same method, plus
@@ -377,9 +283,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is right; clamping *silently* is not: an operator who set a 60-second TTL believes their
   staleness bound is 60 seconds, and it is five. Nothing is emitted for a value already
   within its limit, or for the disabled default.
-
-### Added
-
 - **§16 bounded read-only retry policy.** `checkAccess`/`can`/`batchCheck` now retry under
   the contract's normative table: 3 attempts, 200 ms base, 5 s cap, **full jitter** over
   `[0, backoff]`, `Retry-After` honored as a floor. Both non-deterministic inputs are
@@ -399,8 +302,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `retryEnabled` (§16.6), default on. No knob for the attempt cap, base or delay cap: §16.1
   forbids raising them.
 
+### Changed
+
+- Re-vendor CONTRACT.md 1.19, openapi.json and proto/ from main (R5.8) (#59)
+- Contract 1.15 — §10.1 rule 9, sender-constrained access tokens (#57)
+- Add the §20.7 required timeout assertion
+- Retire the "measured residual" justification (contract 1.14)
+- Re-sync to contract 1.14 (#302 closed)
+- Bump the minor-patch group with 3 updates
+- Bump github/codeql-action from 4.37.4 to 4.37.6
+- **Re-sync vendored `CONTRACT.md`, `openapi.json` and `proto/` to contract 1.19**
+  (upstream **R5.8**). The vendored copies had been pinned at the 1.15-era artifacts and
+  drifted three contract revisions behind `ilpanich/axiam@main`. All five files are now
+  byte-identical to upstream, and `proto/axiam/v1/reactor.proto` (contract 1.18 §22, the
+  AMQP reactor protocol) is vendored here for the first time.
+
+- **CONTRACT.md §11.2 rule 9 — the gRPC decision reads `reason`, not `deny_reason`**
+  (**SDK-Q10**, contract 1.19). `CheckAccessResponse` gains `reason` (proto field 4,
+  explicit presence) carrying the same string the REST decision body has always called
+  `reason`; `deny_reason` (field 2) is now `[deprecated = true]` and is removed at AXIAM
+  2.0. The mirrored `WireCheckAccessResponse` gains an optional `reason` and marks
+  `deny_reason` `@deprecated`, and the decision mapper reads `reason`, falling back to
+  `deny_reason` only when `reason` is **absent on a refusal** — which is exactly what a
+  pre-SDK-Q10 server sends. `AccessDecision` still exposes one `reason`, so this is not a
+  breaking change for callers and nothing changes on the wire today.
+
+  **Known residual, deliberately not taken here:** contract 1.19 also relaxes gRPC
+  `subject_id` to optional (an *empty* value meaning "the subject in the verified token").
+  `CheckAccessRequest.subjectId` stays required — relaxing it is a breaking signature move
+  and belongs in its own change. The type's doc comment now records the gap.
+- **Re-sync vendored `CONTRACT.md` to contract 1.14** — documentation only, no code change.
+  §20.2 rule 6 (a permission ticket MUST NOT be retried) cited a "measured residual
+  (ilpanich/axiam#302) … roughly 1 in 640" as its second reason. That residual is closed: the
+  server now decides the ticket race with a transaction its storage engine arbitrates plus a
+  redemption nonce read back after the commit. **The rule is unchanged, and this SDK's
+  behaviour is unchanged** — `uma_exchange_ticket` stays excluded from every automatic retry
+  path. What changed is the reasoning: the first reason (a spent ticket makes the retry
+  useless) always stood alone, and the second now rests on what an SDK can actually know —
+  it is talking to a server whose storage engine it cannot attest, and the guarantee is
+  conditional on that engine being persistent.
+- **BREAKING (contract 1.13): `TokenExchangeParams.subjectTokenType` is now required.** It
+  shipped optional, defaulting to `ACCESS_TOKEN_TYPE` when omitted — which satisfied §15.7's
+  "never inspect the subject token" while leaving the rule it serves unenforced: an optional
+  field with a default *is* a default the SDK applies whenever the caller says nothing. §15.1
+  now makes it required.
+
+  TypeScript is one of the languages that can refuse the call outright, so it does: omitting
+  the field is a **compile error**, not a runtime one. A `@ts-expect-error` test asserts that,
+  so reintroducing the default would fail the build rather than pass silently.
+
+  **Migration** — one line, naming what you were previously getting by silence:
+
+  ```ts
+  const exchanged = await oidc.tokenExchange({
+    subjectToken: new Sensitive(userToken),
+    subjectTokenType: ACCESS_TOKEN_TYPE, // <- add this
+    scopes: ['orders:read'],
+  });
+  ```
+
+  This closes a gap rather than opening one: `subject_token_type` has always been required *on
+  the wire*, and the SDK was covering for that with a constant which stopped being the only
+  legal value when X4 landed. For a caller who actually held a refresh token, the old default
+  traded the `invalid_request` that names the type for a generic `invalid_grant`.
+- Re-vendored `CONTRACT.md` at **1.8.1**. `openapi.json` unchanged — docs-only contract revs.
+- `RetryOptions.maxAttempts` removed: §16.1 fixes the cap at 3 and forbids raising it.
+  `withRetry`'s callback now receives the attempt number.
+
 ### Fixed
 
+- Re-export the §20 types from the middleware entry point
+- Re-export the §12.7/§14/§15 types from the middleware entry point
 - **`withRetry` was never called by any production path.** It was exported, unit-tested and
   green, but `checkAccess` did not route through it — so this SDK performed **no read-only
   retries at all** while appearing to, leaving §11.2 rule 5 silently unmet. A tested helper
@@ -416,17 +388,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pair as attempt 1, which would have made a retried call indistinguishable from a single
   slow one — caught by the conformance test asserting `[1, 2]`.
 
-### Changed
-
-- Re-vendored `CONTRACT.md` at **1.8.1**. `openapi.json` unchanged — docs-only contract revs.
-- `RetryOptions.maxAttempts` removed: §16.1 fixes the cap at 3 and forbids raising it.
-  `withRetry`'s callback now receives the attempt number.
-
 ## [1.0.0-alpha24] - 2026-08-04
 
 ### Added
 
 - Enforce the full CONTRACT §10.1 local-verification set
+- **CONTRACT §10.1 rule-8 regression tests (§15.3.1).** Rule 8 — "the decision is
+  about the caller's credential and no other" — was enforced only by inspection
+  here. SEC-085 satisfied rules 1–7 and was still an authentication bypass, so
+  the absence of a guardrail is the condition that let it survive three reviews.
+
+  This SDK is structurally safe from that shape: `VerifiableSession` carries a
+  verifier and a tenant, **not a logged-in session**, so there is no second
+  credential in scope for the guard to substitute. The new tests pin that
+  property rather than assume it — one asserts the verifier is invoked with the
+  caller's token and nothing else, the other asserts the guard's input exposes
+  no `session`/`client`/`refresh`/`accessToken` surface. They fail if anyone
+  ever threads a stateful client session into the guard's inputs, which is
+  precisely how the PHP bug became reachable.
+- **Conditional issuer/audience expectations (CONTRACT §10.1 rules 5 and 6).**
+  New `AxiamClientOptions.expectedIssuer` and
+  `AxiamClientOptions.expectedAudience`, surfaced on `SharedSession` /
+  `VerifiableSession` and consumed by the §10 guard. Both are optional and
+  unset by default — the rules are explicitly conditional on configuration, and
+  the SDK never hardcodes an expected issuer. When set, a mismatch is rejected,
+  and the corresponding claim additionally becomes required (an absent `aud`
+  does not "contain" the expected audience).
+- **`Verifier.verifySignatureOnlyUnchecked(token)`** — the §10.1 raw
+  signature-only primitive, for integrators deliberately implementing their own
+  policy. No `exp` requirement, no `nbf`/`tenant_id`/`iss`/`aud` check. The
+  `Unchecked` suffix is the contract's reference spelling, chosen so the
+  omission is obvious at the call site. It is not, and must not become, the
+  documented guard entry point.
+- `assertTenantClaim` and `CLOCK_SKEW_LEEWAY_SEC` are exported from
+  `axiam-sdk/node` and `axiam-sdk/middleware`, so a consumer writing their own
+  guard on top of `Verifier` applies the same policy the middleware does.
+- `test/node/localVerificationSet.test.ts` — the complete §10.1 required
+  negative-test set, asserted against **both** local-verification entry points
+  (the verifier and the middleware guard): expired; no `exp`; non-numeric
+  `exp`; future `nbf`; different tenant; no `tenant_id`; no configured tenant;
+  `alg: none`; HS-signed token bearing the EdDSA `kid`; foreign signature; plus
+  issuer-mismatch and audience-mismatch cases for the newly-configurable
+  expectations, and proof that the raw primitive waves through exactly what the
+  guard rejects.
+- CONTRACT.md in this repository is re-synced with the upstream
+  `ilpanich/axiam` copy: §10.1 is vendored verbatim.
+- Add `verifyWebhook` webhook-signature verifier (CONTRACT.md §13, T-145), reachable from the
+  Node-only `axiam-sdk/node` subpath. Verifies the server's Stripe-style signed-timestamp
+  `X-Axiam-Signature: t=<unix>,v1=<hex>` scheme — HMAC-SHA256 over `<timestamp>.<raw_body>`,
+  compared in **constant time** (`crypto.timingSafeEqual` over the decoded MAC bytes, never `==`
+  on hex strings), with a two-sided 300s-default freshness window (rejects a future-dated `t=` as
+  well as a stale one) and a `now` injection seam for tests. Accepts the raw body as
+  `Buffer`/`Uint8Array`/string only — re-serializing parsed JSON before verifying breaks the MAC,
+  documented in the README alongside the Express `express.raw()`/`verify`-callback workaround.
+  Failures raise a typed `WebhookVerifyError` with a stable `reason` code that never surfaces the
+  expected or computed signature.
 
 ### Changed
 
@@ -444,27 +460,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Diagnose the slug-vs-UUID tenant comparand (§13.4 observation 6) (#36)
 - Repin amqplib to real 0.10.x + add verifyWebhook helper (SEC-078, T-145)
-
-## [Unreleased]
-
-### Added
-
-- **CONTRACT §10.1 rule-8 regression tests (§15.3.1).** Rule 8 — "the decision is
-  about the caller's credential and no other" — was enforced only by inspection
-  here. SEC-085 satisfied rules 1–7 and was still an authentication bypass, so
-  the absence of a guardrail is the condition that let it survive three reviews.
-
-  This SDK is structurally safe from that shape: `VerifiableSession` carries a
-  verifier and a tenant, **not a logged-in session**, so there is no second
-  credential in scope for the guard to substitute. The new tests pin that
-  property rather than assume it — one asserts the verifier is invoked with the
-  caller's token and nothing else, the other asserts the guard's input exposes
-  no `session`/`client`/`refresh`/`accessToken` surface. They fail if anyone
-  ever threads a stateful client session into the guard's inputs, which is
-  precisely how the PHP bug became reachable.
-
-### Fixed
-
 - **Slug-vs-UUID tenant comparand now diagnoses itself (§13.4 observation 6).**
   AXIAM access tokens carry the tenant **UUID** in `tenant_id`, but this SDK's
   client is commonly configured with a tenant **slug**. A guard handed that slug
@@ -475,6 +470,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   strictly *after* the rejection is decided — so it cannot be used as a log-flood
   lever and does not alter the verification outcome. A genuine cross-tenant
   rejection (UUID vs UUID) stays silent.
+- Repin `amqplib` from the mis-pinned `^2.0.1` to `^0.10.9`, matching the vendored
+  `@types/amqplib` range (SEC-078, an SDK-Q06 regression). Add a `npm ls amqplib` CI gate so a
+  future pin that can't resolve, or that drifts out of the range the bundled types are built
+  against, fails the build instead of surfacing later as a silent install or type mismatch.
 
 ### Security — BREAKING
 
@@ -523,56 +522,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     additionally enforced inside `verifyAccessToken` itself, so a
     caller-supplied `Verifier` implementation cannot be the only thing standing
     between a cross-tenant token and the application.
-
-### Added
-
-- **Conditional issuer/audience expectations (CONTRACT §10.1 rules 5 and 6).**
-  New `AxiamClientOptions.expectedIssuer` and
-  `AxiamClientOptions.expectedAudience`, surfaced on `SharedSession` /
-  `VerifiableSession` and consumed by the §10 guard. Both are optional and
-  unset by default — the rules are explicitly conditional on configuration, and
-  the SDK never hardcodes an expected issuer. When set, a mismatch is rejected,
-  and the corresponding claim additionally becomes required (an absent `aud`
-  does not "contain" the expected audience).
-- **`Verifier.verifySignatureOnlyUnchecked(token)`** — the §10.1 raw
-  signature-only primitive, for integrators deliberately implementing their own
-  policy. No `exp` requirement, no `nbf`/`tenant_id`/`iss`/`aud` check. The
-  `Unchecked` suffix is the contract's reference spelling, chosen so the
-  omission is obvious at the call site. It is not, and must not become, the
-  documented guard entry point.
-- `assertTenantClaim` and `CLOCK_SKEW_LEEWAY_SEC` are exported from
-  `axiam-sdk/node` and `axiam-sdk/middleware`, so a consumer writing their own
-  guard on top of `Verifier` applies the same policy the middleware does.
-- `test/node/localVerificationSet.test.ts` — the complete §10.1 required
-  negative-test set, asserted against **both** local-verification entry points
-  (the verifier and the middleware guard): expired; no `exp`; non-numeric
-  `exp`; future `nbf`; different tenant; no `tenant_id`; no configured tenant;
-  `alg: none`; HS-signed token bearing the EdDSA `kid`; foreign signature; plus
-  issuer-mismatch and audience-mismatch cases for the newly-configurable
-  expectations, and proof that the raw primitive waves through exactly what the
-  guard rejects.
-- CONTRACT.md in this repository is re-synced with the upstream
-  `ilpanich/axiam` copy: §10.1 is vendored verbatim.
-
-### Added
-
-- Add `verifyWebhook` webhook-signature verifier (CONTRACT.md §13, T-145), reachable from the
-  Node-only `axiam-sdk/node` subpath. Verifies the server's Stripe-style signed-timestamp
-  `X-Axiam-Signature: t=<unix>,v1=<hex>` scheme — HMAC-SHA256 over `<timestamp>.<raw_body>`,
-  compared in **constant time** (`crypto.timingSafeEqual` over the decoded MAC bytes, never `==`
-  on hex strings), with a two-sided 300s-default freshness window (rejects a future-dated `t=` as
-  well as a stale one) and a `now` injection seam for tests. Accepts the raw body as
-  `Buffer`/`Uint8Array`/string only — re-serializing parsed JSON before verifying breaks the MAC,
-  documented in the README alongside the Express `express.raw()`/`verify`-callback workaround.
-  Failures raise a typed `WebhookVerifyError` with a stable `reason` code that never surfaces the
-  expected or computed signature.
-
-### Fixed
-
-- Repin `amqplib` from the mis-pinned `^2.0.1` to `^0.10.9`, matching the vendored
-  `@types/amqplib` range (SEC-078, an SDK-Q06 regression). Add a `npm ls amqplib` CI gate so a
-  future pin that can't resolve, or that drifts out of the range the bundled types are built
-  against, fails the build instead of surfacing later as a silent install or type mismatch.
 
 ## [1.0.0-alpha23] - 2026-08-02
 
@@ -645,12 +594,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.0-alpha10] - 2026-07-18
 
-### Changed
-
-- Add organization context to client options (login + refresh) (#17)
-
-## [Unreleased]
-
 ### Added
 
 - OIDC / SSO relying-party helpers (CONTRACT.md §12, adopting contract 1.4): nine new
@@ -701,6 +644,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Add organization context to client options (login + refresh) (#17)
 - Vendored `CONTRACT.md` re-synced to contract version 1.4 (§12 OIDC/SSO relying-party
   helpers, the `OAuthProtocolError` taxonomy sub-type, and the two endpoint-qualified
   HTTP-status rows). Conformance statement updated to §1–§12.
