@@ -17,6 +17,7 @@ import {
   startRegistration,
   type OpaqueKsfFields,
 } from '../core/opaque.js';
+import { mfaSetupRequired } from './auth.js';
 import type { AxiamClient } from './client.js';
 import type { LoginResult, LoginSuccessResponseWire, MfaRequiredResponseWire } from './types.js';
 
@@ -179,6 +180,11 @@ export async function loginOpaque(
       { opaque_session: started.opaque_session, ke3 },
     );
   } catch (err) {
+    // §25.2 rule 1 — this endpoint answers the same `403 mfa_setup_required`
+    // as `POST /api/v1/auth/login`, and it is the same outcome here.
+    const setup = mfaSetupRequired(err);
+    if (setup) return setup;
+
     const status = axiosStatus(err);
     if (status !== undefined) {
       throw mapHttpStatusToError(status, axiosMessage(err), { cause: err });

@@ -20,6 +20,7 @@
     "paths": {
       "axiam-sdk": ["../src/index.ts"],
       "axiam-sdk/rest": ["../src/rest/index.ts"],
+      "axiam-sdk/browser": ["../src/browser/index.ts"],
       "axiam-sdk/grpc": ["../src/grpc/index.ts"],
       "axiam-sdk/node": ["../src/node/index.ts"],
       "axiam-sdk/amqp": ["../src/amqp/index.ts"],

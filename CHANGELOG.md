@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **WebAuthn and passkeys — CONTRACT.md §24.** Six relying-party operations on
+  `AxiamClient` (`webauthnRegisterStart`/`Finish`,
+  `webauthnAuthenticateStart`/`Finish`, `webauthnDiscoverableStart`/`Finish`),
+  isomorphic so a Node service completing a ceremony a handset ran is the
+  relying party exactly as a browser is. A new `axiam-sdk/browser` subpath adds
+  the platform ceremony over `navigator.credentials` —
+  `webauthnRegister`/`webauthnLogin`/`webauthnDiscoverableLogin`, feature
+  detection, conditional mediation, and the five-outcome error classification.
+- **The §24.6a JSON bridge.** `webauthnRequestJson` hands the challenge to any
+  platform authenticator API in the JSON form all of them speak, and every
+  `*Finish` accepts the platform's response JSON string directly — so an Android
+  app passes `requestJson` into `CreatePublicKeyCredentialRequest` and the
+  response straight back, with nothing destructured in between.
+- **Account lifecycle and MFA enrolment — CONTRACT.md §25.** Nine operations:
+  `mfaEnroll`/`mfaConfirm`, `mfaSetupEnroll`/`mfaSetupConfirm`, `verifyEmail`,
+  `resendVerification`, `requestPasswordReset`, `confirmPasswordReset`,
+  `passwordResetContext`.
+- **Pushed authorization requests — CONTRACT.md §26 (RFC 9126).** `oidcPar` on
+  `OidcClient`, plus `pushed_authorization_request_endpoint` in the discovery
+  document type.
+- Examples: `webauthn-browser.ts`, `account-lifecycle.ts`, `par-login.ts`.
+
+### Changed
+
+- **BREAKING — `login()` and `loginOpaque()` gain a third outcome.** A tenant
+  that requires MFA answers `403 mfa_setup_required` with a setup token for an
+  account that has none. That used to arrive as an `AuthzError`, which told the
+  caller they lacked permission to log in when what the server said was
+  recoverable and came with the means to recover. It is now
+  `{ status: 'mfa_setup_required', setupToken }` on `LoginResult`. Code that
+  matches the union exhaustively needs a new arm; code that does not is
+  unaffected, and a genuine authorization refusal is still an `AuthzError` —
+  the SDK matches on the body's discriminant, not on the status alone.
+- The SC#1 bundle-and-grep gate now covers the `axiam-sdk/browser` entry as well
+  as `/rest`, rather than trusting a browser-only subpath to stay clean.
+
 ## [1.0.0-alpha37] - 2026-08-21
 
 ### Changed

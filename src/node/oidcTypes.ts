@@ -87,6 +87,14 @@ export interface OidcConfiguration {
    * same application is pointed at.
    */
   end_session_endpoint?: string;
+  /**
+   * RFC 9126 pushed authorization request endpoint, used by `oidcPar` (§26.1).
+   *
+   * Optional for the same reason as the two above, and with the same rule: its
+   * absence is an error at call time, never a cue to build `<issuer>/oauth2/par`
+   * by concatenation.
+   */
+  pushed_authorization_request_endpoint?: string;
   /** Whether the OP sends back-channel logout tokens. */
   backchannel_logout_supported?: boolean;
   /** Whether those logout tokens carry `sid`. AXIAM always sends it. */
@@ -116,6 +124,56 @@ export interface AuthorizationRequest {
   /** CSPRNG replay-protection value (≥128 bits) that must equal the ID token's `nonce` claim. Not a secret (§12.3 rule 2). */
   nonce: string;
   /** The PKCE verifier, secret for its whole lifetime (§12.5). Pass it back into `oidcExchange`. */
+  codeVerifier: Sensitive<string>;
+}
+
+/**
+ * Arguments to `oidcPar` (CONTRACT.md §26.1).
+ *
+ * The parameters come from an {@link AuthorizationRequest} that `oidcBegin`
+ * already produced — §26.2 rule 1 forbids a second generator for `state`,
+ * `nonce` and PKCE, and the `codeVerifier` the caller must keep for
+ * `oidcExchange` is the one `oidcBegin` gave them.
+ */
+export interface OidcParParams {
+  /** The request `oidcBegin` returned. Its `url` is replaced by {@link PushedAuthorizationRequest.authorizationUrl}. */
+  request: AuthorizationRequest;
+  /** The relying party's redirect URI — the same value that will be sent at `oidcExchange` (§26.2 rule 6). */
+  redirectUri: string;
+  /** Requested scope. `openid` is added when absent, exactly as `oidcBegin` does. */
+  scope?: string | string[];
+  /** The discovery document, for the `authorization_endpoint`. Fetched via `oidcDiscover` when omitted. */
+  configuration?: OidcConfiguration;
+  /** Tenant UUID override for the mandatory `?tenant_id=` query parameter (§12.1 note 2). */
+  tenantId?: string;
+}
+
+/**
+ * The result of a pushed authorization request (CONTRACT.md §26.1).
+ *
+ * The server answered `201` — RFC 9126 §2.2 specifies Created, and a success
+ * predicate written `status === 200` would treat every successful push as a
+ * failure.
+ */
+export interface PushedAuthorizationRequest {
+  /**
+   * The authorization URL to redirect the browser to.
+   *
+   * Carries **exactly** `client_id` and `request_uri` and nothing else: the
+   * server refuses a request that mixes a `request_uri` with inline
+   * authorization parameters rather than merging them, because merging is
+   * where parameter confusion lives (§26.2 rule 2).
+   */
+  authorizationUrl: string;
+  /** The opaque, single-use handle. Wrapped per §26.5 — it is a bearer handle to a formed authorization request. */
+  requestUri: Sensitive<string>;
+  /** Seconds until `requestUri` expires. Not advisory (§26.2 rule 3). */
+  expiresIn: number;
+  /** The `state` from the pushed request, to compare against what the IdP returns. */
+  state: string;
+  /** The `nonce` from the pushed request, to compare against the ID token's claim. */
+  nonce: string;
+  /** The PKCE verifier to pass into `oidcExchange` — the same one `oidcBegin` produced. */
   codeVerifier: Sensitive<string>;
 }
 
@@ -457,6 +515,17 @@ export interface DeviceAuthorizationResponseWire {
   verification_uri_complete?: string | null;
   expires_in: number;
   interval?: number | null;
+}
+
+/**
+ * **201** body of `POST /oauth2/par` (CONTRACT.md §26.1).
+ *
+ * RFC 9126 §2.2 specifies Created, not OK — a success predicate written
+ * `status === 200` treats every successful push as a failure.
+ */
+export interface PushedAuthorizationResponseWire {
+  request_uri: string;
+  expires_in: number;
 }
 
 // ---------------------------------------------------------------------------

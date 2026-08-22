@@ -88,6 +88,9 @@ export type {
   SsoStartResult,
   DeviceAuthorization,
   DeviceAuthorizeParams,
+  // §26 pushed authorization requests (RFC 9126).
+  OidcParParams,
+  PushedAuthorizationRequest,
   DeviceLoginParams,
   DevicePollParams,
   ExchangedToken,

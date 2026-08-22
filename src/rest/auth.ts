@@ -5,12 +5,13 @@
 // exclusively via Set-Cookie — LoginResult deliberately carries no session
 // token field anywhere in the public API (T-17-07).
 
-import { mapHttpStatusToError, NetworkError, sanitizeAxiosError } from '../core/index.js';
+import { mapHttpStatusToError, NetworkError, Sensitive, sanitizeAxiosError } from '../core/index.js';
 import type { AxiamClient } from './client.js';
 import type {
   LoginResult,
   LoginSuccessResponseWire,
   MfaRequiredResponseWire,
+  MfaSetupRequiredResponseWire,
   RefreshSuccessResponseWire,
 } from './types.js';
 
@@ -39,6 +40,34 @@ function mfaRequiredToResult(wire: MfaRequiredResponseWire): LoginResult {
     mfaToken: wire.challenge_token,
     availableMethods: wire.available_methods,
   };
+}
+
+/**
+ * CONTRACT.md §25.2 rule 1 — the `403 mfa_setup_required` branch of `login`.
+ *
+ * The server answers `403` when the tenant requires MFA and the account has
+ * none, and hands back the token to fix it. Mapping that through §2 to
+ * `AuthzError` told the caller they lacked permission to log in, when what the
+ * server said was recoverable and came with the means to recover. It is an
+ * outcome, so it is returned rather than thrown.
+ *
+ * Matched on the body's own discriminant, not on the status alone: a genuine
+ * authorization refusal is also a `403`, and only one of the two carries a
+ * `setup_token`.
+ *
+ * Exported so `loginOpaque` shares it — that endpoint answers the identical
+ * `403`, and a second copy of this check is a second place for the two to
+ * disagree about what a setup branch looks like.
+ *
+ * @internal
+ */
+export function mfaSetupRequired(err: unknown): LoginResult | undefined {
+  if (extractAxiosStatus(err) !== 403) return undefined;
+  const body = extractAxiosData<Partial<MfaSetupRequiredResponseWire>>(err);
+  if (body?.mfa_setup_required !== true || typeof body.setup_token !== 'string') {
+    return undefined;
+  }
+  return { status: 'mfa_setup_required', setupToken: new Sensitive(body.setup_token) };
 }
 
 function extractErrorMessage(err: unknown): string {
@@ -83,6 +112,10 @@ export async function login(client: AxiamClient, email: string, password: string
     await client.session.onAuthenticated?.();
     return loginSuccessToResult(response.data as LoginSuccessResponseWire);
   } catch (err) {
+    // §25.2 rule 1: a recoverable, guided state, not a refusal.
+    const setup = mfaSetupRequired(err);
+    if (setup) return setup;
+
     const status = extractAxiosStatus(err);
     if (status !== undefined) {
       throw mapHttpStatusToError(status, extractErrorMessage(extractAxiosData(err)) ?? 'login failed', {
