@@ -32,6 +32,63 @@ describe('barrel entry points', () => {
     expect(new mod.OAuthProtocolError('invalid_grant', 'nope')).toBeInstanceOf(mod.AuthError);
   });
 
+  it('/rest exposes the §24 relying-party operations on the client', async () => {
+    const mod = await import('../src/rest/index.js');
+    for (const operation of [
+      'webauthnRegisterStart',
+      'webauthnRegisterFinish',
+      'webauthnAuthenticateStart',
+      'webauthnAuthenticateFinish',
+      'webauthnDiscoverableStart',
+      'webauthnDiscoverableFinish',
+    ]) {
+      expect(typeof mod.AxiamClient.prototype[operation as never], operation).toBe('function');
+    }
+    // §24.6a's bridge and §24.6b rule 5's classification are isomorphic: they
+    // must be reachable WITHOUT importing /browser, because an Android or
+    // server-side caller never loads that module.
+    expect(typeof mod.webauthnRequestJson).toBe('function');
+    expect(typeof mod.classifyWebauthnError).toBe('function');
+    expect(typeof mod.webauthnErrorMessage).toBe('function');
+  });
+
+  it('/rest exposes the §25 account-lifecycle operations on the client', async () => {
+    const mod = await import('../src/rest/index.js');
+    for (const operation of [
+      'mfaEnroll',
+      'mfaConfirm',
+      'mfaSetupEnroll',
+      'mfaSetupConfirm',
+      'verifyEmail',
+      'resendVerification',
+      'requestPasswordReset',
+      'confirmPasswordReset',
+      'passwordResetContext',
+    ]) {
+      expect(typeof mod.AxiamClient.prototype[operation as never], operation).toBe('function');
+    }
+  });
+
+  it('/browser exposes the §24.6b ceremony', async () => {
+    const mod = await import('../src/browser/index.js');
+    for (const helper of [
+      'webauthnRegister',
+      'webauthnLogin',
+      'webauthnDiscoverableLogin',
+      'isWebauthnSupported',
+      'isConditionalMediationAvailable',
+      'classifyWebauthnError',
+      'webauthnErrorMessage',
+    ]) {
+      expect(typeof mod[helper as never], helper).toBe('function');
+    }
+  });
+
+  it('/node exposes the §26 pushed authorization request operation', async () => {
+    const mod = await import('../src/node/index.js');
+    expect(typeof mod.OidcClient.prototype.oidcPar).toBe('function');
+  });
+
   it('/node exposes the Node persona builders and helpers', async () => {
     const mod = await import('../src/node/index.js');
     expect(typeof mod.createNodeClient).toBe('function');

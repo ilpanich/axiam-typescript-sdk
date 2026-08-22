@@ -19,13 +19,14 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19, §20, §21, §22, §23 (including §6.1 mTLS
-client certificates, the §10.1 minimum local-verification set, the §12 OIDC/SSO
-relying-party helpers, and the §13 `verifyWebhook` signature verifier).
+This SDK conforms to CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19, §20, §21, §22, §23,
+§24, §25, §26 (including §6.1 mTLS client certificates, the §10.1 minimum
+local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
+`verifyWebhook` signature verifier).
 
-§12.7, §14, §15 and §22 are named rather than folded into the range because they landed
-after this SDK already claimed §1–§13: widening the range silently would turn a statement
-that was true when written into a different claim without anyone editing it.
+§12.7, §14, §15, §22, §24, §25 and §26 are named rather than folded into the range because
+they landed after this SDK already claimed §1–§13: widening the range silently would turn a
+statement that was true when written into a different claim without anyone editing it.
 
 ### §10.1 minimum local-verification set
 
@@ -73,6 +74,7 @@ never contains `@grpc/grpc-js` or `amqplib`):
 | Entry point            | Persona                    | Contents                                                                 |
 |-------------------------|-----------------------------|---------------------------------------------------------------------------|
 | `axiam-sdk` / `axiam-sdk/rest` | Browser + Node, REST-only  | `AxiamClient`: `login`/`verifyMfa`/`refresh`/`logout`, `can`/`batchCheck` over the FND-04 REST authz endpoint |
+| `axiam-sdk/browser`     | Browser only                | The WebAuthn **platform ceremony** — `webauthnRegister`/`webauthnLogin`/`webauthnDiscoverableLogin` over `navigator.credentials` (CONTRACT.md §24.6b). The relying-party operations themselves are on `AxiamClient` in `/rest` and work in Node too. |
 | `axiam-sdk/grpc`        | Node only                   | Everything in `/rest` plus `AuthzGrpcClient.checkAccess`/`batchCheck` and `UserInfoGrpcClient.getUserInfo` over gRPC, the Node persona (`createNodeSession`), and the local-JWKS verifier |
 | `axiam-sdk/amqp`        | Node only                   | `consume()` — HMAC-verified AMQP audit/authz event consumer (CONTRACT.md §8) |
 | `axiam-sdk/node`        | Node only                   | The Node persona (`createNodeSession`/`createNodeClient`, cookie jar + local-JWKS verifier) plus the **OIDC/SSO relying-party helpers** — `OidcClient`, `MemoryOidcStateStore`, PKCE primitives (CONTRACT.md §12) |
@@ -820,6 +822,228 @@ t=2 by default, tens to hundreds of milliseconds of synchronous work. That cost
 is the point — it is what makes a stolen record expensive to attack even by
 someone holding the OPRF seed. In a browser, consider a Web Worker.
 
+## WebAuthn and passkeys (CONTRACT.md §24)
+
+A passkey ceremony is **two exchanges stacked**: one with an *authenticator*,
+which needs a platform API, and one with *AXIAM*, which is four ordinary JSON
+round trips. This SDK splits along that seam, and where you import from tells
+you which half you get.
+
+| | Where | Runs in |
+|---|---|---|
+| The six relying-party operations | `AxiamClient`, from `axiam-sdk` / `axiam-sdk/rest` | **Browser and Node** |
+| The ceremony (`navigator.credentials`) | `axiam-sdk/browser` | Browser only |
+
+The Node half is not a consolation prize. A service completing a ceremony that
+ran on a handset — an Android app, an iOS app, a hardware client — is the
+relying party, exactly as a browser is, and it never touches
+`navigator.credentials`.
+
+### The browser: three calls
+
+```ts
+import { AxiamClient } from 'axiam-sdk/rest';
+import {
+  isWebauthnSupported,
+  webauthnRegister,
+  webauthnLogin,
+  webauthnDiscoverableLogin,
+  classifyWebauthnError,
+  webauthnErrorMessage,
+} from 'axiam-sdk/browser';
+
+const client = new AxiamClient({ baseUrl, orgSlug: 'globex', tenantSlug: 'acme' });
+
+// Enrol, for a user who is already signed in.
+if (isWebauthnSupported()) {
+  await webauthnRegister(client, 'Alice’s laptop', 'platform');
+}
+
+// Passkey as a SECOND factor, continuing a password login.
+const result = await client.login(email, password);
+if (result.status === 'mfa_required' && result.availableMethods.includes('webauthn')) {
+  await webauthnLogin(client, result.mfaToken);   // client is authenticated after this
+}
+
+// Passkey with NO username at all.
+await webauthnDiscoverableLogin(client);
+```
+
+`isWebauthnSupported()` is a query, not a try/catch: hide the button rather than
+offer one that throws. Ceremony failures classify into five outcomes, and
+`already_registered` is the one worth separating — it means the authenticator
+already holds a credential for this account and refused to mint a second, so the
+remedy is a different device rather than another attempt:
+
+```ts
+try {
+  await webauthnRegister(client, name, kind);
+} catch (err) {
+  const failure = classifyWebauthnError(err);   // 'cancelled' | 'already_registered' | …
+  showBanner(webauthnErrorMessage(failure));
+}
+```
+
+`cancelled` covers **both** an explicit refusal and a silent timeout. The
+WebAuthn spec deliberately refuses to distinguish them, because telling a website
+which one happened leaks whether an authenticator was present — so the copy for
+it does not accuse anyone of cancelling, and you should not try to recover the
+distinction by timing the call.
+
+Passkey autofill (conditional mediation) is a flag, and everything about it
+degrades quietly:
+
+```ts
+if (await isConditionalMediationAvailable()) {
+  const abort = new AbortController();
+  void webauthnDiscoverableLogin(client, undefined, { conditional: true, signal: abort.signal })
+    .catch(() => {/* abandoned, not failed */});
+}
+```
+
+That promise may never settle — the user simply may not pick a passkey — so
+abandon it on navigation and never show an error for a prompt nobody engaged
+with.
+
+### Anywhere else: the JSON bridge
+
+Every platform authenticator API speaks the same WebAuthn **JSON form** — Android's
+Credential Manager takes `requestJson` and returns `registrationResponseJson`;
+browsers use `parseCreationOptionsFromJSON()` and `credential.toJSON()`. So the
+SDK hands you the challenge as that JSON and takes the platform's answer back as
+that JSON, from any runtime:
+
+```ts
+import { webauthnRequestJson } from 'axiam-sdk/rest';
+
+const { challenge, stateToken } = await client.webauthnDiscoverableStart();
+const requestJson = webauthnRequestJson(challenge);   // → give this to the platform
+
+// …the platform runs the ceremony and hands back a JSON string…
+await client.webauthnDiscoverableFinish(stateToken, responseJson);
+```
+
+Nothing is destructured on the way through, which matters: the response is the
+input to a signature check over bytes this SDK did not produce, and re-encoding
+base64url "to be safe" is the most common way to break a ceremony that was
+otherwise correct.
+
+### What the SDK does not do, on purpose
+
+**It never adjusts an option.** The server generates the challenge and chooses
+`residentKey`, `userVerification`, the attestation conveyance, the exclusion list
+and the timeout; this SDK passes all of it to the authenticator unchanged and
+posts the answer back unchanged. Not because those fields are hard — because they
+are not, and that is the hazard: relaxing `userVerification` to `"preferred"`
+because a CI authenticator kept prompting weakens a ceremony the server believes
+it configured, and the server cannot detect it, since an assertion produced under
+weaker options is a valid assertion.
+
+The single exception is the `authenticatorAttachment` hint, and only when you
+pass one. It selects which authenticator the user is prompted for; without it, a
+user reaching for a security key gets asked for Touch ID.
+
+**It never emulates an authenticator.** A "credential" held in process memory is
+not a second factor. Where no platform API is reachable, the JSON bridge is the
+answer and it is a complete one.
+
+**There is no user private key anywhere in this API.** The private half never
+leaves the authenticator — that is the property the whole mechanism rests on.
+
+### Two error rows that are not the generic mapping
+
+- A **`403` on `webauthnRegisterFinish`** is the tenant's attestation policy
+  refusing *this authenticator* — an AAGUID that is not allow-listed, a missing
+  FIDO certification, a revoked status — not a permission problem with the user.
+  The server's message is surfaced verbatim, because it is the only way the person
+  holding the key learns that a different one would work.
+- A **`503` on `webauthnRegisterStart`** means the attestation policy requires
+  attestation and the FIDO metadata service has no usable snapshot. It is a server
+  configuration state, not a transient failure, and it is deliberately **not**
+  retried: retrying changes nothing and delays a message an operator needs.
+
+## Account lifecycle and MFA enrolment (CONTRACT.md §25)
+
+§1 locks the *middle* of an account's life — `login`, `verifyMfa`, `refresh`,
+`logout` all assume an account that already exists, is verified, and already has
+its second factor. These nine operations are how it gets there.
+
+```ts
+// Voluntary TOTP enrolment, by a signed-in user. Two calls, deliberately: the
+// human step in the middle is not something a helper can wait for, and one that
+// returned after mfaEnroll would report MFA as enabled when it is not.
+const enrolment = await client.mfaEnroll();
+renderQr(enrolment.totpUri.expose());
+await client.mfaConfirm(codeTypedByUser);       // → true once the factor is live
+```
+
+`secretBase32` and `totpUri` are both `Sensitive`, and the URI is the one that
+matters: it *is* `otpauth://…?secret=…`, so it contains the secret it sits next
+to. Wrapping only the secret would have wrapped nothing — the URI is the field
+that actually reaches a log, because it is the field you hand to a QR renderer.
+
+### `login()` has a third outcome
+
+**This is a breaking change** (contract 1.28). The server has always been able to
+answer `POST /api/v1/auth/login` with `403 mfa_setup_required` and a setup token,
+meaning "this tenant requires MFA, this account has none, here is how to finish".
+It used to reach you as an `AuthzError` — which told you that you lacked
+permission to log in, when what the server said was recoverable and came with the
+means to recover.
+
+```ts
+switch (result.status) {
+  case 'authenticated':
+    break;
+  case 'mfa_required':
+    await client.verifyMfa(result.mfaToken, code);
+    break;
+  case 'mfa_setup_required': {                    // ← new
+    const enrolment = await client.mfaSetupEnroll(result.setupToken);
+    renderQr(enrolment.totpUri.expose());
+    await client.mfaSetupConfirm(result.setupToken, codeTypedByUser);
+    break;                                        // this completes the login
+  }
+}
+```
+
+If you match `LoginResult` exhaustively, this is the edit you need. A genuine
+authorization refusal is still an `AuthzError`: the SDK matches on the body's own
+discriminant, not on the `403` alone.
+
+### Email verification and password reset
+
+```ts
+await client.verifyEmail(tokenFromLink, tenantId);
+await client.resendVerification(email, tenantId);
+
+await client.requestPasswordReset({ email });
+```
+
+`requestPasswordReset` resolves **whether or not the address exists**, and this
+SDK exposes no way to tell the difference. That is not an omission to improve on:
+any signal distinguishing them — including one inferred from timing — turns the
+endpoint into the account enumeration oracle its uniform response exists to
+prevent.
+
+Setting the new password takes one extra call on any tenant that might have
+OPAQUE enabled (§23), because the client has to build a registration record and
+cannot know the parameters before it has a token to ask with:
+
+```ts
+const context = await client.passwordResetContext(token);
+await client.confirmPasswordReset({
+  token,
+  newPassword,
+  tenantId,
+  ...(context.opaque ? { opaque: await client.opaqueEnrollment(newPassword) } : {}),
+});
+```
+
+The context discloses no identity — an unauthenticated endpoint that confirmed
+which account a token belongs to would be an oracle worth not having — and a
+`404` covers unknown, expired and already-consumed without distinguishing them.
+
 ## Device authorization grant (`axiam-sdk/node`, CONTRACT.md §14)
 
 RFC 8628 — signing in a device that cannot show a browser: a TV, a CLI, a headless
@@ -910,6 +1134,56 @@ const exchanged = await oidc.tokenExchange({
 
 See [`examples/external-token-exchange.ts`](examples/external-token-exchange.ts) and the
 operator guide, `docs/api/federated-token-exchange.md`.
+
+## Pushed authorization requests (`axiam-sdk/node`, CONTRACT.md §26)
+
+PAR (RFC 9126) moves the authorization request off the browser. Instead of
+putting `scope`, `redirect_uri`, `state` and the PKCE challenge into a URL the
+user agent carries, the client POSTs them straight to AXIAM over an
+authenticated back channel and puts an opaque `request_uri` in the redirect.
+What travels through the browser is then a random string that cannot be edited
+into meaning something else.
+
+Required for a FAPI 2.0 client: `profile: "fapi2"` refuses a registration that
+does not set `require_par`, so such a client cannot authorize any other way.
+
+```ts
+const configuration = await oidc.oidcDiscover();
+const request = oidc.oidcBegin({ configuration, redirectUri, scope: 'openid profile' });
+
+const pushed = await oidc.oidcPar({ request, redirectUri, scope: 'openid profile', configuration });
+
+redirect(pushed.authorizationUrl);
+// …on the callback, unchanged by PAR:
+const tokens = await oidc.oidcExchange({
+  code, redirectUri, nonce: pushed.nonce, codeVerifier: pushed.codeVerifier,
+});
+```
+
+`oidcBegin` still does the computing — there is no second generator for `state`,
+`nonce` and PKCE — and `pushed.codeVerifier` is the one it produced, so there is
+exactly one value to keep.
+
+Three things about this that are easy to get wrong:
+
+1. **The endpoint answers `201`, not `200`.** RFC 9126 §2.2 specifies Created,
+   and a success predicate written `status === 200` treats every successful push
+   as a failure.
+2. **The authorization URL carries exactly `client_id` and `request_uri`.** The
+   server *refuses* a request that mixes a `request_uri` with inline
+   authorization parameters rather than merging them, and re-adding them "for
+   compatibility" restores the parameter-confusion attack the refusal prevents:
+   an attacker supplies the inline value they want and lets the pushed copy
+   satisfy whichever check reads the other one.
+3. **`request_uri` is single-use and short-lived.** There is nothing to retry
+   with it — the safe recovery is a fresh push, which costs one round trip and
+   cannot double-consume anything. `oidcPar` is correspondingly never retried on
+   a `5xx` or a transport failure: it is a POST that creates server state.
+
+`invalid_client` on a push has three usual causes: a wrong secret, a secret sent
+by a client registered for `tls_client_auth` / `private_key_jwt` /
+`self_signed_tls_client_auth` (which is refused, not ignored), or a client
+certificate the transport did not present.
 
 ## Logout — RP-initiated and back-channel (`axiam-sdk/node`, CONTRACT.md §12.7)
 

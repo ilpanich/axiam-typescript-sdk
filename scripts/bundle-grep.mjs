@@ -26,15 +26,25 @@ import { fileURLToPath } from 'node:url';
 const FORBIDDEN_PATTERN = /@grpc\/grpc-js|amqplib/;
 
 const REST_ENTRY = fileURLToPath(new URL('../dist/rest/index.mjs', import.meta.url));
+// `axiam-sdk/browser` is the §24.6b WebAuthn ceremony, and it is by definition
+// the entry a browser bundles — so it gets the same gate rather than being
+// trusted to stay clean because it "obviously" has no transport in it.
+const BROWSER_ENTRY = fileURLToPath(new URL('../dist/browser/index.mjs', import.meta.url));
 
-async function bundleAndGrep(entryModulePath) {
+/** The named export each entry is probed through. */
+const ENTRIES = [
+  { path: REST_ENTRY, symbol: 'AxiamClient' },
+  { path: BROWSER_ENTRY, symbol: 'webauthnRegister' },
+];
+
+async function bundleAndGrep(entryModulePath, symbol) {
   const tmpDir = await mkdtemp(join(tmpdir(), 'axiam-bundle-grep-'));
   const fixturePath = join(tmpDir, 'fixture.mjs');
 
   try {
     await writeFile(
       fixturePath,
-      `import { AxiamClient } from ${JSON.stringify(entryModulePath)};\nconsole.log(typeof AxiamClient);\n`,
+      `import { ${symbol} } from ${JSON.stringify(entryModulePath)};\nconsole.log(typeof ${symbol});\n`,
       'utf8',
     );
 
@@ -59,34 +69,36 @@ async function bundleAndGrep(entryModulePath) {
 }
 
 async function main() {
-  if (!existsSync(REST_ENTRY)) {
-    console.error(`FAIL: ${REST_ENTRY} does not exist — run "npm run build" first.`);
-    process.exit(1);
-  }
+  for (const { path, symbol } of ENTRIES) {
+    if (!existsSync(path)) {
+      console.error(`FAIL: ${path} does not exist — run "npm run build" first.`);
+      process.exit(1);
+    }
 
-  let output;
-  try {
-    output = await bundleAndGrep(REST_ENTRY);
-  } catch (err) {
-    // esbuild throws when platform:'browser' cannot resolve a Node built-in
-    // pulled in transitively — this is itself the gate doing its job (a
-    // Node-only transport leaked into the browser persona), so surface it
-    // as a normal gate failure rather than an uncaught crash.
-    console.error('FAIL: browser bundle failed to build under platform:"browser".');
-    console.error(err instanceof Error ? err.message : String(err));
-    process.exit(1);
-  }
+    let output;
+    try {
+      output = await bundleAndGrep(path, symbol);
+    } catch (err) {
+      // esbuild throws when platform:'browser' cannot resolve a Node built-in
+      // pulled in transitively — this is itself the gate doing its job (a
+      // Node-only transport leaked into the browser persona), so surface it
+      // as a normal gate failure rather than an uncaught crash.
+      console.error(`FAIL: browser bundle of ${path} failed to build under platform:"browser".`);
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
 
-  const match = output.match(FORBIDDEN_PATTERN);
-  if (match) {
-    console.error(
-      `FAIL: browser bundle of ${REST_ENTRY} contains a forbidden Node-only transport reference: "${match[0]}"`,
-    );
-    console.error('SC#1 violated — @grpc/grpc-js or amqplib leaked into the /rest browser bundle.');
-    process.exit(1);
-  }
+    const match = output.match(FORBIDDEN_PATTERN);
+    if (match) {
+      console.error(
+        `FAIL: browser bundle of ${path} contains a forbidden Node-only transport reference: "${match[0]}"`,
+      );
+      console.error('SC#1 violated — @grpc/grpc-js or amqplib leaked into a browser bundle.');
+      process.exit(1);
+    }
 
-  console.log(`OK: browser bundle of ${REST_ENTRY} contains no @grpc/grpc-js or amqplib reference (SC#1).`);
+    console.log(`OK: browser bundle of ${path} contains no @grpc/grpc-js or amqplib reference (SC#1).`);
+  }
 }
 
 main();

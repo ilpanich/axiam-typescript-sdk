@@ -102,6 +102,9 @@ export type {
   DeviceAuthorizeParams,
   DeviceLoginParams,
   DevicePollParams,
+  // §26 pushed authorization requests (RFC 9126).
+  OidcParParams,
+  PushedAuthorizationRequest,
   ExchangedToken,
   LogoutUrlParams,
   TokenExchangeParams,

@@ -58,10 +58,20 @@ try {
     }
   }
 
-  if (result.status === 'mfa_required') {
-    console.log(`signed in; MFA required (methods: ${result.availableMethods.join(', ')})`);
-  } else {
-    console.log(`signed in over OPAQUE as ${result.user.username}; session ${result.sessionId}`);
+  // Three outcomes since contract 1.28, and the switch is exhaustive on
+  // purpose: the third one used to arrive as an AuthzError, which told the
+  // caller they lacked permission to sign in when the server had in fact
+  // handed back the means to finish (CONTRACT.md §25.2 rule 1).
+  switch (result.status) {
+    case 'mfa_required':
+      console.log(`signed in; MFA required (methods: ${result.availableMethods.join(', ')})`);
+      break;
+    case 'mfa_setup_required':
+      console.log('this tenant requires MFA and this account has none — see account-lifecycle.ts');
+      break;
+    case 'authenticated':
+      console.log(`signed in over OPAQUE as ${result.user.username}; session ${result.sessionId}`);
+      break;
   }
 
   // Enrolling a record for a new password. One argument, where the SRP verifier

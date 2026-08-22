@@ -17,7 +17,16 @@ import { installInterceptors } from './interceptors.js';
 import * as authMethods from './auth.js';
 import * as opaqueMethods from './opaque.js';
 import * as authzMethods from './authz.js';
+import * as webauthnMethods from './webauthn.js';
+import * as accountMethods from './accountLifecycle.js';
 import type { AccessCheck, AccessDecision, LoginResult } from './types.js';
+import type { Sensitive } from '../core/index.js';
+import type {
+  WebauthnAuthenticationResponse,
+  WebauthnCredential,
+  WebauthnRegistrationResponse,
+  WebauthnWorkspace,
+} from './webauthnTypes.js';
 
 /**
  * The main entry point for the AXIAM TypeScript/JavaScript SDK — an
@@ -214,5 +223,109 @@ export class AxiamClient {
   /** `POST /api/v1/authz/check/batch` (§1). Results preserve input order. */
   batchCheck(checks: AccessCheck[]): Promise<AccessDecision[]> {
     return authzMethods.batchCheck(this, checks);
+  }
+
+  // -------------------------------------------------------------------------
+  // §24 WebAuthn / passkeys — the relying-party layer
+  //
+  // These six work in Node as well as the browser: a service completing a
+  // ceremony its native client ran is the relying party, exactly as a browser
+  // is. The ceremony itself — the half that needs an authenticator — is
+  // `axiam-sdk/browser` (§24.6).
+  // -------------------------------------------------------------------------
+
+  /** `POST /api/v1/auth/webauthn/register/start` (§24.1). Requires a session. */
+  webauthnRegisterStart(): Promise<webauthnMethods.WebauthnRegistrationChallenge> {
+    return webauthnMethods.webauthnRegisterStart(this);
+  }
+
+  /** `POST /api/v1/auth/webauthn/register/finish` (§24.1). Requires a session. */
+  webauthnRegisterFinish(
+    stateToken: Sensitive<string> | string,
+    credentialName: string,
+    response: WebauthnRegistrationResponse | string,
+  ): Promise<WebauthnCredential> {
+    return webauthnMethods.webauthnRegisterFinish(this, stateToken, credentialName, response);
+  }
+
+  /** `POST /api/v1/auth/webauthn/authenticate/start` (§24.1) — passkey as a second factor. */
+  webauthnAuthenticateStart(
+    challengeToken: Sensitive<string> | string,
+  ): Promise<webauthnMethods.WebauthnAuthenticationChallenge> {
+    return webauthnMethods.webauthnAuthenticateStart(this, challengeToken);
+  }
+
+  /** `POST /api/v1/auth/webauthn/authenticate/finish` (§24.1). Leaves the client authenticated (§24.3). */
+  webauthnAuthenticateFinish(
+    stateToken: Sensitive<string> | string,
+    response: WebauthnAuthenticationResponse | string,
+  ): Promise<webauthnMethods.WebauthnLoginResult> {
+    return webauthnMethods.webauthnAuthenticateFinish(this, stateToken, response);
+  }
+
+  /** `POST .../authenticate/discoverable/start` (§24.1) — usernameless sign-in. */
+  webauthnDiscoverableStart(
+    workspace?: WebauthnWorkspace,
+  ): Promise<webauthnMethods.WebauthnAuthenticationChallenge> {
+    return webauthnMethods.webauthnDiscoverableStart(this, workspace);
+  }
+
+  /** `POST .../authenticate/discoverable/finish` (§24.1). Leaves the client authenticated (§24.3). */
+  webauthnDiscoverableFinish(
+    stateToken: Sensitive<string> | string,
+    response: WebauthnAuthenticationResponse | string,
+  ): Promise<webauthnMethods.WebauthnLoginResult> {
+    return webauthnMethods.webauthnDiscoverableFinish(this, stateToken, response);
+  }
+
+  // -------------------------------------------------------------------------
+  // §25 Account lifecycle and MFA enrolment
+  // -------------------------------------------------------------------------
+
+  /** `POST /api/v1/auth/mfa/enroll` (§25.1) — voluntary TOTP enrolment, by a signed-in user. */
+  mfaEnroll(): Promise<accountMethods.MfaEnrollment> {
+    return accountMethods.mfaEnroll(this);
+  }
+
+  /** `POST /api/v1/auth/mfa/confirm` (§25.1) — activate the factor `mfaEnroll` offered. */
+  mfaConfirm(totpCode: string): Promise<boolean> {
+    return accountMethods.mfaConfirm(this, totpCode);
+  }
+
+  /** `POST /api/v1/auth/mfa/setup/enroll` (§25.1) — start the enrolment a `login()` demanded. */
+  mfaSetupEnroll(setupToken: Sensitive<string> | string): Promise<accountMethods.MfaEnrollment> {
+    return accountMethods.mfaSetupEnroll(this, setupToken);
+  }
+
+  /** `POST /api/v1/auth/mfa/setup/confirm` (§25.1) — finish it, completing the interrupted login. */
+  mfaSetupConfirm(setupToken: Sensitive<string> | string, totpCode: string): Promise<LoginResult> {
+    return accountMethods.mfaSetupConfirm(this, setupToken, totpCode);
+  }
+
+  /** `POST /api/v1/auth/verify-email` (§25.1). */
+  verifyEmail(token: Sensitive<string> | string, tenantId: string): Promise<void> {
+    return accountMethods.verifyEmail(this, token, tenantId);
+  }
+
+  /** `POST /api/v1/auth/resend-verification` (§25.1). */
+  resendVerification(email: string, tenantId: string): Promise<void> {
+    return accountMethods.resendVerification(this, email, tenantId);
+  }
+
+  /** `POST /api/v1/auth/reset` (§25.1). Resolves whether or not the address exists (§25.4). */
+  requestPasswordReset(request: accountMethods.PasswordResetRequest): Promise<void> {
+    return accountMethods.requestPasswordReset(this, request);
+  }
+
+  /** `GET /api/v1/auth/reset/context` (§25.1) — the OPAQUE policy for a reset token's account. */
+  passwordResetContext(
+    token: Sensitive<string> | string,
+  ): Promise<accountMethods.PasswordResetContext> {
+    return accountMethods.passwordResetContext(this, token);
+  }
+
+  /** `POST /api/v1/auth/reset/confirm` (§25.1). */
+  confirmPasswordReset(confirmation: accountMethods.PasswordResetConfirmation): Promise<void> {
+    return accountMethods.confirmPasswordReset(this, confirmation);
   }
 }

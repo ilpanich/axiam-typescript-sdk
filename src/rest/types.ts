@@ -7,6 +7,7 @@
 // anywhere — tokens arrive exclusively via Set-Cookie (D-05/T-17-07).
 
 import type { AccessDecision } from '../core/index.js';
+import type { Sensitive } from '../core/index.js';
 
 // ---------------------------------------------------------------------------
 // Wire types (snake_case, mirror server handlers)
@@ -30,6 +31,15 @@ export interface MfaRequiredResponseWire {
   mfa_required: boolean;
   challenge_token: string;
   available_methods: string[];
+}
+
+/**
+ * 403 Forbidden body from /api/v1/auth/login when the tenant requires MFA and
+ * this account has none (CONTRACT.md §25.2).
+ */
+export interface MfaSetupRequiredResponseWire {
+  mfa_setup_required: boolean;
+  setup_token: string;
 }
 
 /** 200 OK body from /api/v1/auth/refresh. */
@@ -66,6 +76,22 @@ export type LoginResult =
       mfaToken: string;
       /** The MFA methods the user has enrolled and may complete the challenge with. */
       availableMethods: string[];
+    }
+  | {
+      /**
+       * Discriminant: the tenant requires MFA, this account has none, and the
+       * server handed back the token to finish setting one up (§25.2 rule 1).
+       *
+       * This is an **outcome, not an error**. The server answers `403` here,
+       * which §2 would map to `AuthzError` — telling the caller they lack
+       * permission to log in, when what the server said was recoverable and
+       * came with the means to recover. Pass `setupToken` to `mfaSetupEnroll`,
+       * show the user the resulting URI, then `mfaSetupConfirm`, which
+       * completes this login.
+       */
+      status: 'mfa_setup_required';
+      /** Opaque token authorizing the `mfaSetupEnroll`/`mfaSetupConfirm` pair. */
+      setupToken: Sensitive<string>;
     }
   | {
       /** Discriminant: login completed and a session was established. */

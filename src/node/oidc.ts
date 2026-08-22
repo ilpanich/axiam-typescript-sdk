@@ -80,6 +80,9 @@ import type {
   RptResponseWire,
   UmaChallenge,
   UmaExchangeTicketParams,
+  OidcParParams,
+  PushedAuthorizationRequest,
+  PushedAuthorizationResponseWire,
 } from './oidcTypes.js';
 
 /** Path of the OIDC discovery document, relative to the client base URL. */
@@ -954,6 +957,105 @@ export class OidcClient {
       // falls back to the RFC default. A server-sent 0 is treated as absent —
       // polling with no delay is never what the server meant.
       interval: data.interval != null && data.interval > 0 ? data.interval : DEFAULT_POLL_INTERVAL_SECS,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // §26 Pushed Authorization Requests (RFC 9126)
+  // -------------------------------------------------------------------------
+
+  /**
+   * `POST /oauth2/par` (CONTRACT.md §26.1) — push the authorization request
+   * over the back channel and get an opaque handle to redirect with.
+   *
+   * @remarks
+   * PAR moves the authorization request off the browser. Instead of putting
+   * `scope`, `redirect_uri`, `state` and the PKCE challenge into a URL the user
+   * agent carries, the client POSTs them straight to AXIAM over an
+   * authenticated channel and puts an opaque `request_uri` in the redirect.
+   * What travels through the browser is then a random string that cannot be
+   * edited into meaning something else.
+   *
+   * **Required for a FAPI 2.0 client** — `profile: "fapi2"` refuses a
+   * registration that does not set `require_par`, so such a client cannot
+   * authorize any other way (§21.1).
+   *
+   * This is a §12 extension, not a replacement: `oidcExchange` afterwards is
+   * unchanged, and carries the same `codeVerifier` and `redirectUri`
+   * ({@link PushedAuthorizationRequest.codeVerifier} is the one `oidcBegin`
+   * produced — §26.2 rule 6).
+   *
+   * @example
+   * ```ts
+   * const configuration = await oidc.oidcDiscover();
+   * const begun = oidc.oidcBegin({ configuration, redirectUri, scope: 'openid profile' });
+   * const pushed = await oidc.oidcPar({ request: begun, redirectUri, scope: 'openid profile' });
+   *
+   * redirect(pushed.authorizationUrl);           // client_id + request_uri, nothing else
+   * // …later, on the callback:
+   * const tokens = await oidc.oidcExchange({
+   *   code, redirectUri, nonce: pushed.nonce, codeVerifier: pushed.codeVerifier,
+   * });
+   * ```
+   */
+  async oidcPar(params: OidcParParams): Promise<PushedAuthorizationRequest> {
+    const configuration = params.configuration ?? (await this.oidcDiscover());
+    const endpoint = configuration.pushed_authorization_request_endpoint;
+    if (!endpoint) {
+      throw new AuthError(
+        "the authorization server's discovery document advertises no " +
+          'pushed_authorization_request_endpoint: this server does not support RFC 9126 ' +
+          '(CONTRACT.md §26.1)',
+      );
+    }
+
+    // §26.2 rule 1: everything below was computed by `oidcBegin`. There is no
+    // second generator here, and there must not be — two sources for `state`
+    // or the PKCE pair are two things that can disagree.
+    const request = params.request;
+    const form = new URLSearchParams();
+    form.set('client_id', this.#options.clientId);
+    form.set('response_type', 'code');
+    form.set('redirect_uri', params.redirectUri);
+    form.set('scope', normalizeScope(params.scope));
+    form.set('state', request.state);
+    form.set('nonce', request.nonce);
+    form.set('code_challenge', computeCodeChallenge(exposeSecret(request.codeVerifier)));
+    form.set('code_challenge_method', CODE_CHALLENGE_METHOD_S256);
+    this.#appendClientSecret(form);
+
+    const url = this.#endpointUrl(endpoint, params.tenantId);
+    // Deliberately NOT routed through the §16 retry helper: this is a POST that
+    // creates server state, so it falls outside §16.2's read-only eligibility
+    // exactly as `oidcExchange` does. The safe recovery from a transport
+    // failure is a fresh push, which costs one round trip and cannot
+    // double-consume anything (§26.2 rule 4).
+    const { data } = await this.#postForm<PushedAuthorizationResponseWire>(
+      url,
+      form,
+      'pushed authorization request failed',
+    );
+
+    // §26.2 rule 2: exactly two query parameters. Not `response_type`, not
+    // `redirect_uri`, not `scope`, not `state`, not the PKCE pair — the server
+    // REFUSES a request carrying both a `request_uri` and any inline
+    // authorization parameter rather than merging them, because merging is
+    // where parameter confusion lives: an attacker supplies the inline value
+    // they want and lets the pushed copy satisfy whichever check reads the
+    // other one. Re-adding them "for compatibility" restores the attack.
+    const target = new URL(configuration.authorization_endpoint);
+    const query = new URLSearchParams();
+    query.set('client_id', this.#options.clientId);
+    query.set('request_uri', data.request_uri);
+    target.search = query.toString().replace(/\+/g, '%20');
+
+    return {
+      authorizationUrl: target.toString(),
+      requestUri: new Sensitive(data.request_uri),
+      expiresIn: data.expires_in,
+      state: request.state,
+      nonce: request.nonce,
+      codeVerifier: request.codeVerifier,
     };
   }
 

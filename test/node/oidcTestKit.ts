@@ -27,6 +27,7 @@ export const REVOKE_ENDPOINT = `${BASE_URL}/oauth2/revoke`;
 export const ISSUER = 'https://iam.example.com';
 export const DEVICE_AUTHORIZATION_ENDPOINT = `${BASE_URL}/oauth2/device_authorization`;
 export const END_SESSION_ENDPOINT = `${BASE_URL}/oauth2/end_session`;
+export const PAR_ENDPOINT = `${BASE_URL}/oauth2/par`;
 
 /** A discovery document pointing every endpoint at the mocked origin. */
 export function discoveryDocument(overrides: Partial<OidcConfiguration> = {}): OidcConfiguration {
@@ -53,6 +54,7 @@ export function discoveryDocument(overrides: Partial<OidcConfiguration> = {}): O
     ],
     device_authorization_endpoint: DEVICE_AUTHORIZATION_ENDPOINT,
     end_session_endpoint: END_SESSION_ENDPOINT,
+    pushed_authorization_request_endpoint: PAR_ENDPOINT,
     backchannel_logout_supported: true,
     backchannel_logout_session_supported: true,
     ...overrides,
@@ -69,6 +71,7 @@ export function discoveryDocumentWithoutOptionalEndpoints(): OidcConfiguration {
   const doc = discoveryDocument();
   delete doc.device_authorization_endpoint;
   delete doc.end_session_endpoint;
+  delete doc.pushed_authorization_request_endpoint;
   return doc;
 }
 
