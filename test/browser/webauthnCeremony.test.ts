@@ -56,7 +56,7 @@ function fakeCredential(kind: 'create' | 'get'): PublicKeyCredential {
         }
       : {
           clientDataJSON: bytes('eyJ0eXBlIjoid2ViYXV0aG4uZ2V0In0'),
-          authenticatorData: bytes('YXV0aGVudGljYXRvci1kYXRh'),
+          authenticatorData: bytes('YXV0aC1kYXRh'),
           signature: bytes('c2lnbmF0dXJl'),
           userHandle: bytes('dXNlci1oYW5kbGU'),
         };

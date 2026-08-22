@@ -106,7 +106,7 @@ export const AUTHENTICATION_RESPONSE: WebauthnAuthenticationResponse = {
   rawId: 'bmV3LWNyZWRlbnRpYWwtaWQ',
   response: {
     clientDataJSON: 'eyJ0eXBlIjoid2ViYXV0aG4uZ2V0In0',
-    authenticatorData: 'YXV0aGVudGljYXRvci1kYXRh',
+    authenticatorData: 'YXV0aC1kYXRh',
     signature: 'c2lnbmF0dXJl',
     userHandle: 'dXNlci1oYW5kbGUtYnl0ZXM',
   },
