@@ -24,12 +24,13 @@
 <li><strong>License:</strong> Apache-2.0</li>
 </ul>
 <h2 id="contract-conformance" class="tsd-anchor-link">Contract conformance<a href="#contract-conformance" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
-<p>This SDK conforms to <a href="http://CONTRACT.md">CONTRACT.md</a> §1–§13 and §12.7, §14, §15, §17, §19, §20, §21, §22, §23 (including §6.1 mTLS
-client certificates, the §10.1 minimum local-verification set, the §12 OIDC/SSO
-relying-party helpers, and the §13 <code>verifyWebhook</code> signature verifier).</p>
-<p>§12.7, §14, §15 and §22 are named rather than folded into the range because they landed
-after this SDK already claimed §1–§13: widening the range silently would turn a statement
-that was true when written into a different claim without anyone editing it.</p>
+<p>This SDK conforms to <a href="http://CONTRACT.md">CONTRACT.md</a> §1–§13 and §12.7, §14, §15, §17, §19, §20, §21, §22, §23,
+§24, §25, §26 (including §6.1 mTLS client certificates, the §10.1 minimum
+local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
+<code>verifyWebhook</code> signature verifier).</p>
+<p>§12.7, §14, §15, §22, §24, §25 and §26 are named rather than folded into the range because
+they landed after this SDK already claimed §1–§13: widening the range silently would turn a
+statement that was true when written into a different claim without anyone editing it.</p>
 <h3 id="§101-minimum-local-verification-set" class="tsd-anchor-link">§10.1 minimum local-verification set<a href="#§101-minimum-local-verification-set" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <p><code>axiamMiddleware</code> / <code>axiamPlugin</code> (and the <code>requireAuth</code> / <code>requireAccess</code> / <code>requireRole</code>
 helpers built on them) funnel through <code>authenticateRequest</code>, which applies <strong>every</strong> §10.1
@@ -71,6 +72,11 @@ never contains <code>@grpc/grpc-js</code> or <code>amqplib</code>):</p>
 <td><code>axiam-sdk</code> / <code>axiam-sdk/rest</code></td>
 <td>Browser + Node, REST-only</td>
 <td><code>AxiamClient</code>: <code>login</code>/<code>verifyMfa</code>/<code>refresh</code>/<code>logout</code>, <code>can</code>/<code>batchCheck</code> over the FND-04 REST authz endpoint</td>
+</tr>
+<tr>
+<td><code>axiam-sdk/browser</code></td>
+<td>Browser only</td>
+<td>The WebAuthn <strong>platform ceremony</strong> — <code>webauthnRegister</code>/<code>webauthnLogin</code>/<code>webauthnDiscoverableLogin</code> over <code>navigator.credentials</code> (<a href="http://CONTRACT.md">CONTRACT.md</a> §24.6b). The relying-party operations themselves are on <code>AxiamClient</code> in <code>/rest</code> and work in Node too.</td>
 </tr>
 <tr>
 <td><code>axiam-sdk/grpc</code></td>
@@ -573,6 +579,145 @@ instantiate it twice.</p>
 t=2 by default, tens to hundreds of milliseconds of synchronous work. That cost
 is the point — it is what makes a stolen record expensive to attack even by
 someone holding the OPRF seed. In a browser, consider a Web Worker.</p>
+<h2 id="webauthn-and-passkeys-contractmd-§24" class="tsd-anchor-link">WebAuthn and passkeys (<a href="http://CONTRACT.md">CONTRACT.md</a> §24)<a href="#webauthn-and-passkeys-contractmd-§24" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>A passkey ceremony is <strong>two exchanges stacked</strong>: one with an <em>authenticator</em>,
+which needs a platform API, and one with <em>AXIAM</em>, which is four ordinary JSON
+round trips. This SDK splits along that seam, and where you import from tells
+you which half you get.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Where</th>
+<th>Runs in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The six relying-party operations</td>
+<td><code>AxiamClient</code>, from <code>axiam-sdk</code> / <code>axiam-sdk/rest</code></td>
+<td><strong>Browser and Node</strong></td>
+</tr>
+<tr>
+<td>The ceremony (<code>navigator.credentials</code>)</td>
+<td><code>axiam-sdk/browser</code></td>
+<td>Browser only</td>
+</tr>
+</tbody>
+</table>
+<p>The Node half is not a consolation prize. A service completing a ceremony that
+ran on a handset — an Android app, an iOS app, a hardware client — is the
+relying party, exactly as a browser is, and it never touches
+<code>navigator.credentials</code>.</p>
+<h3 id="the-browser-three-calls" class="tsd-anchor-link">The browser: three calls<a href="#the-browser-three-calls" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<pre><code class="ts"><span class="hl-7">import</span><span class="hl-1"> { </span><span class="hl-4">AxiamClient</span><span class="hl-1"> } </span><span class="hl-7">from</span><span class="hl-1"> </span><span class="hl-5">&#39;axiam-sdk/rest&#39;</span><span class="hl-1">;</span><br/><span class="hl-7">import</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-4">isWebauthnSupported</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">webauthnRegister</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">webauthnLogin</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">webauthnDiscoverableLogin</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">classifyWebauthnError</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">webauthnErrorMessage</span><span class="hl-1">,</span><br/><span class="hl-1">} </span><span class="hl-7">from</span><span class="hl-1"> </span><span class="hl-5">&#39;axiam-sdk/browser&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">client</span><span class="hl-1"> = </span><span class="hl-0">new</span><span class="hl-1"> </span><span class="hl-3">AxiamClient</span><span class="hl-1">({ </span><span class="hl-4">baseUrl</span><span class="hl-1">, </span><span class="hl-4">orgSlug:</span><span class="hl-1"> </span><span class="hl-5">&#39;globex&#39;</span><span class="hl-1">, </span><span class="hl-4">tenantSlug:</span><span class="hl-1"> </span><span class="hl-5">&#39;acme&#39;</span><span class="hl-1"> });</span><br/><br/><span class="hl-6">// Enrol, for a user who is already signed in.</span><br/><span class="hl-7">if</span><span class="hl-1"> (</span><span class="hl-3">isWebauthnSupported</span><span class="hl-1">()) {</span><br/><span class="hl-1">  </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-3">webauthnRegister</span><span class="hl-1">(</span><span class="hl-4">client</span><span class="hl-1">, </span><span class="hl-5">&#39;Alice’s laptop&#39;</span><span class="hl-1">, </span><span class="hl-5">&#39;platform&#39;</span><span class="hl-1">);</span><br/><span class="hl-1">}</span><br/><br/><span class="hl-6">// Passkey as a SECOND factor, continuing a password login.</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">result</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">login</span><span class="hl-1">(</span><span class="hl-4">email</span><span class="hl-1">, </span><span class="hl-4">password</span><span class="hl-1">);</span><br/><span class="hl-7">if</span><span class="hl-1"> (</span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">status</span><span class="hl-1"> === </span><span class="hl-5">&#39;mfa_required&#39;</span><span class="hl-1"> &amp;&amp; </span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">availableMethods</span><span class="hl-1">.</span><span class="hl-3">includes</span><span class="hl-1">(</span><span class="hl-5">&#39;webauthn&#39;</span><span class="hl-1">)) {</span><br/><span class="hl-1">  </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-3">webauthnLogin</span><span class="hl-1">(</span><span class="hl-4">client</span><span class="hl-1">, </span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">mfaToken</span><span class="hl-1">);   </span><span class="hl-6">// client is authenticated after this</span><br/><span class="hl-1">}</span><br/><br/><span class="hl-6">// Passkey with NO username at all.</span><br/><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-3">webauthnDiscoverableLogin</span><span class="hl-1">(</span><span class="hl-4">client</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<p><code>isWebauthnSupported()</code> is a query, not a try/catch: hide the button rather than
+offer one that throws. Ceremony failures classify into five outcomes, and
+<code>already_registered</code> is the one worth separating — it means the authenticator
+already holds a credential for this account and refused to mint a second, so the
+remedy is a different device rather than another attempt:</p>
+<pre><code class="ts"><span class="hl-7">try</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-3">webauthnRegister</span><span class="hl-1">(</span><span class="hl-4">client</span><span class="hl-1">, </span><span class="hl-4">name</span><span class="hl-1">, </span><span class="hl-4">kind</span><span class="hl-1">);</span><br/><span class="hl-1">} </span><span class="hl-7">catch</span><span class="hl-1"> (</span><span class="hl-4">err</span><span class="hl-1">) {</span><br/><span class="hl-1">  </span><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">failure</span><span class="hl-1"> = </span><span class="hl-3">classifyWebauthnError</span><span class="hl-1">(</span><span class="hl-4">err</span><span class="hl-1">);   </span><span class="hl-6">// &#39;cancelled&#39; | &#39;already_registered&#39; | …</span><br/><span class="hl-1">  </span><span class="hl-3">showBanner</span><span class="hl-1">(</span><span class="hl-3">webauthnErrorMessage</span><span class="hl-1">(</span><span class="hl-4">failure</span><span class="hl-1">));</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<p><code>cancelled</code> covers <strong>both</strong> an explicit refusal and a silent timeout. The
+WebAuthn spec deliberately refuses to distinguish them, because telling a website
+which one happened leaks whether an authenticator was present — so the copy for
+it does not accuse anyone of cancelling, and you should not try to recover the
+distinction by timing the call.</p>
+<p>Passkey autofill (conditional mediation) is a flag, and everything about it
+degrades quietly:</p>
+<pre><code class="ts"><span class="hl-7">if</span><span class="hl-1"> (</span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-3">isConditionalMediationAvailable</span><span class="hl-1">()) {</span><br/><span class="hl-1">  </span><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">abort</span><span class="hl-1"> = </span><span class="hl-0">new</span><span class="hl-1"> </span><span class="hl-3">AbortController</span><span class="hl-1">();</span><br/><span class="hl-1">  </span><span class="hl-0">void</span><span class="hl-1"> </span><span class="hl-3">webauthnDiscoverableLogin</span><span class="hl-1">(</span><span class="hl-4">client</span><span class="hl-1">, </span><span class="hl-0">undefined</span><span class="hl-1">, { </span><span class="hl-4">conditional:</span><span class="hl-1"> </span><span class="hl-0">true</span><span class="hl-1">, </span><span class="hl-4">signal:</span><span class="hl-1"> </span><span class="hl-4">abort</span><span class="hl-1">.</span><span class="hl-4">signal</span><span class="hl-1"> })</span><br/><span class="hl-1">    .</span><span class="hl-3">catch</span><span class="hl-1">(() </span><span class="hl-0">=&gt;</span><span class="hl-1"> {</span><span class="hl-6">/* abandoned, not failed */</span><span class="hl-1">});</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<p>That promise may never settle — the user simply may not pick a passkey — so
+abandon it on navigation and never show an error for a prompt nobody engaged
+with.</p>
+<h3 id="anywhere-else-the-json-bridge" class="tsd-anchor-link">Anywhere else: the JSON bridge<a href="#anywhere-else-the-json-bridge" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>Every platform authenticator API speaks the same WebAuthn <strong>JSON form</strong> — Android's
+Credential Manager takes <code>requestJson</code> and returns <code>registrationResponseJson</code>;
+browsers use <code>parseCreationOptionsFromJSON()</code> and <code>credential.toJSON()</code>. So the
+SDK hands you the challenge as that JSON and takes the platform's answer back as
+that JSON, from any runtime:</p>
+<pre><code class="ts"><span class="hl-7">import</span><span class="hl-1"> { </span><span class="hl-4">webauthnRequestJson</span><span class="hl-1"> } </span><span class="hl-7">from</span><span class="hl-1"> </span><span class="hl-5">&#39;axiam-sdk/rest&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> { </span><span class="hl-2">challenge</span><span class="hl-1">, </span><span class="hl-2">stateToken</span><span class="hl-1"> } = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">webauthnDiscoverableStart</span><span class="hl-1">();</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">requestJson</span><span class="hl-1"> = </span><span class="hl-3">webauthnRequestJson</span><span class="hl-1">(</span><span class="hl-4">challenge</span><span class="hl-1">);   </span><span class="hl-6">// → give this to the platform</span><br/><br/><span class="hl-6">// …the platform runs the ceremony and hands back a JSON string…</span><br/><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">webauthnDiscoverableFinish</span><span class="hl-1">(</span><span class="hl-4">stateToken</span><span class="hl-1">, </span><span class="hl-4">responseJson</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Nothing is destructured on the way through, which matters: the response is the
+input to a signature check over bytes this SDK did not produce, and re-encoding
+base64url &quot;to be safe&quot; is the most common way to break a ceremony that was
+otherwise correct.</p>
+<h3 id="what-the-sdk-does-not-do-on-purpose" class="tsd-anchor-link">What the SDK does not do, on purpose<a href="#what-the-sdk-does-not-do-on-purpose" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p><strong>It never adjusts an option.</strong> The server generates the challenge and chooses
+<code>residentKey</code>, <code>userVerification</code>, the attestation conveyance, the exclusion list
+and the timeout; this SDK passes all of it to the authenticator unchanged and
+posts the answer back unchanged. Not because those fields are hard — because they
+are not, and that is the hazard: relaxing <code>userVerification</code> to <code>&quot;preferred&quot;</code>
+because a CI authenticator kept prompting weakens a ceremony the server believes
+it configured, and the server cannot detect it, since an assertion produced under
+weaker options is a valid assertion.</p>
+<p>The single exception is the <code>authenticatorAttachment</code> hint, and only when you
+pass one. It selects which authenticator the user is prompted for; without it, a
+user reaching for a security key gets asked for Touch ID.</p>
+<p><strong>It never emulates an authenticator.</strong> A &quot;credential&quot; held in process memory is
+not a second factor. Where no platform API is reachable, the JSON bridge is the
+answer and it is a complete one.</p>
+<p><strong>There is no user private key anywhere in this API.</strong> The private half never
+leaves the authenticator — that is the property the whole mechanism rests on.</p>
+<h3 id="two-error-rows-that-are-not-the-generic-mapping" class="tsd-anchor-link">Two error rows that are not the generic mapping<a href="#two-error-rows-that-are-not-the-generic-mapping" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul>
+<li>A <strong><code>403</code> on <code>webauthnRegisterFinish</code></strong> is the tenant's attestation policy
+refusing <em>this authenticator</em> — an AAGUID that is not allow-listed, a missing
+FIDO certification, a revoked status — not a permission problem with the user.
+The server's message is surfaced verbatim, because it is the only way the person
+holding the key learns that a different one would work.</li>
+<li>A <strong><code>503</code> on <code>webauthnRegisterStart</code></strong> means the attestation policy requires
+attestation and the FIDO metadata service has no usable snapshot. It is a server
+configuration state, not a transient failure, and it is deliberately <strong>not</strong>
+retried: retrying changes nothing and delays a message an operator needs.</li>
+</ul>
+<h2 id="account-lifecycle-and-mfa-enrolment-contractmd-§25" class="tsd-anchor-link">Account lifecycle and MFA enrolment (<a href="http://CONTRACT.md">CONTRACT.md</a> §25)<a href="#account-lifecycle-and-mfa-enrolment-contractmd-§25" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>§1 locks the <em>middle</em> of an account's life — <code>login</code>, <code>verifyMfa</code>, <code>refresh</code>,
+<code>logout</code> all assume an account that already exists, is verified, and already has
+its second factor. These nine operations are how it gets there.</p>
+<pre><code class="ts"><span class="hl-6">// Voluntary TOTP enrolment, by a signed-in user. Two calls, deliberately: the</span><br/><span class="hl-6">// human step in the middle is not something a helper can wait for, and one that</span><br/><span class="hl-6">// returned after mfaEnroll would report MFA as enabled when it is not.</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">enrolment</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">mfaEnroll</span><span class="hl-1">();</span><br/><span class="hl-3">renderQr</span><span class="hl-1">(</span><span class="hl-4">enrolment</span><span class="hl-1">.</span><span class="hl-4">totpUri</span><span class="hl-1">.</span><span class="hl-3">expose</span><span class="hl-1">());</span><br/><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">mfaConfirm</span><span class="hl-1">(</span><span class="hl-4">codeTypedByUser</span><span class="hl-1">);       </span><span class="hl-6">// → true once the factor is live</span>
+</code><button type="button">Copy</button></pre>
+
+<p><code>secretBase32</code> and <code>totpUri</code> are both <code>Sensitive</code>, and the URI is the one that
+matters: it <em>is</em> <code>otpauth://…?secret=…</code>, so it contains the secret it sits next
+to. Wrapping only the secret would have wrapped nothing — the URI is the field
+that actually reaches a log, because it is the field you hand to a QR renderer.</p>
+<h3 id="has-a-third-outcome" class="tsd-anchor-link"><code>login()</code> has a third outcome<a href="#has-a-third-outcome" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p><strong>This is a breaking change</strong> (contract 1.28). The server has always been able to
+answer <code>POST /api/v1/auth/login</code> with <code>403 mfa_setup_required</code> and a setup token,
+meaning &quot;this tenant requires MFA, this account has none, here is how to finish&quot;.
+It used to reach you as an <code>AuthzError</code> — which told you that you lacked
+permission to log in, when what the server said was recoverable and came with the
+means to recover.</p>
+<pre><code class="ts"><span class="hl-7">switch</span><span class="hl-1"> (</span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">status</span><span class="hl-1">) {</span><br/><span class="hl-1">  </span><span class="hl-7">case</span><span class="hl-1"> </span><span class="hl-5">&#39;authenticated&#39;</span><span class="hl-1">:</span><br/><span class="hl-1">    </span><span class="hl-7">break</span><span class="hl-1">;</span><br/><span class="hl-1">  </span><span class="hl-7">case</span><span class="hl-1"> </span><span class="hl-5">&#39;mfa_required&#39;</span><span class="hl-1">:</span><br/><span class="hl-1">    </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">verifyMfa</span><span class="hl-1">(</span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">mfaToken</span><span class="hl-1">, </span><span class="hl-4">code</span><span class="hl-1">);</span><br/><span class="hl-1">    </span><span class="hl-7">break</span><span class="hl-1">;</span><br/><span class="hl-1">  </span><span class="hl-7">case</span><span class="hl-1"> </span><span class="hl-5">&#39;mfa_setup_required&#39;</span><span class="hl-1">: {                    </span><span class="hl-6">// ← new</span><br/><span class="hl-1">    </span><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">enrolment</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">mfaSetupEnroll</span><span class="hl-1">(</span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">setupToken</span><span class="hl-1">);</span><br/><span class="hl-1">    </span><span class="hl-3">renderQr</span><span class="hl-1">(</span><span class="hl-4">enrolment</span><span class="hl-1">.</span><span class="hl-4">totpUri</span><span class="hl-1">.</span><span class="hl-3">expose</span><span class="hl-1">());</span><br/><span class="hl-1">    </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">mfaSetupConfirm</span><span class="hl-1">(</span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">setupToken</span><span class="hl-1">, </span><span class="hl-4">codeTypedByUser</span><span class="hl-1">);</span><br/><span class="hl-1">    </span><span class="hl-7">break</span><span class="hl-1">;                                        </span><span class="hl-6">// this completes the login</span><br/><span class="hl-1">  }</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<p>If you match <code>LoginResult</code> exhaustively, this is the edit you need. A genuine
+authorization refusal is still an <code>AuthzError</code>: the SDK matches on the body's own
+discriminant, not on the <code>403</code> alone.</p>
+<h3 id="email-verification-and-password-reset" class="tsd-anchor-link">Email verification and password reset<a href="#email-verification-and-password-reset" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<pre><code class="ts"><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">verifyEmail</span><span class="hl-1">(</span><span class="hl-4">tokenFromLink</span><span class="hl-1">, </span><span class="hl-4">tenantId</span><span class="hl-1">);</span><br/><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">resendVerification</span><span class="hl-1">(</span><span class="hl-4">email</span><span class="hl-1">, </span><span class="hl-4">tenantId</span><span class="hl-1">);</span><br/><br/><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">requestPasswordReset</span><span class="hl-1">({ </span><span class="hl-4">email</span><span class="hl-1"> });</span>
+</code><button type="button">Copy</button></pre>
+
+<p><code>requestPasswordReset</code> resolves <strong>whether or not the address exists</strong>, and this
+SDK exposes no way to tell the difference. That is not an omission to improve on:
+any signal distinguishing them — including one inferred from timing — turns the
+endpoint into the account enumeration oracle its uniform response exists to
+prevent.</p>
+<p>Setting the new password takes one extra call on any tenant that might have
+OPAQUE enabled (§23), because the client has to build a registration record and
+cannot know the parameters before it has a token to ask with:</p>
+<pre><code class="ts"><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">context</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">passwordResetContext</span><span class="hl-1">(</span><span class="hl-4">token</span><span class="hl-1">);</span><br/><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">confirmPasswordReset</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-4">token</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">newPassword</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">tenantId</span><span class="hl-1">,</span><br/><span class="hl-1">  ...(</span><span class="hl-4">context</span><span class="hl-1">.</span><span class="hl-4">opaque</span><span class="hl-1"> ? { </span><span class="hl-4">opaque:</span><span class="hl-1"> </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">opaqueEnrollment</span><span class="hl-1">(</span><span class="hl-4">newPassword</span><span class="hl-1">) } : {}),</span><br/><span class="hl-1">});</span>
+</code><button type="button">Copy</button></pre>
+
+<p>The context discloses no identity — an unauthenticated endpoint that confirmed
+which account a token belongs to would be an oracle worth not having — and a
+<code>404</code> covers unknown, expired and already-consumed without distinguishing them.</p>
 <h2 id="device-authorization-grant-contractmd-§14" class="tsd-anchor-link">Device authorization grant (<code>axiam-sdk/node</code>, <a href="http://CONTRACT.md">CONTRACT.md</a> §14)<a href="#device-authorization-grant-contractmd-§14" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>RFC 8628 — signing in a device that cannot show a browser: a TV, a CLI, a headless
 commissioning tool.</p>
@@ -635,6 +780,41 @@ exchanged again — exchanges do not compose.</li>
 </ul>
 <p>See <a href="media/external-token-exchange.ts"><code>examples/external-token-exchange.ts</code></a> and the
 operator guide, <code>docs/api/federated-token-exchange.md</code>.</p>
+<h2 id="pushed-authorization-requests-contractmd-§26" class="tsd-anchor-link">Pushed authorization requests (<code>axiam-sdk/node</code>, <a href="http://CONTRACT.md">CONTRACT.md</a> §26)<a href="#pushed-authorization-requests-contractmd-§26" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>PAR (RFC 9126) moves the authorization request off the browser. Instead of
+putting <code>scope</code>, <code>redirect_uri</code>, <code>state</code> and the PKCE challenge into a URL the
+user agent carries, the client POSTs them straight to AXIAM over an
+authenticated back channel and puts an opaque <code>request_uri</code> in the redirect.
+What travels through the browser is then a random string that cannot be edited
+into meaning something else.</p>
+<p>Required for a FAPI 2.0 client: <code>profile: &quot;fapi2&quot;</code> refuses a registration that
+does not set <code>require_par</code>, so such a client cannot authorize any other way.</p>
+<pre><code class="ts"><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">configuration</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">oidc</span><span class="hl-1">.</span><span class="hl-3">oidcDiscover</span><span class="hl-1">();</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">request</span><span class="hl-1"> = </span><span class="hl-4">oidc</span><span class="hl-1">.</span><span class="hl-3">oidcBegin</span><span class="hl-1">({ </span><span class="hl-4">configuration</span><span class="hl-1">, </span><span class="hl-4">redirectUri</span><span class="hl-1">, </span><span class="hl-4">scope:</span><span class="hl-1"> </span><span class="hl-5">&#39;openid profile&#39;</span><span class="hl-1"> });</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">pushed</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">oidc</span><span class="hl-1">.</span><span class="hl-3">oidcPar</span><span class="hl-1">({ </span><span class="hl-4">request</span><span class="hl-1">, </span><span class="hl-4">redirectUri</span><span class="hl-1">, </span><span class="hl-4">scope:</span><span class="hl-1"> </span><span class="hl-5">&#39;openid profile&#39;</span><span class="hl-1">, </span><span class="hl-4">configuration</span><span class="hl-1"> });</span><br/><br/><span class="hl-3">redirect</span><span class="hl-1">(</span><span class="hl-4">pushed</span><span class="hl-1">.</span><span class="hl-4">authorizationUrl</span><span class="hl-1">);</span><br/><span class="hl-6">// …on the callback, unchanged by PAR:</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">tokens</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">oidc</span><span class="hl-1">.</span><span class="hl-3">oidcExchange</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-4">code</span><span class="hl-1">, </span><span class="hl-4">redirectUri</span><span class="hl-1">, </span><span class="hl-4">nonce:</span><span class="hl-1"> </span><span class="hl-4">pushed</span><span class="hl-1">.</span><span class="hl-4">nonce</span><span class="hl-1">, </span><span class="hl-4">codeVerifier:</span><span class="hl-1"> </span><span class="hl-4">pushed</span><span class="hl-1">.</span><span class="hl-4">codeVerifier</span><span class="hl-1">,</span><br/><span class="hl-1">});</span>
+</code><button type="button">Copy</button></pre>
+
+<p><code>oidcBegin</code> still does the computing — there is no second generator for <code>state</code>,
+<code>nonce</code> and PKCE — and <code>pushed.codeVerifier</code> is the one it produced, so there is
+exactly one value to keep.</p>
+<p>Three things about this that are easy to get wrong:</p>
+<ol>
+<li><strong>The endpoint answers <code>201</code>, not <code>200</code>.</strong> RFC 9126 §2.2 specifies Created,
+and a success predicate written <code>status === 200</code> treats every successful push
+as a failure.</li>
+<li><strong>The authorization URL carries exactly <code>client_id</code> and <code>request_uri</code>.</strong> The
+server <em>refuses</em> a request that mixes a <code>request_uri</code> with inline
+authorization parameters rather than merging them, and re-adding them &quot;for
+compatibility&quot; restores the parameter-confusion attack the refusal prevents:
+an attacker supplies the inline value they want and lets the pushed copy
+satisfy whichever check reads the other one.</li>
+<li><strong><code>request_uri</code> is single-use and short-lived.</strong> There is nothing to retry
+with it — the safe recovery is a fresh push, which costs one round trip and
+cannot double-consume anything. <code>oidcPar</code> is correspondingly never retried on
+a <code>5xx</code> or a transport failure: it is a POST that creates server state.</li>
+</ol>
+<p><code>invalid_client</code> on a push has three usual causes: a wrong secret, a secret sent
+by a client registered for <code>tls_client_auth</code> / <code>private_key_jwt</code> /
+<code>self_signed_tls_client_auth</code> (which is refused, not ignored), or a client
+certificate the transport did not present.</p>
 <h2 id="logout-rp-initiated-and-back-channel--contractmd-§127" class="tsd-anchor-link">Logout — RP-initiated and back-channel (<code>axiam-sdk/node</code>, <a href="http://CONTRACT.md">CONTRACT.md</a> §12.7)<a href="#logout-rp-initiated-and-back-channel--contractmd-§127" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p><code>logoutUrl</code> builds the redirect; <code>verifyLogoutToken</code> validates a token the OP <strong>pushed</strong> to
 your back-channel endpoint.</p>
@@ -883,11 +1063,24 @@ the TypeDoc API reference to this repo's GitHub Pages site.</p>
 <li><a href="#this-sdk-does-not-implement-opaque"><span>This <wbr/>SDK does not implement <wbr/>OPAQUE</span></a></li>
 <li><a href="#runtime-requirements"><span>Runtime requirements</span></a></li>
 <li><a href="#cost"><span>Cost</span></a></li></ul></li>
+<li><a href="#webauthn-and-passkeys-contractmd-§24"><span>Web<wbr/>Authn and passkeys (<wbr/>CONTRACT.md §24)</span></a></li>
+<li>
+<ul>
+<li><a href="#the-browser-three-calls"><span>The browser: three calls</span></a></li>
+<li><a href="#anywhere-else-the-json-bridge"><span>Anywhere else: the <wbr/>JSON bridge</span></a></li>
+<li><a href="#what-the-sdk-does-not-do-on-purpose"><span>What the <wbr/>SDK does not do, on purpose</span></a></li>
+<li><a href="#two-error-rows-that-are-not-the-generic-mapping"><span>Two error rows that are not the generic mapping</span></a></li></ul></li>
+<li><a href="#account-lifecycle-and-mfa-enrolment-contractmd-§25"><span>Account lifecycle and <wbr/>MFA enrolment (<wbr/>CONTRACT.md §25)</span></a></li>
+<li>
+<ul>
+<li><a href="#has-a-third-outcome"><span> has a third outcome</span></a></li>
+<li><a href="#email-verification-and-password-reset"><span>Email verification and password reset</span></a></li></ul></li>
 <li><a href="#device-authorization-grant-contractmd-§14"><span>Device authorization grant (, <wbr/>CONTRACT.md §14)</span></a></li>
 <li><a href="#token-exchange-contractmd-§15"><span>Token exchange (, <wbr/>CONTRACT.md §15)</span></a></li>
 <li>
 <ul>
 <li><a href="#external-idp-subject-tokens-contractmd-§157"><span>External-<wbr/>Id<wbr/>P subject tokens (<wbr/>CONTRACT.md §15.7)</span></a></li></ul></li>
+<li><a href="#pushed-authorization-requests-contractmd-§26"><span>Pushed authorization requests (, <wbr/>CONTRACT.md §26)</span></a></li>
 <li><a href="#logout-rp-initiated-and-back-channel--contractmd-§127"><span>Logout — <wbr/>RP-<wbr/>initiated and back-<wbr/>channel (, <wbr/>CONTRACT.md §12.7)</span></a></li>
 <li><a href="#uma-20-protection-api-and-ticket-grant-contractmd-§20"><span>UMA 2.0 — <wbr/>Protection <wbr/>API and ticket grant (<wbr/>CONTRACT.md §20)</span></a></li>
 <li>
