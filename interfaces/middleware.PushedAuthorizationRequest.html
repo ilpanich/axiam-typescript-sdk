@@ -19,7 +19,7 @@ failure.</p>
 </div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">PushedAuthorizationRequest</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#authorizationurl">authorizationUrl</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#codeverifier">codeVerifier</a><span class="tsd-signature-symbol">:</span> <a href="../classes/index.Sensitive.html" class="tsd-signature-type tsd-kind-class">Sensitive</a><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#expiresin">expiresIn</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#nonce">nonce</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#requesturi">requestUri</a><span class="tsd-signature-symbol">:</span> <a href="../classes/index.Sensitive.html" class="tsd-signature-type tsd-kind-class">Sensitive</a><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#state">state</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0c043ca5813530c3cca482041e7ae4baafda1ba7/src/node/oidcTypes.ts#L158">src/node/oidcTypes.ts:158</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/721c18145148454cd21657a180a1c3ba855202f5/src/node/oidcTypes.ts#L158">src/node/oidcTypes.ts:158</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -47,42 +47,42 @@ authorization parameters rather than merging them, because merging is
 where parameter confusion lives (§26.2 rule 2).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0c043ca5813530c3cca482041e7ae4baafda1ba7/src/node/oidcTypes.ts#L167">src/node/oidcTypes.ts:167</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/721c18145148454cd21657a180a1c3ba855202f5/src/node/oidcTypes.ts#L167">src/node/oidcTypes.ts:167</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="codeverifier"><span>code<wbr/>Verifier</span><a href="#codeverifier" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">codeVerifier</span><span class="tsd-signature-symbol">:</span> <a href="../classes/index.Sensitive.html" class="tsd-signature-type tsd-kind-class">Sensitive</a><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span></div>
 <div class="tsd-comment tsd-typography"><p>The PKCE verifier to pass into <code>oidcExchange</code> — the same one <code>oidcBegin</code> produced.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0c043ca5813530c3cca482041e7ae4baafda1ba7/src/node/oidcTypes.ts#L177">src/node/oidcTypes.ts:177</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/721c18145148454cd21657a180a1c3ba855202f5/src/node/oidcTypes.ts#L177">src/node/oidcTypes.ts:177</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="expiresin"><span>expires<wbr/>In</span><a href="#expiresin" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">expiresIn</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>Seconds until <code>requestUri</code> expires. Not advisory (§26.2 rule 3).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0c043ca5813530c3cca482041e7ae4baafda1ba7/src/node/oidcTypes.ts#L171">src/node/oidcTypes.ts:171</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/721c18145148454cd21657a180a1c3ba855202f5/src/node/oidcTypes.ts#L171">src/node/oidcTypes.ts:171</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="nonce"><span>nonce</span><a href="#nonce" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">nonce</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>The <code>nonce</code> from the pushed request, to compare against the ID token's claim.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0c043ca5813530c3cca482041e7ae4baafda1ba7/src/node/oidcTypes.ts#L175">src/node/oidcTypes.ts:175</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/721c18145148454cd21657a180a1c3ba855202f5/src/node/oidcTypes.ts#L175">src/node/oidcTypes.ts:175</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="requesturi"><span>request<wbr/>Uri</span><a href="#requesturi" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">requestUri</span><span class="tsd-signature-symbol">:</span> <a href="../classes/index.Sensitive.html" class="tsd-signature-type tsd-kind-class">Sensitive</a><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span></div>
 <div class="tsd-comment tsd-typography"><p>The opaque, single-use handle. Wrapped per §26.5 — it is a bearer handle to a formed authorization request.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0c043ca5813530c3cca482041e7ae4baafda1ba7/src/node/oidcTypes.ts#L169">src/node/oidcTypes.ts:169</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/721c18145148454cd21657a180a1c3ba855202f5/src/node/oidcTypes.ts#L169">src/node/oidcTypes.ts:169</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="state"><span>state</span><a href="#state" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">state</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>The <code>state</code> from the pushed request, to compare against what the IdP returns.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0c043ca5813530c3cca482041e7ae4baafda1ba7/src/node/oidcTypes.ts#L173">src/node/oidcTypes.ts:173</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/721c18145148454cd21657a180a1c3ba855202f5/src/node/oidcTypes.ts#L173">src/node/oidcTypes.ts:173</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
