@@ -26,7 +26,7 @@ DIFFERENT tenant in the same org (<a href="http://CONTRACT.md">CONTRACT.md</a> Â
 <ul class="tsd-hierarchy">
 <li class="tsd-hierarchy-item"><a href="middleware.AuthzVerifiableSession.html" class="tsd-signature-type tsd-kind-interface">AuthzVerifiableSession</a></li></ul></li></ul></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/c63830a21997cf3a13d221144e2f42f46c9f99f2/src/middleware/verifyCore.ts#L19">src/middleware/verifyCore.ts:19</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0c043ca5813530c3cca482041e7ae4baafda1ba7/src/middleware/verifyCore.ts#L19">src/middleware/verifyCore.ts:19</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -50,7 +50,7 @@ default. A resource server guarding user-facing routes SHOULD set
 <code>&quot;axiam:user&quot;</code>. Populated from <code>AxiamClientOptions.expectedAudience</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/c63830a21997cf3a13d221144e2f42f46c9f99f2/src/middleware/verifyCore.ts#L47">src/middleware/verifyCore.ts:47</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0c043ca5813530c3cca482041e7ae4baafda1ba7/src/middleware/verifyCore.ts#L47">src/middleware/verifyCore.ts:47</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="expectedissuer"><code class="tsd-tag">Optional</code><span>expected<wbr/>Issuer</span><a href="#expectedissuer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">expectedIssuer</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
@@ -60,14 +60,14 @@ hardcodes an issuer. When set, a token whose <code>iss</code> differs is rejecte
 Populated from <code>AxiamClientOptions.expectedIssuer</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/c63830a21997cf3a13d221144e2f42f46c9f99f2/src/middleware/verifyCore.ts#L41">src/middleware/verifyCore.ts:41</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0c043ca5813530c3cca482041e7ae4baafda1ba7/src/middleware/verifyCore.ts#L41">src/middleware/verifyCore.ts:41</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="jwksverifier"><span>jwks<wbr/>Verifier</span><a href="#jwksverifier" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">jwksVerifier</span><span class="tsd-signature-symbol">:</span> <a href="middleware.Verifier.html" class="tsd-signature-type tsd-kind-interface">Verifier</a></div>
 <div class="tsd-comment tsd-typography"><p>Local JWKS verifier (D-11) â€” validates the token's EdDSA signature against the org-wide cached JWKS, offline on a cache hit.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/c63830a21997cf3a13d221144e2f42f46c9f99f2/src/middleware/verifyCore.ts#L21">src/middleware/verifyCore.ts:21</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0c043ca5813530c3cca482041e7ae4baafda1ba7/src/middleware/verifyCore.ts#L21">src/middleware/verifyCore.ts:21</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="tenantheadervalue"><span>tenant<wbr/>Header<wbr/>Value</span><a href="#tenantheadervalue" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">tenantHeaderValue</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
@@ -84,7 +84,7 @@ session can never match and therefore rejects every request; that is
 fail-closed by design, not a silent pass.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/c63830a21997cf3a13d221144e2f42f46c9f99f2/src/middleware/verifyCore.ts#L34">src/middleware/verifyCore.ts:34</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0c043ca5813530c3cca482041e7ae4baafda1ba7/src/middleware/verifyCore.ts#L34">src/middleware/verifyCore.ts:34</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
