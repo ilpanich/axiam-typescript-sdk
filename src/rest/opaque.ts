@@ -17,7 +17,7 @@ import {
   startRegistration,
   type OpaqueKsfFields,
 } from '../core/opaque.js';
-import { mfaSetupRequired } from './auth.js';
+import { login, mfaSetupRequired } from './auth.js';
 import type { AxiamClient } from './client.js';
 import type { LoginResult, LoginSuccessResponseWire, MfaRequiredResponseWire } from './types.js';
 
@@ -29,6 +29,17 @@ interface LoginStartWire extends OpaqueKsfFields {
   opaque_session: string;
   ke2: string;
   suite: string;
+  /**
+   * The tenant's `opaque_mode` — `"optional"` or `"required"`, never
+   * `"disabled"` (that path answers `404`). Absent from a server older than
+   * the field, and read only by §23.4 rule 7's failure branch.
+   *
+   * It is **not** downgrade protection and must not be presented as such: a
+   * hostile server that wanted the plaintext could answer `404` and get the
+   * fallback whatever it put here. `required` is what closes that, server-side,
+   * by refusing `/auth/login` before examining any credential.
+   */
+  mode?: string | null;
 }
 
 interface RegisterStartWire extends OpaqueKsfFields {
@@ -104,8 +115,28 @@ function axiosMessage(err: unknown): string {
  * - `AuthError` for a wrong password, an account that does not exist, and a
  *   server that does not hold the record — indistinguishable by design.
  *   **Nothing is sent to `login/finish` in that case** (§23.4 rule 7), and a
- *   caller must not retry over `login()`: that would hand the plaintext to a
- *   server that just failed to prove itself.
+ *   caller must not retry it over `login()`: under `mode: "optional"` this call
+ *   has already done so (see below), and in every other case that would hand
+ *   the plaintext to a server that just failed to prove itself.
+ *
+ * ## The one case that is not a failure — §23.4 rule 7
+ *
+ * When the tenant's `login/start` response says `mode: "optional"`, a failed
+ * exchange is not yet a verdict on the credentials: under `optional` every
+ * account starts with no registration record and acquires one only when its
+ * password is next set, so this call retries over `POST /api/v1/auth/login`
+ * with the same credentials and returns that call's outcome — its success on
+ * success, its error on failure. Without that, enabling `optional` would lock
+ * out every user of a tenant mid-migration.
+ *
+ * `required`, a response with no `mode` field (a server older than it), and
+ * any unrecognised value all fail closed: `AuthError`, no retry, no plaintext
+ * password on the wire.
+ *
+ * `mode` is **not** downgrade protection and is not treated as such — a
+ * hostile server that wanted the plaintext could simply answer `404` and get
+ * the caller's own fallback. `required` is what closes that, server-side, by
+ * refusing `/auth/login` for every principal before examining any credential.
  *
  * ## Cost
  *
@@ -170,6 +201,22 @@ export async function loginOpaque(
     ke3 = exchange.finish(started.ke2, started);
   } catch (err) {
     if (err instanceof NetworkError) throw err;
+    // §23.4 rule 7: what happens next depends on `mode`, and only on that.
+    //
+    // Under `optional` an account with no record is the ordinary case rather
+    // than an error — every account has none the moment an operator enables
+    // OPAQUE, and they acquire one only as they next set a password — so the
+    // failed exchange is not yet a verdict on the credentials. Treating it as
+    // final would lock out every user of a tenant mid-migration, which is the
+    // state `optional` exists to serve. The retry goes through `login` itself,
+    // so the two paths cannot drift on body building, MFA branches or errors.
+    //
+    // Anything else — `required`, no `mode` at all (a server older than the
+    // field), or a value this SDK does not recognise — fails closed: the
+    // exchange is over, and no plaintext password goes on the wire.
+    if (started.mode === 'optional') {
+      return await login(client, usernameOrEmail, password);
+    }
     throw mapHttpStatusToError(401, 'invalid credentials', { cause: err });
   }
 

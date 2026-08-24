@@ -24,6 +24,7 @@ const BASE_URL = 'https://axiam-opaque.test';
 const REGISTER_START = `${BASE_URL}/api/v1/auth/opaque/register/start`;
 const LOGIN_START = `${BASE_URL}/api/v1/auth/opaque/login/start`;
 const LOGIN_FINISH = `${BASE_URL}/api/v1/auth/opaque/login/finish`;
+const PASSWORD_LOGIN = `${BASE_URL}/api/v1/auth/login`;
 
 const PASSWORD = 'correct horse battery staple';
 
@@ -73,13 +74,15 @@ function client(): AxiamClient {
 
 const KSF_FIELDS = { ksf: 'argon2id', memory_kib: 8192, iterations: 1, parallelism: 1 };
 
-function loginStartOk() {
+/** `mode` omitted entirely when not given — the pre-1.29 server shape. */
+function loginStartOk(mode?: string) {
   return http.post(LOGIN_START, () =>
     HttpResponse.json({
       opaque_session: 'sealed-login-session',
       ke2: '12'.repeat(320),
       suite: 'ristretto255_sha512',
       ...KSF_FIELDS,
+      ...(mode === undefined ? {} : { mode }),
     }),
   );
 }
@@ -173,6 +176,151 @@ describe('loginOpaque', () => {
     await expect(client().loginOpaque('alice', 'the-wrong-password')).rejects.toBeInstanceOf(
       AuthError,
     );
+    expect(finishCalls).toBe(0);
+  });
+
+  it('retries over /auth/login when the exchange fails and mode is optional', async () => {
+    // §23.4 rule 7. Under `optional` every account starts with no registration
+    // record and acquires one only as its password is next set, so a failed
+    // exchange is not yet a verdict on the credentials — treating it as final
+    // would lock out every user of a tenant mid-migration.
+    let finishCalls = 0;
+    let passwordLoginBody: Record<string, unknown> | undefined;
+    server.use(
+      loginStartOk('optional'),
+      http.post(LOGIN_FINISH, () => {
+        finishCalls += 1;
+        return HttpResponse.json({});
+      }),
+      http.post(PASSWORD_LOGIN, async ({ request }) => {
+        passwordLoginBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({
+          user: { id: 'u1', username: 'alice', email: 'alice@example.com' },
+          session_id: 's1',
+          expires_in: 900,
+        });
+      }),
+    );
+
+    const result = await client().loginOpaque('alice', 'no-record-for-this-account');
+    expect(result).toMatchObject({ status: 'authenticated', sessionId: 's1' });
+    // The KE3 that could not be derived is still never sent.
+    expect(finishCalls).toBe(0);
+    // The same credentials, over the ordinary login path.
+    expect(passwordLoginBody).toMatchObject({
+      username_or_email: 'alice',
+      password: 'no-record-for-this-account',
+    });
+  });
+
+  it('surfaces the /auth/login failure when the optional retry also fails', async () => {
+    // The retry's outcome is the call's outcome, success or failure alike —
+    // the SDK does not paper over a genuinely wrong password. Asserted against
+    // what `login()` itself produces for the same response rather than against
+    // a hard-coded class, because the two must not be able to drift: on this
+    // SDK a 401 from /auth/login is pre-mapped by the response interceptor and
+    // re-wrapped, so the authentication failure arrives as the `cause` (see
+    // authErrors.test.ts), and that is exactly what a caller of `login()` sees.
+    let finishCalls = 0;
+    let passwordLoginCalls = 0;
+    server.use(
+      loginStartOk('optional'),
+      http.post(LOGIN_FINISH, () => {
+        finishCalls += 1;
+        return HttpResponse.json({});
+      }),
+      http.post(PASSWORD_LOGIN, () => {
+        passwordLoginCalls += 1;
+        return HttpResponse.json({ message: 'bad creds' }, { status: 401 });
+      }),
+    );
+
+    const viaOpaque = await client()
+      .loginOpaque('alice', 'the-wrong-password')
+      .catch((e: unknown) => e);
+    expect(passwordLoginCalls).toBe(1);
+    // The KE3 that could not be derived is still never sent.
+    expect(finishCalls).toBe(0);
+    expect(viaOpaque).toBeInstanceOf(Error);
+
+    const viaPassword = await client()
+      .login('alice', 'the-wrong-password')
+      .catch((e: unknown) => e);
+    expect((viaOpaque as Error).constructor).toBe((viaPassword as Error).constructor);
+    expect((viaOpaque as Error).message).toBe((viaPassword as Error).message);
+
+    // And the authentication failure is what is actually being reported.
+    const authFailure = (err: unknown): boolean =>
+      err instanceof AuthError || (err as { cause?: unknown })?.cause instanceof AuthError;
+    expect(authFailure(viaOpaque)).toBe(true);
+  });
+
+  it('does not retry over /auth/login when mode is required', async () => {
+    // `required` answers `403 opaque_required` for every principal, so a retry
+    // would put a plaintext password on the wire for nothing.
+    let finishCalls = 0;
+    let passwordLoginCalls = 0;
+    server.use(
+      loginStartOk('required'),
+      http.post(LOGIN_FINISH, () => {
+        finishCalls += 1;
+        return HttpResponse.json({});
+      }),
+      http.post(PASSWORD_LOGIN, () => {
+        passwordLoginCalls += 1;
+        return HttpResponse.json({});
+      }),
+    );
+
+    await expect(client().loginOpaque('alice', 'the-wrong-password')).rejects.toBeInstanceOf(
+      AuthError,
+    );
+    expect(passwordLoginCalls).toBe(0);
+    expect(finishCalls).toBe(0);
+  });
+
+  it('fails closed when the response carries no mode field at all', async () => {
+    // A server older than the field. Absence is `required`, not `optional`.
+    let finishCalls = 0;
+    let passwordLoginCalls = 0;
+    server.use(
+      loginStartOk(),
+      http.post(LOGIN_FINISH, () => {
+        finishCalls += 1;
+        return HttpResponse.json({});
+      }),
+      http.post(PASSWORD_LOGIN, () => {
+        passwordLoginCalls += 1;
+        return HttpResponse.json({});
+      }),
+    );
+
+    await expect(client().loginOpaque('alice', 'the-wrong-password')).rejects.toBeInstanceOf(
+      AuthError,
+    );
+    expect(passwordLoginCalls).toBe(0);
+    expect(finishCalls).toBe(0);
+  });
+
+  it('fails closed on an unrecognised mode value', async () => {
+    let finishCalls = 0;
+    let passwordLoginCalls = 0;
+    server.use(
+      loginStartOk('enforced-someday'),
+      http.post(LOGIN_FINISH, () => {
+        finishCalls += 1;
+        return HttpResponse.json({});
+      }),
+      http.post(PASSWORD_LOGIN, () => {
+        passwordLoginCalls += 1;
+        return HttpResponse.json({});
+      }),
+    );
+
+    await expect(client().loginOpaque('alice', 'the-wrong-password')).rejects.toBeInstanceOf(
+      AuthError,
+    );
+    expect(passwordLoginCalls).toBe(0);
     expect(finishCalls).toBe(0);
   });
 

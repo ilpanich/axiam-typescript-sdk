@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **`loginOpaque()` falls back to `login()` under `opaque_mode: "optional"` —
+  CONTRACT.md §23.4 rule 7 (contract 1.29).** `POST /auth/opaque/login/start`
+  now returns the tenant's `mode`, and it is the only thing that decides what a
+  failed `KE2` means. Under `"optional"` the SDK retries the same credentials
+  over `POST /api/v1/auth/login` before reporting anything, and returns that
+  call's outcome — its success on success, its error on failure. Under
+  `"optional"` an account with no registration record is the ordinary case, not
+  an error: every account has none the moment an operator enables OPAQUE and
+  acquires one only as its password is next set, so the previous behaviour
+  locked out every user of a tenant mid-migration. Under `"required"`, with no
+  `mode` field at all (a server older than it), or on an unrecognised value, the
+  behaviour is unchanged and fails closed: `AuthError`, no `KE3` sent, and no
+  plaintext password on the wire. `404` handling — the tenant has OPAQUE
+  disabled, still a `NetworkError` — is untouched.
+
+  `mode` is **not** downgrade protection and is not documented as such: a
+  hostile server that wanted the plaintext could answer `404` and get the
+  fallback whatever it put there. `required` is what closes that, server-side.
+
+- Re-vendor `CONTRACT.md` at **1.29** and `openapi.json` at **1.0.0-alpha40**.
+
 ## [1.0.0-alpha40] - 2026-08-23
 
 ### Changed

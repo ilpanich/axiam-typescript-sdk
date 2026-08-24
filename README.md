@@ -742,8 +742,19 @@ try {
 ```
 
 The `if` is the important line. **Any other error is a failed login**, and
-retrying it over `login()` would hand the plaintext to a server that just
-failed to prove it holds the record.
+retrying it over `login()` yourself would hand the plaintext to a server that
+just failed to prove it holds the record.
+
+One case is handled for you. `login/start` returns the tenant's `mode`, and when
+it is `"optional"` — the mid-migration state, where accounts acquire a
+registration record only as their passwords are next set — a failed exchange is
+not yet a verdict on the credentials, so `loginOpaque` retries over
+`POST /api/v1/auth/login` itself and returns that call's outcome (CONTRACT.md
+§23.4 rule 7). Under `"required"`, and against a server too old to send `mode`
+at all, it fails closed exactly as before. `mode` is **not** downgrade
+protection: a hostile server that wanted the plaintext could answer `404` and
+get the fallback above regardless. `required` is what closes that, server-side,
+by refusing `/auth/login` for every principal in the tenant.
 
 ### What this buys, and what it does not
 
