@@ -16,6 +16,7 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 - **Registry:** [npmjs.com/package/axiam-sdk](https://www.npmjs.com/package/axiam-sdk) _(reserved, not yet published)_
 - **Source:** [github.com/ilpanich/axiam-typescript-sdk](https://github.com/ilpanich/axiam-typescript-sdk)
 - **License:** Apache-2.0
+- **Node:** `>=22` — see [Supported Node versions](#supported-node-versions)
 
 ## Contract conformance
 
@@ -63,6 +64,39 @@ See [`CONTRACT.md`](./CONTRACT.md) for the full cross-language behavioral contra
 ```bash
 npm install axiam-sdk
 ```
+
+## Supported Node versions
+
+| | Version | Why this one |
+|---|---|---|
+| **Floor** | 22 | The oldest release line still receiving security fixes. Node 18 went EOL 2025-04-30 and Node 20 on 2026-04-30. `engines.node` is `>=22`. |
+| **Newest** | 26 | The current release line (out 2026-05, promoted to LTS 2026-10), and the line `@types/node` is pinned to. |
+
+Node 24 (Active LTS) sits between the two and is supported.
+
+**The SDK is built against the floor, and runs on everything up to the newest.**
+Those are two different claims, and CI proves each separately: the gating
+matrix in `sdk-ci-typescript.yml` runs `build`, `typecheck`, the full test
+suite and the CommonJS-require smoke tests on **22 and on 26**. The floor leg
+is what stops a Node 24-only built-in from slipping in; the newest leg is what
+catches a removal, and is the runtime `tsc` is typechecking against. A line
+between two green legs is interpolation, which is why the matrix is two legs
+rather than four — the runtime-independent gates (bundle-grep, the token-leak
+and TLS-lint greps, `npm audit`, the docs gate and the publish dry-run) run
+once, on the floor.
+
+If you are on a newer runtime than the floor you need do nothing: the
+published bundle targets ES2022 and is forward-compatible, and the newest leg
+is the evidence.
+
+The browser persona (`axiam-sdk/browser`) has no Node floor at all — it needs
+a runtime with `fetch`, `crypto.subtle` and `TextEncoder`, which every
+currently supported browser has.
+
+`test/core/versionPolicy.test.ts` fails the build if `engines.node`, the
+`@types/node` pin and the CI matrix ever stop agreeing. They are three
+independent declarations of the same fact and nothing else compares them —
+before that test existed, all three disagreed at once.
 
 ## Two personas, tree-shaken subpath entries
 

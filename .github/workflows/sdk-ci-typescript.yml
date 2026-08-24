@@ -12,15 +12,31 @@ permissions:
 
 jobs:
   test:
-    name: Test
+    name: Test (Node ${{ matrix.node }})
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The gating matrix is floor + newest, not every line in between.
+        # The floor is `engines.node` from package.json (22, the oldest line
+        # still receiving security fixes — 18 went EOL 2025-04-30 and 20 on
+        # 2026-04-30); the newest is the current release line (26, out
+        # 2026-05, promoted to LTS 2026-10). 24 (Active LTS) sits between two
+        # green legs.
+        #
+        # Both ends matter here for different reasons: the floor is what
+        # `engines` promises an installer, and the newest is what
+        # @types/node is pinned to — typechecking against APIs no tested
+        # runtime provides is exactly the drift this matrix exists to catch.
+        # test/core/versionPolicy.test.ts fails if these stop agreeing.
+        node: ['22', '26']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node }}
           registry-url: 'https://registry.npmjs.org'
 
       # buf generate (below) needs the buf CLI.
@@ -41,6 +57,7 @@ jobs:
       # built against (^0.10.x) — breaks the build here rather than
       # surfacing later as a silent runtime/type mismatch downstream.
       - name: Dependency resolution gate — amqplib pin resolves (SEC-078)
+        if: matrix.node == '22'
         run: npm ls amqplib
 
       # src/gen stays gitignored (Phase 15 D-01); buf generate runs here as the
@@ -65,9 +82,11 @@ jobs:
       # `npm run docs` itself already fails on regression — this step just
       # runs it in CI without publishing the generated _docs/ output.
       - name: Docs — no undocumented public API exports
+        if: matrix.node == '22'
         run: npm run docs
 
       - name: Dependency vulnerability scan (CI-03)
+        if: matrix.node == '22'
         run: npm audit --audit-level=high --omit=dev
 
       # SC#1 / D-02: end-to-end proof (not config trust) that the browser
@@ -76,6 +95,7 @@ jobs:
       # in transitively by @grpc/grpc-js or amqplib a hard build error
       # rather than a silent polyfill (RESEARCH Area 1).
       - name: Bundle-and-grep gate — no Node transports in the browser bundle (SC#1)
+        if: matrix.node == '22'
         run: npm run bundle-grep
 
       # T-17-27: the dynamic `import('jose')` guard (17-03) that lets the
@@ -95,6 +115,7 @@ jobs:
       # values out of debug/log/serialized surfaces; this proves it holds
       # in the compiled artifact too.
       - name: Token-leak gate — no JWT-shaped strings in built output (T-17-24)
+        if: matrix.node == '22'
         run: |
           if grep -r 'eyJ' dist/ 2>/dev/null | grep -v '^Binary file' | grep -q .; then
             echo "FAIL: found 'eyJ'-prefixed (JWT-shaped) strings in dist/"
@@ -107,6 +128,7 @@ jobs:
       # hatch is customCa — there must be no insecure/skip-verification
       # surface anywhere in the SDK's own source tree.
       - name: TLS-lint gate — no TLS-bypass patterns (CONTRACT §6, T-17-25)
+        if: matrix.node == '22'
         run: |
           if grep -rniE 'rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED|insecureskipverify' src/ 2>/dev/null | grep -q .; then
             echo "FAIL: found a TLS-bypass pattern under src/"
@@ -120,6 +142,7 @@ jobs:
       # without side effects. The publish job re-runs this same command
       # before the real `npm publish`.
       - name: Dry-run publish gate (SC#5)
+        if: matrix.node == '22'
         run: |
           set -euo pipefail
           # Same --tag rule as the publish job below: this gate runs on
