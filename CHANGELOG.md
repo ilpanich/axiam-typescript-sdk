@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-alpha43] - 2026-08-24
+
 ### Added
+
+- Raise the Node floor to 22 and build the newest line (#77)
 
 - **Node 26 is now a CI-built runtime.** The gating matrix runs `build`,
   `typecheck`, the full test suite and the CommonJS-require smoke tests on the
