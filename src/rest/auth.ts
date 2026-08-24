@@ -5,7 +5,7 @@
 // exclusively via Set-Cookie — LoginResult deliberately carries no session
 // token field anywhere in the public API (T-17-07).
 
-import { mapHttpStatusToError, NetworkError, Sensitive, sanitizeAxiosError } from '../core/index.js';
+import { AxiamError, mapHttpStatusToError, NetworkError, Sensitive, sanitizeAxiosError } from '../core/index.js';
 import type { AxiamClient } from './client.js';
 import type {
   LoginResult,
@@ -112,9 +112,23 @@ export async function login(client: AxiamClient, email: string, password: string
     await client.session.onAuthenticated?.();
     return loginSuccessToResult(response.data as LoginSuccessResponseWire);
   } catch (err) {
-    // §25.2 rule 1: a recoverable, guided state, not a refusal.
+    // §25.2 rule 1: a recoverable, guided state, not a refusal. Checked
+    // before the guard below because a 403 is never pre-mapped: the response
+    // interceptor pre-maps only 401 on a SKIP_REFRESH url, so an
+    // `mfa_setup_required` 403 still arrives here as a raw AxiosError.
     const setup = mfaSetupRequired(err);
     if (setup) return setup;
+
+    // Already an SDK error: the response interceptor mapped it. LOGIN_PATH is
+    // a SKIP_REFRESH url, so a 401 here has ALREADY become an AuthError
+    // before this catch runs. Such an error carries no axios `.response`, so
+    // `extractAxiosStatus` below reports undefined and the final line used to
+    // bury the AuthError inside a NetworkError — reporting wrong credentials
+    // as a transport failure, and inconsistently with verifyMfa(), whose path
+    // is not SKIP_REFRESH and so maps the identical 401 straight to AuthError.
+    // Rethrowing unchanged is also what §23.4 rule 7's OPAQUE fallback needs:
+    // it delegates to login() and returns that call's outcome verbatim.
+    if (err instanceof AxiamError) throw err;
 
     const status = extractAxiosStatus(err);
     if (status !== undefined) {
@@ -149,6 +163,12 @@ export async function verifyMfa(client: AxiamClient, mfaToken: string, code: str
     await client.session.onAuthenticated?.();
     return loginSuccessToResult(response.data);
   } catch (err) {
+    // Already mapped by the response interceptor — rethrow rather than bury
+    // it in a NetworkError. MFA_VERIFY_PATH is not a SKIP_REFRESH url, so
+    // nothing pre-maps a 401 here today; the guard keeps this path correct if
+    // that list ever grows, and identical to its three siblings.
+    if (err instanceof AxiamError) throw err;
+
     const status = extractAxiosStatus(err);
     if (status !== undefined) {
       throw mapHttpStatusToError(status, extractErrorMessage(extractAxiosData(err)) ?? 'verifyMfa failed', {
@@ -189,6 +209,11 @@ export async function refresh(client: AxiamClient): Promise<void> {
     // (undefined there), and Node's implementation is idempotent.
     await client.session.onAuthenticated?.();
   } catch (err) {
+    // REFRESH_PATH is a SKIP_REFRESH url, so a 401 here is already an
+    // AuthError by the time this catch runs. §9.3 wants exactly that error
+    // surfaced, not a NetworkError wrapping it.
+    if (err instanceof AxiamError) throw err;
+
     const status = extractAxiosStatus(err);
     if (status !== undefined) {
       // §9.3: 401 on the refresh call itself is AuthError, no retry loop.
@@ -216,6 +241,10 @@ export async function logout(client: AxiamClient): Promise<void> {
   try {
     await client.session.axios.post(LOGOUT_PATH, {});
   } catch (err) {
+    // LOGOUT_PATH is a SKIP_REFRESH url — same pre-mapping as login/refresh.
+    // The `finally` below still clears session state either way.
+    if (err instanceof AxiamError) throw err;
+
     const status = extractAxiosStatus(err);
     if (status !== undefined) {
       throw mapHttpStatusToError(status, extractErrorMessage(extractAxiosData(err)) ?? 'logout failed', {

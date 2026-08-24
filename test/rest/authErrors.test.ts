@@ -28,17 +28,33 @@ function client(): AxiamClient {
 }
 
 describe('login() error branches', () => {
-  // /auth/login is a SKIP_REFRESH url: the response interceptor pre-maps a
-  // 401 to AuthError, which auth.ts (finding no axios `.response` on the
-  // already-mapped error) then re-wraps as NetworkError('login request
-  // failed'). 403/5xx are passed through raw and mapped by auth.ts itself.
-  it('re-wraps a 401 (pre-mapped by the interceptor) as NetworkError', async () => {
+  // /auth/login is a SKIP_REFRESH url, so the response interceptor pre-maps a
+  // 401 to AuthError before auth.ts's catch runs. auth.ts rethrows an
+  // already-mapped AxiamError unchanged; 403/5xx are passed through raw and
+  // mapped by auth.ts itself.
+  it('surfaces a 401 (pre-mapped by the interceptor) as AuthError, not NetworkError', async () => {
     server.use(
       http.post(LOGIN, () => HttpResponse.json({ message: 'bad creds' }, { status: 401 })),
     );
     const err = await client().login('a@example.com', 'wrong').catch((e) => e);
-    expect(err).toBeInstanceOf(NetworkError);
-    expect(err.message).toBe('login request failed');
+    expect(err).toBeInstanceOf(AuthError);
+    expect(err).not.toBeInstanceOf(NetworkError);
+    // The transport-failure message must not be attached to a credential
+    // failure — that wording is what made the old bug hard to spot.
+    expect(err.message).not.toBe('login request failed');
+  });
+
+  // Regression guard for the inconsistency the fix removed: login() and
+  // verifyMfa() see the same 401 through different paths (SKIP_REFRESH vs
+  // not), and must report the same class of error.
+  it('reports a 401 as the same error class as verifyMfa() does', async () => {
+    server.use(
+      http.post(LOGIN, () => HttpResponse.json({ message: 'bad creds' }, { status: 401 })),
+      http.post(MFA, () => HttpResponse.json({ message: 'bad code' }, { status: 401 })),
+    );
+    const loginErr = await client().login('a@example.com', 'wrong').catch((e) => e);
+    const mfaErr = await client().verifyMfa('challenge', '000000').catch((e) => e);
+    expect(loginErr.constructor).toBe(mfaErr.constructor);
   });
 
   it('maps a 403 response to AuthzError', async () => {
@@ -85,13 +101,16 @@ describe('refresh()', () => {
     await expect(client().refresh()).resolves.toBeUndefined();
   });
 
-  it('re-wraps a 401 on the refresh call (pre-mapped by the interceptor) as NetworkError', async () => {
+  it('surfaces a 401 on the refresh call as AuthError, not NetworkError', async () => {
     // /auth/refresh is a SKIP_REFRESH url — no retry loop; the interceptor
-    // pre-maps the 401 and auth.ts re-wraps it as NetworkError.
+    // pre-maps the 401, and auth.ts rethrows that AuthError unchanged.
+    // §9.3 wants a 401 on refresh reported as an authentication failure, so
+    // a caller can re-authenticate rather than retry a "transport" error.
     server.use(http.post(REFRESH, () => HttpResponse.json({}, { status: 401 })));
     const err = await client().refresh().catch((e) => e);
-    expect(err).toBeInstanceOf(NetworkError);
-    expect(err.message).toBe('refresh request failed');
+    expect(err).toBeInstanceOf(AuthError);
+    expect(err).not.toBeInstanceOf(NetworkError);
+    expect(err.message).not.toBe('refresh request failed');
   });
 
   it('wraps a transport failure in NetworkError', async () => {

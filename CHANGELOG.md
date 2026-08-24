@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`login()`, `refresh()` and `logout()` reported a `401` as a `NetworkError`
+  instead of an `AuthError`.** All three post to a `SKIP_REFRESH` url, so the
+  response interceptor maps their `401` to an `AuthError` before `auth.ts`'s
+  own `catch` runs. That already-mapped error carries no axios `.response`, so
+  the status probe returned `undefined` and the final line wrapped it in
+  `NetworkError('<op> request failed')` with the `AuthError` as `cause` — a
+  wrong password was reported as a transport failure. `auth.ts` now rethrows an
+  already-mapped `AxiamError` unchanged.
+
+  The inconsistency this removes: `verifyMfa()` is *not* a `SKIP_REFRESH` url,
+  so the identical `401` already surfaced there as `AuthError`. The same bad
+  credential produced two different error classes depending on which endpoint
+  saw it, and the README's documented `catch` pattern — `if (err instanceof
+  AuthError) { /* re-authenticate */ }` — silently failed to match a failed
+  login.
+
+  It also compounded with the §23.4 rule 7 fallback: under `opaque_mode:
+  "optional"`, `loginOpaque()` delegates to `login()` and returns its outcome
+  verbatim, so a wrong password came back as a `NetworkError` — which the
+  README's own fallback guard (`if (!(err instanceof NetworkError)) throw err`)
+  treats as "OPAQUE unavailable, try the password path", running a second
+  plaintext login for a credential that had already been rejected.
+
+  **Behaviour change for callers** who catch `NetworkError` around `login()`,
+  `refresh()` or `logout()` to handle a rejected credential: that now arrives
+  as `AuthError`. Catching `AxiamError`, or the `AuthError`/`NetworkError`
+  split the README documents, was already correct and is unaffected. Transport
+  failures with no response are still `NetworkError` with the same messages.
+
 ### Changed
 
 - **`loginOpaque()` falls back to `login()` under `opaque_mode: "optional"` —
