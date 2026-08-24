@@ -5,21 +5,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0-alpha41] - 2026-08-24
-
-### Added
-
-- Fall back to /auth/login when mode is optional (§23.4 rule 7)
-
-### Changed
-
-- Re-vendor openapi.json for the vault_pki CA custodian (axiam#368)
-- Re-vendor CONTRACT.md 1.29 and openapi.json alpha40
-
-### Fixed
-
-- Surface a pre-mapped 401 as AuthError, not NetworkError
-
 ## [Unreleased]
 
 ### Added
@@ -67,38 +52,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   floor leg rather than twice, mirroring the Rust SDK's
   `if: matrix.toolchain == 'stable'` pattern.
 
-### Fixed
+## [1.0.0-alpha41] - 2026-08-24
 
-- **`login()`, `refresh()` and `logout()` reported a `401` as a `NetworkError`
-  instead of an `AuthError`.** All three post to a `SKIP_REFRESH` url, so the
-  response interceptor maps their `401` to an `AuthError` before `auth.ts`'s
-  own `catch` runs. That already-mapped error carries no axios `.response`, so
-  the status probe returned `undefined` and the final line wrapped it in
-  `NetworkError('<op> request failed')` with the `AuthError` as `cause` — a
-  wrong password was reported as a transport failure. `auth.ts` now rethrows an
-  already-mapped `AxiamError` unchanged.
+### Added
 
-  The inconsistency this removes: `verifyMfa()` is *not* a `SKIP_REFRESH` url,
-  so the identical `401` already surfaced there as `AuthError`. The same bad
-  credential produced two different error classes depending on which endpoint
-  saw it, and the README's documented `catch` pattern — `if (err instanceof
-  AuthError) { /* re-authenticate */ }` — silently failed to match a failed
-  login.
-
-  It also compounded with the §23.4 rule 7 fallback: under `opaque_mode:
-  "optional"`, `loginOpaque()` delegates to `login()` and returns its outcome
-  verbatim, so a wrong password came back as a `NetworkError` — which the
-  README's own fallback guard (`if (!(err instanceof NetworkError)) throw err`)
-  treats as "OPAQUE unavailable, try the password path", running a second
-  plaintext login for a credential that had already been rejected.
-
-  **Behaviour change for callers** who catch `NetworkError` around `login()`,
-  `refresh()` or `logout()` to handle a rejected credential: that now arrives
-  as `AuthError`. Catching `AxiamError`, or the `AuthError`/`NetworkError`
-  split the README documents, was already correct and is unaffected. Transport
-  failures with no response are still `NetworkError` with the same messages.
+- Fall back to /auth/login when mode is optional (§23.4 rule 7)
 
 ### Changed
+
+- Re-vendor openapi.json for the vault_pki CA custodian (axiam#368)
+
+- Re-vendor CONTRACT.md 1.29 and openapi.json alpha40
 
 - **Re-vendor `openapi.json`** for AXIAM server PR #368, which adds a third CA
   key custodian, `vault_pki`, having HashiCorp Vault's PKI secrets engine
@@ -159,6 +123,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Re-vendor `CONTRACT.md` at **1.29** and `openapi.json` at **1.0.0-alpha40**.
 
+### Fixed
+
+- Surface a pre-mapped 401 as AuthError, not NetworkError
+
+- **`login()`, `refresh()` and `logout()` reported a `401` as a `NetworkError`
+  instead of an `AuthError`.** All three post to a `SKIP_REFRESH` url, so the
+  response interceptor maps their `401` to an `AuthError` before `auth.ts`'s
+  own `catch` runs. That already-mapped error carries no axios `.response`, so
+  the status probe returned `undefined` and the final line wrapped it in
+  `NetworkError('<op> request failed')` with the `AuthError` as `cause` — a
+  wrong password was reported as a transport failure. `auth.ts` now rethrows an
+  already-mapped `AxiamError` unchanged.
+
+  The inconsistency this removes: `verifyMfa()` is *not* a `SKIP_REFRESH` url,
+  so the identical `401` already surfaced there as `AuthError`. The same bad
+  credential produced two different error classes depending on which endpoint
+  saw it, and the README's documented `catch` pattern — `if (err instanceof
+  AuthError) { /* re-authenticate */ }` — silently failed to match a failed
+  login.
+
+  It also compounded with the §23.4 rule 7 fallback: under `opaque_mode:
+  "optional"`, `loginOpaque()` delegates to `login()` and returns its outcome
+  verbatim, so a wrong password came back as a `NetworkError` — which the
+  README's own fallback guard (`if (!(err instanceof NetworkError)) throw err`)
+  treats as "OPAQUE unavailable, try the password path", running a second
+  plaintext login for a credential that had already been rejected.
+
+  **Behaviour change for callers** who catch `NetworkError` around `login()`,
+  `refresh()` or `logout()` to handle a rejected credential: that now arrives
+  as `AuthError`. Catching `AxiamError`, or the `AuthError`/`NetworkError`
+  split the README documents, was already correct and is unaffected. Transport
+  failures with no response are still `NetworkError` with the same messages.
+
 ## [1.0.0-alpha40] - 2026-08-23
 
 ### Changed
@@ -178,15 +175,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add WebAuthn (§24), account lifecycle (§25) and PAR (§26)
 
-### Changed
-
-- Use the shared authenticatorData fixture value
-- Re-vendor CONTRACT.md at 1.28
-
-## [Unreleased]
-
-### Added
-
 - **WebAuthn and passkeys — CONTRACT.md §24.** Six relying-party operations on
   `AxiamClient` (`webauthnRegisterStart`/`Finish`,
   `webauthnAuthenticateStart`/`Finish`, `webauthnDiscoverableStart`/`Finish`),
@@ -195,21 +183,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the platform ceremony over `navigator.credentials` —
   `webauthnRegister`/`webauthnLogin`/`webauthnDiscoverableLogin`, feature
   detection, conditional mediation, and the five-outcome error classification.
+
 - **The §24.6a JSON bridge.** `webauthnRequestJson` hands the challenge to any
   platform authenticator API in the JSON form all of them speak, and every
   `*Finish` accepts the platform's response JSON string directly — so an Android
   app passes `requestJson` into `CreatePublicKeyCredentialRequest` and the
   response straight back, with nothing destructured in between.
+
 - **Account lifecycle and MFA enrolment — CONTRACT.md §25.** Nine operations:
   `mfaEnroll`/`mfaConfirm`, `mfaSetupEnroll`/`mfaSetupConfirm`, `verifyEmail`,
   `resendVerification`, `requestPasswordReset`, `confirmPasswordReset`,
   `passwordResetContext`.
+
 - **Pushed authorization requests — CONTRACT.md §26 (RFC 9126).** `oidcPar` on
   `OidcClient`, plus `pushed_authorization_request_endpoint` in the discovery
   document type.
+
 - Examples: `webauthn-browser.ts`, `account-lifecycle.ts`, `par-login.ts`.
 
 ### Changed
+
+- Use the shared authenticatorData fixture value
+
+- Re-vendor CONTRACT.md at 1.28
 
 - Re-vendor `CONTRACT.md`. Repairs §14.1's link to the `device_login` heading,
   which dropped a hyphen the em dash leaves behind and so rendered as a link
@@ -233,6 +229,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   matches the union exhaustively needs a new arm; code that does not is
   unaffected, and a genuine authorization refusal is still an `AuthzError` —
   the SDK matches on the body's discriminant, not on the status alone.
+
 - The SC#1 bundle-and-grep gate now covers the `axiam-sdk/browser` entry as well
   as `/rest`, rather than trusting a browser-only subpath to stay clean.
 
@@ -251,10 +248,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Link to the AXIAM platform documentation site
-- Re-vendor openapi.json at alpha32 (#69)
-- Document OpaqueEnrollment's fields for typedoc
 
-## [Unreleased]
+- Re-vendor openapi.json at alpha32 (#69)
+
+- Document OpaqueEnrollment's fields for typedoc
 
 ## [1.0.0-alpha33] - 2026-08-21
 
