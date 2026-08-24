@@ -88,7 +88,8 @@
         "types": "./dist/nestjs/index.d.ts",
         "default": "./dist/nestjs/index.js"
       }
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
@@ -111,7 +112,7 @@
     "authorization"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "generate": "buf generate --template buf.gen.yaml",

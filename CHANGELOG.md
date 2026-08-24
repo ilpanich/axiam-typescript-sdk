@@ -22,6 +22,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Node 26 is now a CI-built runtime.** The gating matrix runs `build`,
+  `typecheck`, the full test suite and the CommonJS-require smoke tests on the
+  floor **and** on the newest release line, rather than on one line in the
+  middle of the range.
+
+- **`test/core/versionPolicy.test.ts`** — a conformance test for the support
+  policy itself. `engines.node`, the `@types/node` pin and the CI `node` matrix
+  are three independent declarations of the same fact and nothing compared
+  them. Before this test existed all three disagreed at once: `engines` said
+  `>=18`, `@types/node` was `^26`, and CI built only 22 — meaning `tsc`
+  validated the SDK against APIs no tested runtime provided, while the package
+  advertised installation on a runtime nothing built.
+
+- **`examples/version-compatibility.ts`** — a runnable startup preflight
+  reporting the running Node against the SDK's declared range, read out of the
+  SDK's own `package.json` rather than hardcoded. `engines` is advisory to npm
+  and ignored outright under `engine-strict=false`; this makes it assertable.
+
+- **`"./package.json"` in the package `exports` map**, so a consumer can read
+  the SDK's `engines` range at runtime. Additive — no existing subpath changes.
+
+- **A "Supported Node versions" section in the README**, stating the two claims
+  separately: built against the floor, runs on everything through the newest,
+  with a CI leg proving each.
+
+### Changed
+
+- **BREAKING (declared support): `engines.node` raised `>=18` → `>=22`.** Node
+  18 reached end of life on 2025-04-30 and Node 20 on 2026-04-30; 22 is the
+  oldest line still receiving security fixes. The SDK was never built or
+  tested on 18 — this corrects a declaration that had quietly stopped being
+  true, rather than dropping a runtime that was working.
+
+  No code change accompanies this: the bundle still targets ES2022. Installs
+  on Node 18 or 20 will now emit an `EBADENGINE` warning (or fail under
+  `engine-strict=true`).
+
+- **The gating CI matrix is floor + newest (22, 26)** rather than a single
+  line. Runtime-independent gates — bundle-grep, the token-leak and TLS-lint
+  greps, `npm audit`, the docs gate and the publish dry-run — run once on the
+  floor leg rather than twice, mirroring the Rust SDK's
+  `if: matrix.toolchain == 'stable'` pattern.
+
 ### Fixed
 
 - **`login()`, `refresh()` and `logout()` reported a `401` as a `NetworkError`
