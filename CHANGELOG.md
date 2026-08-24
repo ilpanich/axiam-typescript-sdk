@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-alpha41] - 2026-08-24
+
+### Added
+
+- Fall back to /auth/login when mode is optional (§23.4 rule 7)
+
+### Changed
+
+- Re-vendor openapi.json for the vault_pki CA custodian (axiam#368)
+- Re-vendor CONTRACT.md 1.29 and openapi.json alpha40
+
+### Fixed
+
+- Surface a pre-mapped 401 as AuthError, not NetworkError
+
 ## [Unreleased]
 
 ### Fixed
