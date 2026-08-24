@@ -520,8 +520,18 @@ an <code>AuthError</code>, so neither can be mistaken for a bad password:</p>
 </code><button type="button">Copy</button></pre>
 
 <p>The <code>if</code> is the important line. <strong>Any other error is a failed login</strong>, and
-retrying it over <code>login()</code> would hand the plaintext to a server that just
-failed to prove it holds the record.</p>
+retrying it over <code>login()</code> yourself would hand the plaintext to a server that
+just failed to prove it holds the record.</p>
+<p>One case is handled for you. <code>login/start</code> returns the tenant's <code>mode</code>, and when
+it is <code>&quot;optional&quot;</code> — the mid-migration state, where accounts acquire a
+registration record only as their passwords are next set — a failed exchange is
+not yet a verdict on the credentials, so <code>loginOpaque</code> retries over
+<code>POST /api/v1/auth/login</code> itself and returns that call's outcome (<a href="http://CONTRACT.md">CONTRACT.md</a>
+§23.4 rule 7). Under <code>&quot;required&quot;</code>, and against a server too old to send <code>mode</code>
+at all, it fails closed exactly as before. <code>mode</code> is <strong>not</strong> downgrade
+protection: a hostile server that wanted the plaintext could answer <code>404</code> and
+get the fallback above regardless. <code>required</code> is what closes that, server-side,
+by refusing <code>/auth/login</code> for every principal in the tenant.</p>
 <h3 id="what-this-buys-and-what-it-does-not" class="tsd-anchor-link">What this buys, and what it does not<a href="#what-this-buys-and-what-it-does-not" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <p>OPAQUE closes holes TLS 1.3 does not:</p>
 <ul>
