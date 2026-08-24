@@ -22,6 +22,7 @@
 <li><strong>Registry:</strong> <a href="https://www.npmjs.com/package/axiam-sdk">npmjs.com/package/axiam-sdk</a> <em>(reserved, not yet published)</em></li>
 <li><strong>Source:</strong> <a href="https://github.com/ilpanich/axiam-typescript-sdk">github.com/ilpanich/axiam-typescript-sdk</a></li>
 <li><strong>License:</strong> Apache-2.0</li>
+<li><strong>Node:</strong> <code>&gt;=22</code> — see <a href="#supported-node-versions">Supported Node versions</a></li>
 </ul>
 <h2 id="contract-conformance" class="tsd-anchor-link">Contract conformance<a href="#contract-conformance" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>This SDK conforms to <a href="http://CONTRACT.md">CONTRACT.md</a> §1–§13 and §12.7, §14, §15, §17, §19, §20, §21, §22, §23,
@@ -54,6 +55,49 @@ never use it to guard a route.</p>
 <pre><code class="bash"><span class="hl-3">npm</span><span class="hl-1"> </span><span class="hl-5">install</span><span class="hl-1"> </span><span class="hl-5">axiam-sdk</span>
 </code><button type="button">Copy</button></pre>
 
+<h2 id="supported-node-versions" class="tsd-anchor-link">Supported Node versions<a href="#supported-node-versions" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Version</th>
+<th>Why this one</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Floor</strong></td>
+<td>22</td>
+<td>The oldest release line still receiving security fixes. Node 18 went EOL 2025-04-30 and Node 20 on 2026-04-30. <code>engines.node</code> is <code>&gt;=22</code>.</td>
+</tr>
+<tr>
+<td><strong>Newest</strong></td>
+<td>26</td>
+<td>The current release line (out 2026-05, promoted to LTS 2026-10), and the line <code>@types/node</code> is pinned to.</td>
+</tr>
+</tbody>
+</table>
+<p>Node 24 (Active LTS) sits between the two and is supported.</p>
+<p><strong>The SDK is built against the floor, and runs on everything up to the newest.</strong>
+Those are two different claims, and CI proves each separately: the gating
+matrix in <code>sdk-ci-typescript.yml</code> runs <code>build</code>, <code>typecheck</code>, the full test
+suite and the CommonJS-require smoke tests on <strong>22 and on 26</strong>. The floor leg
+is what stops a Node 24-only built-in from slipping in; the newest leg is what
+catches a removal, and is the runtime <code>tsc</code> is typechecking against. A line
+between two green legs is interpolation, which is why the matrix is two legs
+rather than four — the runtime-independent gates (bundle-grep, the token-leak
+and TLS-lint greps, <code>npm audit</code>, the docs gate and the publish dry-run) run
+once, on the floor.</p>
+<p>If you are on a newer runtime than the floor you need do nothing: the
+published bundle targets ES2022 and is forward-compatible, and the newest leg
+is the evidence.</p>
+<p>The browser persona (<code>axiam-sdk/browser</code>) has no Node floor at all — it needs
+a runtime with <code>fetch</code>, <code>crypto.subtle</code> and <code>TextEncoder</code>, which every
+currently supported browser has.</p>
+<p><code>test/core/versionPolicy.test.ts</code> fails the build if <code>engines.node</code>, the
+<code>@types/node</code> pin and the CI matrix ever stop agreeing. They are three
+independent declarations of the same fact and nothing else compares them —
+before that test existed, all three disagreed at once.</p>
 <h2 id="two-personas-tree-shaken-subpath-entries" class="tsd-anchor-link">Two personas, tree-shaken subpath entries<a href="#two-personas-tree-shaken-subpath-entries" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p><code>axiam-sdk</code> ships as <strong>one package with two personas</strong>, each reachable through its own
 <code>package.json</code> subpath so a bundler only pulls in the transport code the caller actually
@@ -1025,6 +1069,7 @@ the TypeDoc API reference to this repo's GitHub Pages site.</p>
 <ul>
 <li><a href="#§101-minimum-local-verification-set"><span>§10.1 minimum local-<wbr/>verification set</span></a></li></ul></li>
 <li><a href="#install"><span>Install</span></a></li>
+<li><a href="#supported-node-versions"><span>Supported <wbr/>Node versions</span></a></li>
 <li><a href="#two-personas-tree-shaken-subpath-entries"><span>Two personas, tree-<wbr/>shaken subpath entries</span></a></li>
 <li><a href="#construction"><span>Construction</span></a></li>
 <li>
