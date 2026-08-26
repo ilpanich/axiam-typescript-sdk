@@ -47,6 +47,7 @@
  * **There is no transaction.** See {@link ApplyReport}.
  */
 
+export * from './declarative.js';
 export * from './plan.js';
 export * from './spec.js';
 export { ManifestApi } from './engine.js';

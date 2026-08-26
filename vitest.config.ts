@@ -17,14 +17,19 @@ export default defineConfig({
       // dilute the ratio without saying anything about the SDK's own tests.
       exclude: ['src/gen/**'],
       // Regression gate: fail `vitest run --coverage` if coverage drops below
-      // the floor. Set a couple of points below the current level (lines ~95.8%,
-      // statements ~95.5%, functions ~96.6%, branches ~87-90%) so it never
+      // the floor. Set a couple of points below the current level so it never
       // false-fails; ratchet upward as coverage rises.
+      //
+      // Raised with §27 (lines ~96.9%, statements ~96.3%, functions ~97.6%,
+      // branches ~89.8%): the management surface arrived with its own
+      // generated per-operation test plus hand-written semantics, which lifted
+      // every ratio rather than diluting it. Leaving the old floor would have
+      // let that margin be spent silently.
       thresholds: {
-        lines: 94,
-        statements: 94,
-        functions: 95,
-        branches: 86,
+        lines: 95,
+        statements: 95,
+        functions: 96,
+        branches: 88,
       },
     },
   },
