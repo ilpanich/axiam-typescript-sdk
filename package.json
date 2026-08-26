@@ -122,7 +122,9 @@
     "coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "bundle-grep": "node scripts/bundle-grep.mjs",
-    "docs": "typedoc"
+    "docs": "typedoc",
+    "gen-management": "node scripts/gen-management.mjs",
+    "gen-management:check": "node scripts/gen-management.mjs --check"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.4",

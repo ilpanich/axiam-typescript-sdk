@@ -64,6 +64,20 @@ import type {
  * }
  * ```
  */
+import { ManifestApi } from '../management/manifest/engine.js';
+import type { ManagementNamespaces } from '../management/ops/index.js';
+import { managementNamespaces } from '../management/ops/index.js';
+
+/**
+ * The §27 management namespaces, merged onto the client.
+ *
+ * Declaration merging rather than 24 hand-written getters: the namespace set
+ * is generated from `management-registry.json`, and a hand-maintained copy of
+ * it on this class is the thing §27.8 exists to prevent.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
+export interface AxiamClient extends ManagementNamespaces {}
+
 export class AxiamClient {
   /** @internal — exposed for auth.ts/authz.ts method implementations and other transports (D-13). */
   readonly session: SharedSession;
@@ -102,6 +116,32 @@ export class AxiamClient {
     // here, because construction is the only moment an operator can act on it.
     this.decisionMemo.reportClamp(options.decisionMemoTtlMs ?? 0, this.telemetry.dispatcher);
     this.retryEnabled = options.retryEnabled ?? true;
+    // §27.2 rule 1: acquiring a handle performs no I/O and is not meant to be
+    // observable. Copying the *descriptors* keeps the generated getters lazy,
+    // so constructing a client does not construct 24 namespace objects; a
+    // plain `Object.assign` would invoke every getter here.
+    Object.defineProperties(this, Object.getOwnPropertyDescriptors(managementNamespaces(this)));
+  }
+
+  /**
+   * Declarative management — CONTRACT.md §27.6.
+   *
+   * `client.manifest.plan(m)` says what would change and writes nothing;
+   * `client.manifest.apply(m)` reconciles.
+   */
+  get manifest(): ManifestApi {
+    return new ManifestApi(this);
+  }
+
+  /**
+   * Every §27 namespace behind one accessor (§27.2 rule 4).
+   *
+   * `client.management.users` and `client.users` are the same handle; this
+   * exists for callers who prefer the management surface not to be mixed in
+   * with §1's eight methods when reading a call site.
+   */
+  get management(): ManagementNamespaces {
+    return managementNamespaces(this);
   }
 
   /**

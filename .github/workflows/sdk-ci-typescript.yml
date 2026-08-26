@@ -69,6 +69,15 @@ jobs:
       - name: Build
         run: npm run build
 
+      # CONTRACT §27.8: the management surface is generated from the vendored
+      # management-registry.json and committed. This fails when the two have
+      # drifted -- which happens whenever the registry is re-vendored and
+      # nobody re-ran the generator, and which would otherwise ship 146
+      # methods pointing at last release's routes.
+      - name: §27 management surface is regenerated
+        run: |
+          node scripts/gen-management.mjs --check
+
       - name: Typecheck
         run: npm run typecheck
 
