@@ -63,14 +63,52 @@ export function isConverged(plan: ManagementPlan): boolean {
   return changes(plan).length === 0;
 }
 
-/** What actually happened to one planned step. */
-export type Outcome =
-  | { status: 'created' }
-  | { status: 'updated' }
-  | { status: 'unchanged' }
-  | { status: 'failed'; message: string }
-  /** Never attempted, because an earlier step failed. */
-  | { status: 'not-attempted' };
+/**
+ * What actually happened to one planned step.
+ *
+ * Named `StepOutcome` rather than `Outcome` because `core/telemetry` already
+ * exports an `Outcome` — the success/failure of a single request — and two
+ * exported types of that name in one package is one too many.
+ */
+export type StepOutcome =
+  | {
+      /** The step ran and the thing now exists. */
+      status: 'created';
+    }
+  | {
+      /** The step ran and the thing was updated. */
+      status: 'updated';
+    }
+  | {
+      /** A no-op step; nothing was sent. */
+      status: 'unchanged';
+    }
+  | {
+      /** The step failed. Everything before it has already happened. */
+      status: 'failed';
+      /** The error the server or transport gave. */
+      message: string;
+    }
+  | {
+      /** Never attempted, because an earlier step failed. */
+      status: 'not-attempted';
+    };
+
+/** One planned step paired with what became of it. */
+export interface AppliedStep {
+  /** The step, exactly as `plan` reported it. */
+  action: PlannedAction;
+  /** What actually happened when it ran — or did not. */
+  outcome: StepOutcome;
+}
+
+/** The step that stopped an apply, and why. */
+export interface ManifestFailure {
+  /** The step that failed. Everything before it has already happened. */
+  action: PlannedAction;
+  /** The error the server or transport gave. */
+  message: string;
+}
 
 /**
  * The result of applying a manifest.
@@ -85,13 +123,11 @@ export type Outcome =
  */
 export interface ApplyReport {
   /** Each planned step paired with what became of it, in plan order. */
-  steps: Array<{ action: PlannedAction; outcome: Outcome }>;
+  steps: AppliedStep[];
 }
 
 /** The failing step, if the apply stopped early. */
-export function failure(
-  report: ApplyReport,
-): { action: PlannedAction; message: string } | undefined {
+export function failure(report: ApplyReport): ManifestFailure | undefined {
   const found = report.steps.find((s) => s.outcome.status === 'failed');
   return found ? { action: found.action, message: (found.outcome as { message: string }).message } : undefined;
 }

@@ -61,6 +61,6 @@ export * from './errors.js';
 export * from './models.js';
 export * from './ops/index.js';
 export * from './page.js';
-export type { Scope } from './scope.js';
+export type { NamespaceScope } from './scope.js';
 export * from './manifest/index.js';
 export type { ManagementCall, ManagementMethod } from './request.js';

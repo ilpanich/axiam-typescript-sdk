@@ -24,6 +24,7 @@ export type ManagementMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 export interface ManagementCall {
   /** `"users.create"` — the registry's namespace-qualified operation name. */
   operation: string;
+  /** The HTTP verb. Only `GET` is retry-eligible (§27.4 rule 8). */
   method: ManagementMethod;
   /** `"/api/v1/users/{user_id}"`, ids **not** substituted — the §19.1 label. */
   pathTemplate: string;

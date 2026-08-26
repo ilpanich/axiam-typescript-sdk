@@ -46,8 +46,21 @@ const IMPLICIT_TENANT_NAMESPACES = new Set(['email_config', 'settings', 'webauth
 // Naming
 // ---------------------------------------------------------------------------
 
-const pascal = (s) =>
-  s.split(/[_\-\s]+/).filter(Boolean).map((p) => p[0].toUpperCase() + p.slice(1)).join('');
+// Schema names that would collide with a type this SDK already exports. The
+// generated surface is re-exported from the package root, so a duplicate name
+// makes one of the two unreachable — and the one that loses is whichever the
+// barrel happens to list second.
+const RENAMED_SCHEMAS = {
+  // §23's `OpaqueEnrollment` (src/rest/opaque.ts) is the enrolment *result* a
+  // caller receives; this is the registration payload a caller *sends* when
+  // creating a user. Different shapes, same server-side vocabulary.
+  OpaqueEnrollment: 'OpaqueEnrollmentPayload',
+};
+
+const pascal = (s) => {
+  const p = s.split(/[_\-\s]+/).filter(Boolean).map((x) => x[0].toUpperCase() + x.slice(1)).join('');
+  return RENAMED_SCHEMAS[p] ?? p;
+};
 const camel = (s) => {
   const p = pascal(s);
   return p[0].toLowerCase() + p.slice(1);
@@ -329,16 +342,22 @@ function emitUnion(rname, schema, { tag, arms }) {
   lines.push(`export type ${rname} =`);
   arms.forEach(({ value, payload }, i) => {
     const tail = i === arms.length - 1 ? ';' : '';
+    const tagDoc = `/** Discriminator: always \`${value}\`. */`;
     if (payload.$ref) {
-      lines.push(
-        `  | ({ ${tag}: ${JSON.stringify(value)} } & ${pascal(payload.$ref.split('/').pop())})${tail}`,
-      );
+      lines.push(`  | ({`);
+      lines.push(`      ${tagDoc}`);
+      lines.push(`      ${tag}: ${JSON.stringify(value)};`);
+      lines.push(`    } & ${pascal(payload.$ref.split('/').pop())})${tail}`);
     } else {
       const required = new Set(payload.required ?? []);
-      const fields = Object.entries(payload.properties ?? {})
-        .map(([n, p]) => `${n}${required.has(n) ? '' : '?'}: ${tsType(p)}`)
-        .join('; ');
-      lines.push(`  | { ${tag}: ${JSON.stringify(value)}; ${fields} }${tail}`);
+      lines.push('  | {');
+      lines.push(`      ${tagDoc}`);
+      lines.push(`      ${tag}: ${JSON.stringify(value)};`);
+      for (const [n, prop] of Object.entries(payload.properties ?? {})) {
+        lines.push(...doc(prop.description ?? `\`${n}\`.`, '      '));
+        lines.push(`      ${n}${required.has(n) ? '' : '?'}: ${tsType(prop)};`);
+      }
+      lines.push(`    }${tail}`);
     }
   });
   lines.push('');
@@ -388,7 +407,11 @@ function emitInterface(rname, name, secrets, directions) {
 
   // The wire twin, plus only the conversion direction this type travels in.
   const wire = `${rname}Wire`;
-  lines.push(...doc(`Wire twin of {@link ${rname}} — plain strings, never logged.`));
+  lines.push(
+    ...doc(
+      `Wire twin of {@link ${rname}} — plain strings, never logged.\n\n@internal — it exists because \`Sensitive\` cannot be serialized, not because a consumer should read it.`,
+    ),
+  );
   lines.push(`export interface ${wire} {`);
   for (const f of fields) {
     const type = f.secret ? 'string' : f.type;
@@ -478,10 +501,10 @@ function emitNamespace(namespace, nsdef, secrets) {
   );
   body.push(`export class ${cls} {`);
   body.push('  readonly #client: AxiamClient;');
-  body.push('  readonly #scope: Scope;');
+  body.push('  readonly #scope: NamespaceScope;');
   body.push('');
   body.push('  /** @internal — reached through `client.<namespace>`, never constructed directly. */');
-  body.push('  constructor(client: AxiamClient, scope: Scope = {}) {');
+  body.push('  constructor(client: AxiamClient, scope: NamespaceScope = {}) {');
   body.push('    this.#client = client;');
   body.push('    this.#scope = scope;');
   body.push('  }');
@@ -525,7 +548,7 @@ function emitNamespace(namespace, nsdef, secrets) {
   const pageValues = ['collectPages', 'pageQuery'].filter((n) => new RegExp(`\\b${n}\\b`).test(rendered));
   if (pageValues.length) imports.push(`import { ${pageValues.join(', ')} } from '../page.js';`);
   imports.push("import { sendManagement } from '../request.js';");
-  imports.push("import type { Scope } from '../scope.js';");
+  imports.push("import type { NamespaceScope } from '../scope.js';");
   if (/resolveOrg|resolveTenant/.test(rendered)) {
     imports.push("import { resolveOrg, resolveTenant } from '../scope.js';");
   }

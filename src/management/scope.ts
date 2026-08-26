@@ -12,8 +12,14 @@
 import { NetworkError } from '../core/errors.js';
 import type { AxiamClient } from '../rest/client.js';
 
-/** Per-handle overrides for the two implicit path parameters. */
-export interface Scope {
+/**
+ * Per-handle overrides for the two implicit path parameters.
+ *
+ * Named `NamespaceScope` rather than `Scope` because the server's schema set
+ * already has a `Scope` — the sub-resource kind §27.1's `scopes` namespace
+ * administers — and two exported types of that name is one too many.
+ */
+export interface NamespaceScope {
   /** Override for `{org_id}`. Absent means "the client's". */
   orgId?: string;
   /** Override for `{tenant_id}`. Absent means "the client's". */
@@ -31,7 +37,7 @@ export interface Scope {
  *
  * @internal
  */
-export function resolveOrg(client: AxiamClient, scope: Scope, operation: string): string {
+export function resolveOrg(client: AxiamClient, scope: NamespaceScope, operation: string): string {
   if (scope.orgId) return scope.orgId;
   const configured = client.session.orgId;
   if (configured) return configured;
@@ -55,7 +61,7 @@ export function resolveOrg(client: AxiamClient, scope: Scope, operation: string)
  *
  * @internal
  */
-export function resolveTenant(client: AxiamClient, scope: Scope, operation: string): string {
+export function resolveTenant(client: AxiamClient, scope: NamespaceScope, operation: string): string {
   if (scope.tenantId) return scope.tenantId;
   const configured = client.session.tenantId ?? client.session.resolvedTenantId;
   if (configured) return configured;

@@ -96,3 +96,11 @@ export {
   Sensitive,
   type IdTokenFailureReason,
 } from '../core/index.js';
+
+// CONTRACT.md §27 — the management API. Exported from the root/`/rest` entry
+// because it is REST and browser-safe: an admin UI is exactly its audience,
+// and it pulls in no Node-only dependency (the SC#1 bundle gate covers this).
+// The namespace handles themselves are reached from the client
+// (`client.users`, `client.roles`, …); what is exported here is the models,
+// the page and error types, and the declarative manifest surface.
+export * from '../management/index.js';

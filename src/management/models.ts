@@ -442,6 +442,9 @@ export interface CreateFederationConfigRequest {
 /**
  * Wire twin of {@link CreateFederationConfigRequest} — plain strings, never
  * logged.
+ *
+ * @internal — it exists because `Sensitive` cannot be serialized, not
+ * because a consumer should read it.
  */
 export interface CreateFederationConfigRequestWire {
   allowed_algorithms?: string[] | null;
@@ -719,6 +722,9 @@ export interface CreateScimTokenResponse {
 /**
  * Wire twin of {@link CreateScimTokenResponse} — plain strings, never
  * logged.
+ *
+ * @internal — it exists because `Sensitive` cannot be serialized, not
+ * because a consumer should read it.
  */
 export interface CreateScimTokenResponseWire {
   created_at: string;
@@ -781,7 +787,7 @@ export interface CreateUserRequest {
   /** `metadata`. */
   metadata?: unknown;
   /** `opaque`. */
-  opaque?: OpaqueEnrollment | null;
+  opaque?: OpaqueEnrollmentPayload | null;
   /**
    * `password`.
    *
@@ -793,11 +799,16 @@ export interface CreateUserRequest {
   username: string;
 }
 
-/** Wire twin of {@link CreateUserRequest} — plain strings, never logged. */
+/**
+ * Wire twin of {@link CreateUserRequest} — plain strings, never logged.
+ *
+ * @internal — it exists because `Sensitive` cannot be serialized, not
+ * because a consumer should read it.
+ */
 export interface CreateUserRequestWire {
   email: string;
   metadata?: unknown;
-  opaque?: OpaqueEnrollment | null;
+  opaque?: OpaqueEnrollmentPayload | null;
   password: string;
   username: string;
 }
@@ -833,7 +844,12 @@ export interface CreateWebhookRequest {
   url: string;
 }
 
-/** Wire twin of {@link CreateWebhookRequest} — plain strings, never logged. */
+/**
+ * Wire twin of {@link CreateWebhookRequest} — plain strings, never logged.
+ *
+ * @internal — it exists because `Sensitive` cannot be serialized, not
+ * because a consumer should read it.
+ */
 export interface CreateWebhookRequestWire {
   events: string[];
   retry_policy?: RetryPolicy | null;
@@ -1108,7 +1124,12 @@ export interface GeneratedCaCertificate {
   tenant_id?: string | null;
 }
 
-/** Wire twin of {@link GeneratedCaCertificate} — plain strings, never logged. */
+/**
+ * Wire twin of {@link GeneratedCaCertificate} — plain strings, never logged.
+ *
+ * @internal — it exists because `Sensitive` cannot be serialized, not
+ * because a consumer should read it.
+ */
 export interface GeneratedCaCertificateWire {
   chain_pem?: string | null;
   created_at: string;
@@ -1191,7 +1212,12 @@ export interface GeneratedCertificate {
   tenant_id: string;
 }
 
-/** Wire twin of {@link GeneratedCertificate} — plain strings, never logged. */
+/**
+ * Wire twin of {@link GeneratedCertificate} — plain strings, never logged.
+ *
+ * @internal — it exists because `Sensitive` cannot be serialized, not
+ * because a consumer should read it.
+ */
 export interface GeneratedCertificateWire {
   cert_type: CertificateType;
   chain_pem?: string | null;
@@ -1248,7 +1274,12 @@ export interface GeneratedPgpKey {
   tenant_id: string;
 }
 
-/** Wire twin of {@link GeneratedPgpKey} — plain strings, never logged. */
+/**
+ * Wire twin of {@link GeneratedPgpKey} — plain strings, never logged.
+ *
+ * @internal — it exists because `Sensitive` cannot be serialized, not
+ * because a consumer should read it.
+ */
 export interface GeneratedPgpKeyWire {
   algorithm: PgpKeyAlgorithm;
   created_at: string;
@@ -1355,6 +1386,9 @@ export interface ImportCaCertificateRequest {
 /**
  * Wire twin of {@link ImportCaCertificateRequest} — plain strings, never
  * logged.
+ *
+ * @internal — it exists because `Sensitive` cannot be serialized, not
+ * because a consumer should read it.
  */
 export interface ImportCaCertificateRequestWire {
   private_key_pem?: string;
@@ -1397,10 +1431,36 @@ export interface LockoutPolicy {
  * (mirrors `axiam_db::mds_ingest::MdsIngestOutcome`).
  */
 export type MdsRefreshOutcome =
-  | { outcome: "initial"; entry_count: number; no: number }
-  | { outcome: "replaced"; entry_count: number; no: number }
-  | { outcome: "no_op_refresh"; no: number }
-  | { outcome: "rollback_rejected"; attempted_no: number; stored_no: number };
+  | {
+      /** Discriminator: always `initial`. */
+      outcome: "initial";
+      /** `entry_count`. */
+      entry_count: number;
+      /** `no`. */
+      no: number;
+    }
+  | {
+      /** Discriminator: always `replaced`. */
+      outcome: "replaced";
+      /** `entry_count`. */
+      entry_count: number;
+      /** `no`. */
+      no: number;
+    }
+  | {
+      /** Discriminator: always `no_op_refresh`. */
+      outcome: "no_op_refresh";
+      /** `no`. */
+      no: number;
+    }
+  | {
+      /** Discriminator: always `rollback_rejected`. */
+      outcome: "rollback_rejected";
+      /** `attempted_no`. */
+      attempted_no: number;
+      /** `stored_no`. */
+      stored_no: number;
+    };
 
 /**
  * `GET /api/v1/mds/status` response. `no`/`next_update`/`last_refreshed_at`
@@ -1555,6 +1615,9 @@ export interface OAuth2ClientCreatedResponse {
 /**
  * Wire twin of {@link OAuth2ClientCreatedResponse} — plain strings, never
  * logged.
+ *
+ * @internal — it exists because `Sensitive` cannot be serialized, not
+ * because a consumer should read it.
  */
 export interface OAuth2ClientCreatedResponseWire {
   client_id: string;
@@ -1701,7 +1764,7 @@ export interface OidcCallbackResponse {
  * and the credential identifier are all decided by the server — a client
  * that could name them could enrol a record against somebody else's account.
  */
-export interface OpaqueEnrollment {
+export interface OpaqueEnrollmentPayload {
   /** The `opaque_session` from the register/start response, echoed verbatim. */
   opaque_session: string;
   /** Lowercase-hex serialized RFC 9807 `RegistrationRecord`. */
@@ -1923,11 +1986,26 @@ export interface PrivacyPolicy {
 
 /** Provider-specific connection details. */
 export type ProviderConfig =
-  | ({ kind: "smtp" } & SmtpConfig)
-  | ({ kind: "send_grid" } & ApiProviderConfig)
-  | ({ kind: "postmark" } & ApiProviderConfig)
-  | ({ kind: "resend" } & ApiProviderConfig)
-  | ({ kind: "brevo" } & ApiProviderConfig);
+  | ({
+      /** Discriminator: always `smtp`. */
+      kind: "smtp";
+    } & SmtpConfig)
+  | ({
+      /** Discriminator: always `send_grid`. */
+      kind: "send_grid";
+    } & ApiProviderConfig)
+  | ({
+      /** Discriminator: always `postmark`. */
+      kind: "postmark";
+    } & ApiProviderConfig)
+  | ({
+      /** Discriminator: always `resend`. */
+      kind: "resend";
+    } & ApiProviderConfig)
+  | ({
+      /** Discriminator: always `brevo`. */
+      kind: "brevo";
+    } & ApiProviderConfig);
 
 /** One hookable event, as the registry describes it. */
 export interface ReactorEventDescriptor {
@@ -2134,7 +2212,12 @@ export interface RotateSecretResponse {
   client_secret: Sensitive<string>;
 }
 
-/** Wire twin of {@link RotateSecretResponse} — plain strings, never logged. */
+/**
+ * Wire twin of {@link RotateSecretResponse} — plain strings, never logged.
+ *
+ * @internal — it exists because `Sensitive` cannot be serialized, not
+ * because a consumer should read it.
+ */
 export interface RotateSecretResponseWire {
   client_secret: string;
 }
@@ -2266,6 +2349,9 @@ export interface ServiceAccountCreatedResponse {
 /**
  * Wire twin of {@link ServiceAccountCreatedResponse} — plain strings, never
  * logged.
+ *
+ * @internal — it exists because `Sensitive` cannot be serialized, not
+ * because a consumer should read it.
  */
 export interface ServiceAccountCreatedResponseWire {
   client_id: string;
@@ -2652,6 +2738,9 @@ export interface UpdateFederationConfigRequest {
 /**
  * Wire twin of {@link UpdateFederationConfigRequest} — plain strings, never
  * logged.
+ *
+ * @internal — it exists because `Sensitive` cannot be serialized, not
+ * because a consumer should read it.
  */
 export interface UpdateFederationConfigRequestWire {
   allowed_algorithms?: string[] | null;
@@ -2950,7 +3039,12 @@ export interface UpdateWebhookRequest {
   url?: string | null;
 }
 
-/** Wire twin of {@link UpdateWebhookRequest} — plain strings, never logged. */
+/**
+ * Wire twin of {@link UpdateWebhookRequest} — plain strings, never logged.
+ *
+ * @internal — it exists because `Sensitive` cannot be serialized, not
+ * because a consumer should read it.
+ */
 export interface UpdateWebhookRequestWire {
   enabled?: boolean | null;
   events?: string[] | null;

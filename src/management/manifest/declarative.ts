@@ -31,7 +31,7 @@ import { validate } from './plan.js';
  *
  * The `const` type parameter preserves the literal key strings, so editor
  * completion and go-to-definition work across the manifest's own
- * cross-references. The eager {@link validate} call is the part that earns its
+ * cross-references. The eager validation is the part that earns its
  * keep: a dangling key, a duplicate, or a cycle in the resource parents fails
  * where the manifest is *written* rather than on the first `plan` against a
  * live tenant — which, for a manifest that lives in a config module, is
@@ -49,8 +49,8 @@ import { validate } from './plan.js';
  * });
  * ```
  *
- * @throws NetworkError if the manifest cannot be reconciled — see
- *   {@link validate} for what that covers.
+ * @throws NetworkError if the manifest cannot be reconciled: a dangling
+ *   cross-reference key, a duplicate key, or a cycle in the resource parents.
  */
 export function defineManifest<const T extends ManagementManifest>(manifest: T): T {
   validate(manifest);

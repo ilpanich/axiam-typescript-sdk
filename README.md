@@ -21,13 +21,18 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 ## Contract conformance
 
 This SDK conforms to CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19, §20, §21, §22, §23,
-§24, §25, §26 (including §6.1 mTLS client certificates, the §10.1 minimum
+§24, §25, §26, §27 (including §6.1 mTLS client certificates, the §10.1 minimum
 local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
 `verifyWebhook` signature verifier).
 
-§12.7, §14, §15, §22, §24, §25 and §26 are named rather than folded into the range because
-they landed after this SDK already claimed §1–§13: widening the range silently would turn a
-statement that was true when written into a different claim without anyone editing it.
+§27 is implemented **in full**, both halves: the 146-operation imperative surface *and*
+the §27.6 declarative manifest with its §27.7 `defineManifest` and decorator forms. The
+contract asks an SDK that ships only one half to say which; this one ships both.
+
+§12.7, §14, §15, §22, §24, §25, §26 and §27 are named rather than folded into the range
+because they landed after this SDK already claimed §1–§13: widening the range silently
+would turn a statement that was true when written into a different claim without anyone
+editing it.
 
 ### §10.1 minimum local-verification set
 
@@ -1478,6 +1483,167 @@ identically — asymmetric caching would leak which outcome occurred through lat
 Failures are never memoized: caching a transport error as a deny would turn a blip into a
 TTL-long outage. The memo is cleared on `login`, `verifyMfa`, `refresh` and `logout`, since
 entries are keyed by subject rather than by session.
+
+## Management API (CONTRACT.md §27)
+
+Everything above assumes a populated tenant. `login` signs a user in,
+`checkAccess` asks about a resource, `verifyWebhook` checks a delivery signature — and
+none of them can create the user, declare the resource or register the webhook. The
+management surface is the part that can: **146 operations across 24 namespaces**,
+generated from `management-registry.json`, which is the whole server API minus what other
+contract sections own and minus organization creation and deletion (§27.0 keeps those out
+of reach of a client library on purpose).
+
+```ts
+const page  = await client.users.list({ limit: 50 });
+const every = await client.users.listAll({ limit: 200 });
+const role  = await client.roles.get(roleId);
+await client.roles.assignToUser(roleId, { user_id: userId });
+```
+
+Operations hang off **namespace handles** rather than the client. Twenty namespaces have a
+`list` and fourteen a `get`, so flattening them would need a disambiguating prefix invented
+once per operation — and would bury the eight §1 methods most callers want under five times
+as many they do not. Acquiring a handle performs no I/O. `client.management.users` is the
+same handle as `client.users`, for call sites that read better with the namespace spelled
+out.
+
+Every management call goes through the session's existing axios instance, so it inherits
+CSRF forwarding (§3), the cookie jar (§4), the `X-Tenant-ID` header (§5), the TLS policy
+(§6), the reactive single-flight refresh the response interceptor already performs (§9),
+the retry policy (§16) and telemetry (§19). None of it is reimplemented, and none of it can
+be forgotten per-operation.
+
+**Field names are the server's, verbatim** — `resource_type`, `is_global`, `user_id`. A
+management surface is read alongside the API docs, and a casing translation layer over 136
+generated types is both a lot of code and a class of bug; what you read in `openapi.json`
+is what you write here. The hand-curated §1 types (`AccessCheck`) keep their camelCase.
+
+### Five things that bite
+
+**Reads retry; writes never do.** Not even the idempotent-looking ones.
+`certificates.generate()` twice mints two certificates; `serviceAccounts.rotateSecret()`
+twice invalidates the secret the first call returned and you already stored.
+
+**Seventeen `PUT`s patch, four replace.** A sparse update sends only the fields you set — an
+unset field is *absent* from the wire body, not `null`, so it is left unchanged. But
+`settings.setOrg()`, `emailConfig.setOrg()`, `webauthnPolicy.set()` and
+`caCertificates.setMtlsTrustAnchor()` **replace**: what you omit is not preserved. Their
+request types have required fields, so a half-filled one does not typecheck — which is the
+point, since sending a subset of `SetOrgSettings` resets the other eighteen.
+
+**Seven calls return a secret exactly once.** Creating a service account or an OAuth2
+client, minting a SCIM token, generating a certificate, a CA, a signing CA or a PGP key.
+The field is `Sensitive<string>`: `JSON.stringify` gives `"[SENSITIVE]"`, `.expose()` gives
+the value. No later `get` returns it again, and the `get` projection has no field where it
+was — so nothing tells you it is missing.
+
+**404 means "absent, or not yours."** The server answers 404 for a resource in another
+tenant deliberately: a distinguishable "exists but not yours" lets a caller enumerate
+another tenant's ids.
+
+```ts
+try {
+  await client.users.get(id);
+} catch (e) {
+  if (e instanceof NotFoundError) { /* absent, or another tenant's */ }
+  else if (e instanceof ConflictError) { /* 409 — the name is taken */ }
+  else if (e instanceof ValidationError) { for (const f of e.fields) { /* 400, per field */ } }
+}
+```
+
+All three are real subclasses of the §2 types — `NotFoundError` and `ConflictError` extend
+`AuthzError`, `ValidationError` extends `NetworkError` — so `e instanceof AuthzError`
+written before §27 still catches the first two.
+
+**`orgId` and `tenantId` default from the client**, and are overridable per handle with
+`.inOrg(id)` / `.forTenant(id)`. A client built with a *slug* fails locally, with no
+request, on any route that needs the UUID — the SDK will not resolve a slug behind your
+back.
+
+### Declarative manifests (§27.6, §27.7)
+
+Calling 146 operations one at a time is rarely what an application wants. What it does at
+start-up, in a migration, or in a test fixture is assert a shape:
+
+```ts
+import { defineManifest, Sensitive } from 'axiam-sdk/rest';
+
+export const desired = defineManifest({
+  resources: [
+    { key: 'docs', name: 'documents', resourceType: 'collection',
+      scopes: [{ key: 'draft', name: 'draft', description: 'Unpublished' }] },
+  ],
+  permissions: [{ key: 'read', action: 'document:read', description: 'Read a document' }],
+  roles: [{ key: 'editor', name: 'Editor', description: 'Edits documents',
+            grants: [{ permission: 'read', scopes: ['draft'] }] }],
+  groups: [{ key: 'staff', name: 'Staff', description: 'The team', roles: ['editor'] }],
+  users: [{ key: 'alice', username: 'alice', email: 'alice@example.com',
+            initialPassword: new Sensitive(pw), groups: ['staff'] }],
+});
+
+const plan = await client.manifest.plan(desired);   // reads only — no writes
+const report = await client.manifest.apply(desired);
+```
+
+`defineManifest` keeps the literal key types *and* validates immediately — a dangling
+cross-reference throws where the manifest is written, which for a config module is import
+time, rather than on the first `plan` against production.
+
+`plan()` issues `GET`s and nothing else. It matches each spec by its natural key — a user's
+`username`, a role's `name`, a scope's `name` within its resource — and returns the ordered
+actions that would reconcile the tenant.
+
+- **Nothing is ever deleted.** A manifest is usually a *subset* of a tenant's truth, and a
+  prune would turn "make sure these three roles exist" into "delete the other forty". There
+  is no prune option, deliberately.
+- **A field the manifest does not state is never a difference**, so `apply` is safe against
+  a tenant that also holds hand-made state.
+- **Applying twice converges**: the second plan is all `no-change`. That is what makes
+  re-running after a failure safe.
+- **There is no transaction** across 146 independent HTTP endpoints, and `ApplyReport` does
+  not pretend there is. If step 12 of 30 fails, steps 1–11 have happened; the report says
+  which, execution stops rather than continuing blindly, and there is no `rollback` —
+  because this SDK could not honour one.
+
+Codebases that already declare their domain with classes get decorators instead:
+
+```ts
+@AxiamResource({ key: 'docs', name: 'documents', resourceType: 'collection' })
+@AxiamScope({ key: 'draft', name: 'draft', description: 'Unpublished' })
+class Documents {}
+
+@AxiamRole({ key: 'editor', name: 'Editor', description: 'Edits documents' })
+@AxiamGrant({ permission: 'read', scopes: ['draft'] })
+class Editor {}
+
+const shape = collectManifest(Documents, ReadDocument, Editor);
+```
+
+TypeScript has two decorator dialects and this SDK's own `tsconfig.json` deliberately
+enables neither — so these are dual-protocol plain functions that work under both, and
+under neither: `AxiamResource(spec)(Documents)` is exactly what the `@` syntax desugars to.
+
+### Examples
+
+- [`examples/management-basics.ts`](examples/management-basics.ts) — the imperative surface
+  and the rules above, one at a time.
+- [`examples/management-manifest.ts`](examples/management-manifest.ts) — both declarative
+  forms end to end.
+- [`examples/device-mtls-provisioning.ts`](examples/device-mtls-provisioning.ts) —
+  provisioning an IoT device and its mTLS identity: anchor the CA, create the service
+  account, generate the certificate, bind it, then authenticate with it. This is the flow
+  §27 exists for; before it, every step but the last had to happen out of band.
+
+### Regenerating
+
+`src/management/models.ts` and `src/management/ops/` are generated and committed. After
+re-vendoring `management-registry.json` or `openapi.json`:
+
+```bash
+npm run gen-management          # regenerate
+npm run gen-management:check    # what CI runs
+```
 
 ## Error handling
 

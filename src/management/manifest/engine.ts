@@ -8,7 +8,7 @@ import type * as models from '../models.js';
 import type {
   ApplyReport,
   ManagementPlan,
-  Outcome,
+  StepOutcome,
   PlannedAction,
   Target,
 } from './plan.js';
@@ -445,7 +445,7 @@ export class ManifestApi {
       }
       try {
         await this.#run(step, resolved);
-        const outcome: Outcome =
+        const outcome: StepOutcome =
           action.change === 'create' ? { status: 'created' } : { status: 'updated' };
         out.push({ action, outcome });
       } catch (err) {

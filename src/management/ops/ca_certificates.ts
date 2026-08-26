@@ -13,7 +13,7 @@ import * as models from '../models.js';
 import type { Page, PageRequest } from '../page.js';
 import { collectPages, pageQuery } from '../page.js';
 import { sendManagement } from '../request.js';
-import type { Scope } from '../scope.js';
+import type { NamespaceScope } from '../scope.js';
 import { resolveOrg, resolveTenant } from '../scope.js';
 
 /**
@@ -26,10 +26,10 @@ import { resolveOrg, resolveTenant } from '../scope.js';
  */
 export class CaCertificatesApi {
   readonly #client: AxiamClient;
-  readonly #scope: Scope;
+  readonly #scope: NamespaceScope;
 
   /** @internal — reached through `client.<namespace>`, never constructed directly. */
-  constructor(client: AxiamClient, scope: Scope = {}) {
+  constructor(client: AxiamClient, scope: NamespaceScope = {}) {
     this.#client = client;
     this.#scope = scope;
   }
