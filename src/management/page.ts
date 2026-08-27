@@ -31,10 +31,10 @@ export interface PageRequest {
    * count belonging to the result set it is paging.
    *
    * It lives here rather than as a third argument on each of the twenty
-   * generated `list` methods (§27.4 rule 4), and that is what makes
-   * {@link collectPages} carry it across the whole walk — a walk that filtered
-   * its first request and not the rest would return the matches followed by the
-   * unfiltered tail.
+   * generated `list` methods (§27.4 rule 4), and that is what makes the
+   * auto-paging `listAll` form carry it across every request of the walk — a
+   * walk that filtered its first request and not the rest would return the
+   * matches followed by the unfiltered tail.
    *
    * Omitted sends no `search` parameter. An empty or whitespace-only term is
    * treated as omitted: a box that fires on every keystroke sends `?search=`
