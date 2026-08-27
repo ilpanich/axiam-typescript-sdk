@@ -17,6 +17,12 @@ export interface LoginUserInfoWire {
   id: string;
   username: string;
   email: string;
+  /**
+   * CONTRACT.md §5.2. Absent on a server older than contract 1.31, and `false`
+   * is the safe reading of absent: the client then offers no cross-tenant
+   * action rather than one that would 403.
+   */
+  organization_level?: boolean;
 }
 
 /** 200 OK body from /api/v1/auth/login, /api/v1/auth/mfa/verify, and (subset) /api/v1/auth/refresh. */
@@ -59,6 +65,24 @@ export interface AxiamUserInfo {
   username: string;
   /** The user's email address. */
   email: string;
+  /**
+   * Whether this is an **organization-level** principal — CONTRACT.md §5.2.
+   *
+   * Such a principal's record lives in its organization's reserved tenant, so
+   * its global grants apply in every tenant of that organization, and it can
+   * act on a different one by sending a different `X-Tenant-ID` on the next
+   * request — no re-login, because it already is a principal of every tenant
+   * there.
+   *
+   * An ordinary tenant principal is a principal of exactly one tenant, and the
+   * same header change for one of those produces a `403`. Check this *before*
+   * offering a tenant switch, rather than discovering the answer from a failed
+   * request.
+   *
+   * `false` against a server older than contract 1.31, which is the safe
+   * direction: no cross-tenant action offered.
+   */
+  organizationLevel: boolean;
 }
 
 /**

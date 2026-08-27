@@ -253,7 +253,13 @@ export async function loginOpaque(
   await client.session.onAuthenticated?.();
   return {
     status: 'authenticated',
-    user: { id: wire.user.id, username: wire.user.username, email: wire.user.email },
+    user: {
+      id: wire.user.id,
+      username: wire.user.username,
+      email: wire.user.email,
+      // §5.2, same reading as `auth.ts`: absent means no cross-tenant action.
+      organizationLevel: wire.user.organization_level ?? false,
+    },
     sessionId: wire.session_id,
     expiresIn: wire.expires_in,
   };

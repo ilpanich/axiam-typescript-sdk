@@ -307,6 +307,7 @@ import { Sensitive } from '../core/sensitive.js';
 `,
   ];
 
+  const projections = projectionMap();
   for (const name of schemaClosure()) {
     const schema = SCHEMAS[name];
     const rname = pascal(name);
@@ -319,18 +320,38 @@ import { Sensitive } from '../core/sensitive.js';
       out.push(emitUnion(rname, schema, union));
       continue;
     }
-    out.push(emitInterface(rname, name, secrets.get(name) ?? new Set(), directions.get(name) ?? new Set()));
+    out.push(
+      emitInterface(
+        rname,
+        name,
+        secrets.get(name) ?? new Set(),
+        directions.get(name) ?? new Set(),
+        projections.get(name) ?? [],
+      ),
+    );
   }
   return out.join('\n');
 }
 
 function emitEnum(rname, schema) {
-  const lines = doc(schema.description ?? `\`${rname}\` (generated from openapi.json).`);
+  const lines = doc(
+    (schema.description ?? `\`${rname}\` (generated from openapi.json).`) +
+      '\n\nAn **open** enum. The final `(string & {})` arm accepts a value this ' +
+      "SDK's copy of the spec does not list, so the next one the server adds " +
+      'reaches a caller as itself rather than failing the response it arrived ' +
+      'in (CONTRACT §27.11 rule 1). The named arms still autocomplete and still ' +
+      'narrow; what the extra arm removes is the illusion that a value outside ' +
+      'them cannot occur, which is what an exhaustive `switch` over the named ' +
+      'ones quietly assumes.',
+  );
   lines.push(`export type ${rname} =`);
-  schema.enum.forEach((v, i) => {
-    const tail = i === schema.enum.length - 1 ? ';' : '';
-    lines.push(`  | ${JSON.stringify(v)}${tail}`);
+  schema.enum.forEach((v) => {
+    lines.push(`  | ${JSON.stringify(v)}`);
   });
+  // eslint/prettier keep `(string & {})` as written; it is the standard way to
+  // widen a literal union without losing completion on the literals.
+  lines.push('  // eslint-disable-next-line @typescript-eslint/ban-types');
+  lines.push('  | (string & {});');
   lines.push('');
   return lines.join('\n');
 }
@@ -364,15 +385,32 @@ function emitUnion(rname, schema, { tag, arms }) {
   return lines.join('\n');
 }
 
-function emitInterface(rname, name, secrets, directions) {
-  const { props, required, description } = flatten(name);
+function emitInterface(rname, name, secrets, directions, projected = []) {
+  const { props: basePlain, required, description } = flatten(name);
+  const props = { ...basePlain };
+  const projectedNames = new Set();
+  for (const add of projected) {
+    if (props[add.name]) continue;
+    projectedNames.add(add.name);
+    props[add.name] = {
+      type: add.type,
+      format: add.format,
+      description:
+        'Resolved by the list projection only.\n\n' +
+        'The server resolves this for a whole page in one query, so it is ' +
+        'populated by the `list` operation and is absent from `get` ' +
+        '(CONTRACT §27.11 rule 4). Absent there means "this read does not ' +
+        'carry it", not "there is nothing bound" — the SDK does not issue a ' +
+        'second request to fill it in.',
+    };
+  }
   const owners = new Set([name, ...composedFrom(name)]);
   void owners;
   const fields = Object.entries(props)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([pname, pschema]) => ({
       name: pname,
-      optional: !required.has(pname),
+      optional: !required.has(pname) || projectedNames.has(pname),
       secret: secrets.has(pname),
       type: secrets.has(pname) ? 'Sensitive<string>' : tsType(pschema),
       description: pschema.description,
@@ -568,12 +606,51 @@ function emitNamespace(namespace, nsdef, secrets) {
   ].join('\n');
 }
 
+/**
+ * Query parameters that become method arguments, rather than `PageRequest`.
+ *
+ * `offset` and `limit` have always come from `PageRequest`. `search` joins them
+ * on paginated operations (CONTRACT §27.4 rule 4): the term is part of which
+ * page this is, and putting it on the page request rather than on each of the
+ * twenty generated `list` methods is what makes `collectPages` carry it across
+ * the whole walk instead of filtering only the first request.
+ *
+ * The `paginated` guard matters. A *non*-paginated operation that grew a
+ * `search` parameter would have no `PageRequest` to carry it, so it keeps its
+ * own argument — none exists in the registry today, and this is what keeps that
+ * from silently dropping the parameter if one ever does.
+ */
+function extraQueryParams(op) {
+  const owned = op.paginated ? ['offset', 'limit', 'search'] : ['offset', 'limit'];
+  return op.query_params.filter((q) => !owned.includes(q.name));
+}
+
+/**
+ * Schema name -> the fields a list projection adds on top of it.
+ *
+ * `certificates.list` answers `Certificate` plus `bound_service_account_id`, a
+ * graph edge the server resolves for the whole page in one query. CONTRACT
+ * §27.11 rule 4 lets an SDK carry that as an optional field on the base type,
+ * which is what this does: the field is absent on `get`, and the SDK never
+ * synthesizes it there with a second request.
+ */
+function projectionMap() {
+  const out = new Map();
+  for (const nsdef of Object.values(REGISTRY.namespaces)) {
+    for (const op of Object.values(nsdef.operations)) {
+      const adds = op.response.projected_fields;
+      if (!adds || !op.response.schema) continue;
+      const base = op.response.schema.replace(/^\[\]/, '');
+      out.set(base, [...(out.get(base) ?? []), ...adds]);
+    }
+  }
+  return out;
+}
+
 function emitFilters(namespace, nsdef) {
   const out = [];
   for (const [opname, op] of Object.entries(nsdef.operations)) {
-    const optional = op.query_params.filter(
-      (q) => !['offset', 'limit'].includes(q.name) && !q.required,
-    );
+    const optional = extraQueryParams(op).filter((q) => !q.required);
     if (optional.length <= 2) continue;
     const name = `${pascal(namespace)}${pascal(opname)}Filter`;
     out.push(
@@ -614,7 +691,7 @@ function emitOperation(namespace, opname, op, secrets) {
     }
   }
 
-  const extra = op.query_params.filter((q) => !['offset', 'limit'].includes(q.name));
+  const extra = extraQueryParams(op);
   const requiredQ = extra.filter((q) => q.required);
   const optionalQ = extra.filter((q) => !q.required);
   const filterType =
@@ -883,7 +960,7 @@ function callArguments(namespace, opname, op, secrets) {
       route = route.replace(`{${p.name}}`, 'example');
     }
   }
-  const extra = op.query_params.filter((q) => !['offset', 'limit'].includes(q.name));
+  const extra = extraQueryParams(op);
   const requiredQ = extra.filter((q) => q.required);
   const optionalQ = extra.filter((q) => !q.required);
   for (const _ of requiredQ) args.push("'example'");

@@ -180,6 +180,222 @@ describe('§27.4 rule 4 — pagination', () => {
   });
 });
 
+describe('§27.4 rule 4 — search', () => {
+  // Asserted on the request URL rather than the arguments: a term the SDK
+  // accepts, stores and never sends is invisible from the call site, and it is
+  // the failure this test exists for.
+  it('puts the term on the query string', async () => {
+    const server = mockServer();
+    let sent: string | null = null;
+    server.use(
+      http.get(`${BASE_URL}/api/v1/users`, ({ request }) => {
+        sent = new URL(request.url).searchParams.get('search');
+        return HttpResponse.json({ items: [], total: 0, offset: 0, limit: 50 });
+      }),
+    );
+
+    await managementClient().users.list({ limit: 50, search: 'ada' });
+    expect(sent).toBe('ada');
+  });
+
+  // A UI that fires on every keystroke sends `?search=` the moment the box is
+  // cleared, and "rows containing the empty string" is a different question —
+  // different enough that the server normalizes it away too. Asserted on the
+  // exact key set, because a `search=` with an empty value would still pass a
+  // check for "the term is not 'ada'".
+  it.each([
+    ['omitted', undefined],
+    ['empty', ''],
+    ['whitespace-only', '   '],
+  ])('sends no `search` key at all when %s', async (_label, term) => {
+    const server = mockServer();
+    let keys: string[] = [];
+    server.use(
+      http.get(`${BASE_URL}/api/v1/users`, ({ request }) => {
+        keys = [...new URL(request.url).searchParams.keys()];
+        return HttpResponse.json({ items: [], total: 0, offset: 0, limit: 50 });
+      }),
+    );
+
+    await managementClient().users.list({ limit: 50, search: term });
+    expect(keys).not.toContain('search');
+  });
+
+  // A listAll that filtered page one and not page two would concatenate the
+  // matches with the unfiltered remainder — which reads as a server bug from
+  // the caller's side, and which a test counting requests would pass.
+  it('carries the term on every request of the walk, not just the first', async () => {
+    const server = mockServer();
+    const terms: (string | null)[] = [];
+    server.use(
+      http.get(`${BASE_URL}/api/v1/users`, ({ request }) => {
+        const url = new URL(request.url);
+        terms.push(url.searchParams.get('search'));
+        const offset = Number(url.searchParams.get('offset') ?? '0');
+        return HttpResponse.json({
+          items: [userBody(['ada@b.c', 'adam@e.f'][offset] as string)],
+          total: 2,
+          offset,
+          limit: 1,
+        });
+      }),
+    );
+
+    const all = await managementClient().users.listAll({ limit: 1, search: 'ad' });
+    expect(all).toHaveLength(2);
+    expect(terms).toEqual(['ad', 'ad']);
+  });
+
+  it('trims the term before sending it', async () => {
+    const server = mockServer();
+    let sent: string | null = null;
+    server.use(
+      http.get(`${BASE_URL}/api/v1/users`, ({ request }) => {
+        sent = new URL(request.url).searchParams.get('search');
+        return HttpResponse.json({ items: [], total: 0, offset: 0, limit: 50 });
+      }),
+    );
+
+    await managementClient().users.list({ limit: 50, search: '  ada  ' });
+    expect(sent).toBe('ada');
+  });
+
+  // The server's length cap is the server's. A client-side truncation the
+  // server would not have made is a silently different query — the caller asked
+  // one question and the wire carried another, with nothing to indicate it.
+  it('sends a long term whole rather than truncating it locally', async () => {
+    const server = mockServer();
+    const long = 'x'.repeat(400);
+    let sent: string | null = null;
+    server.use(
+      http.get(`${BASE_URL}/api/v1/users`, ({ request }) => {
+        sent = new URL(request.url).searchParams.get('search');
+        return HttpResponse.json({ items: [], total: 0, offset: 0, limit: 50 });
+      }),
+    );
+
+    await managementClient().users.list({ limit: 50, search: long });
+    expect(sent).toBe(long);
+  });
+});
+
+describe('§27.11 — model additions', () => {
+  const tenantBody = (slug: string, kind?: string) => ({
+    id: EXAMPLE_ID,
+    organization_id: ORG_ID,
+    name: slug,
+    slug,
+    ...(kind === undefined ? {} : { kind }),
+    status: 'Active',
+    metadata: {},
+    created_at: '2026-08-27T00:00:00Z',
+    updated_at: '2026-08-27T00:00:00Z',
+  });
+
+  // §27.11 rule 1. A closed enum would fail the whole `list` over one field of
+  // one record — including the tenants the caller was actually after.
+  it('decodes an unknown tenant kind instead of failing the page', async () => {
+    const server = mockServer();
+    server.use(
+      http.get(`${BASE_URL}/api/v1/organizations/${ORG_ID}/tenants`, () =>
+        HttpResponse.json({
+          items: [
+            tenantBody('prod', 'standard'),
+            tenantBody('future', 'some-kind-from-a-newer-server'),
+          ],
+          total: 2,
+          offset: 0,
+          limit: 50,
+        }),
+      ),
+    );
+
+    const page = await managementClient().tenants.list({ limit: 50 });
+    expect(page.items[0]?.kind).toBe('standard');
+    expect(page.items[1]?.kind).toBe('some-kind-from-a-newer-server');
+  });
+
+  it('reads a tenant written before organization scope as having no kind', async () => {
+    const server = mockServer();
+    server.use(
+      http.get(`${BASE_URL}/api/v1/organizations/${ORG_ID}/tenants/${EXAMPLE_ID}`, () =>
+        HttpResponse.json(tenantBody('prod')),
+      ),
+    );
+
+    const tenant = await managementClient().tenants.get(EXAMPLE_ID);
+    expect(tenant.kind).toBeUndefined();
+  });
+
+  // §27.11 rule 3: "the listener trusts no CAs" and "there was no listener to
+  // ask" are different operational states, and only one of them is a problem.
+  it('leaves trustedAnchors absent when nothing was reloaded', async () => {
+    const server = mockServer();
+    server.use(
+      http.put(
+        `${BASE_URL}/api/v1/organizations/${ORG_ID}/ca-certificates/${EXAMPLE_ID}/mtls-trust-anchor`,
+        () =>
+          HttpResponse.json({
+            ca_certificate_id: EXAMPLE_ID,
+            mtls_trust_anchor: true,
+            restart_required: true,
+            message: 'stored; applies at next start',
+          }),
+      ),
+    );
+
+    const out = await managementClient().caCertificates.setMtlsTrustAnchor(EXAMPLE_ID, {
+      enabled: true,
+    });
+    expect(out.restart_required).toBe(true);
+    expect(out.trusted_anchors).toBeUndefined();
+    expect(out.trusted_anchors).not.toBe(0);
+  });
+
+  // §27.11 rule 4. The `get` assertion is the load-bearing one: an SDK that
+  // filled the field in there would be issuing a second request nobody asked
+  // for.
+  it('carries bound_service_account_id on the list projection and not on get', async () => {
+    const server = mockServer();
+    const certBody = (extra: Record<string, unknown> = {}) => ({
+      id: EXAMPLE_ID,
+      tenant_id: TENANT_ID,
+      issuer_ca_id: ORG_ID,
+      subject: 'CN=device-1',
+      public_cert_pem: '-----BEGIN CERTIFICATE-----',
+      fingerprint: 'ab:cd',
+      cert_type: 'Device',
+      key_algorithm: 'Ed25519',
+      not_before: '2026-08-27T00:00:00Z',
+      not_after: '2027-08-27T00:00:00Z',
+      status: 'Active',
+      metadata: {},
+      created_at: '2026-08-27T00:00:00Z',
+      ...extra,
+    });
+    server.use(
+      http.get(`${BASE_URL}/api/v1/certificates`, () =>
+        HttpResponse.json({
+          items: [certBody({ bound_service_account_id: TENANT_ID })],
+          total: 1,
+          offset: 0,
+          limit: 50,
+        }),
+      ),
+      http.get(`${BASE_URL}/api/v1/certificates/${EXAMPLE_ID}`, () =>
+        HttpResponse.json(certBody()),
+      ),
+    );
+
+    const client = managementClient();
+    const page = await client.certificates.list({ limit: 50 });
+    expect(page.items[0]?.bound_service_account_id).toBe(TENANT_ID);
+
+    const one = await client.certificates.get(EXAMPLE_ID);
+    expect(one.bound_service_account_id).toBeUndefined();
+  });
+});
+
 describe('§27.4 rule 5 — sparse updates', () => {
   // The assertion is on the full key set. Asserting the field is present
   // passes even when every other field went along as null — which is the bug,

@@ -1065,10 +1065,60 @@ discriminant, not on the `403` alone.
 
 ```ts
 await client.verifyEmail(tokenFromLink, tenantId);
-await client.resendVerification(email, tenantId);
+await client.resendVerification(email, tenantId);   // anonymous caller
+await client.resendOwnVerification();               // signed-in caller
 
 await client.requestPasswordReset({ email });
 ```
+
+**There are two resends, and picking the wrong one is silent.** Use the second
+whenever you have a session.
+
+`resendVerification` takes an address from an *unauthenticated* caller, so it
+resolves whatever happens — unknown address, already verified, over the daily
+limit. That constancy is the point: anything else is an oracle for which
+addresses have accounts.
+
+`resendOwnVerification` is for a caller signed in to the account it is asking
+about. It takes **no address at all** (the server reads it off your own record,
+and a parameter would let a session mail an arbitrary one) and it says what
+happened:
+
+```ts
+try {
+  await client.resendOwnVerification();            // minted and enqueued
+} catch (e) {
+  if (e instanceof ConflictError) { /* already verified, or not eligible */ }
+  else if (e instanceof NetworkError) { /* 429 — daily limit */ }
+  else throw e;
+}
+```
+
+A profile page that called the *first* one reports success while doing nothing,
+which is the bug this pair exists to separate. This SDK does not fall back from
+the second to the first on either failure — that would turn both back into a
+resolved promise with an extra round-trip. And resolving means *enqueued*:
+delivery is asynchronous and can still fail at the provider.
+
+### Organization-level principals (§5.2)
+
+An authenticated `LoginResult` also says whether the account is an
+**organization-level** principal — one whose record lives in its organization's
+reserved tenant, so its global grants apply in every tenant of that organization:
+
+```ts
+if (result.status === 'authenticated' && result.user.organizationLevel) {
+  // Acts on any tenant of its organization by sending a different
+  // `X-Tenant-ID` on the next request. No re-login: it already is a
+  // principal of every tenant there.
+}
+```
+
+Check it *before* offering a tenant switch. An ordinary tenant principal is a
+principal of exactly one tenant, and changing the header for one of those
+produces a `403` — so a UI that offers the switch to everyone has turned a
+distinction the server made into a failure the user discovers. `false` against a
+server older than contract 1.31, which is the safe reading of absent.
 
 `requestPasswordReset` resolves **whether or not the address exists**, and this
 SDK exposes no way to tell the difference. That is not an omission to improve on:
@@ -1497,6 +1547,7 @@ of reach of a client library on purpose).
 ```ts
 const page  = await client.users.list({ limit: 50 });
 const every = await client.users.listAll({ limit: 200 });
+const found = await client.users.list({ limit: 50, search: 'ada' });
 const role  = await client.roles.get(roleId);
 await client.roles.assignToUser(roleId, { user_id: userId });
 ```
@@ -1518,6 +1569,42 @@ be forgotten per-operation.
 management surface is read alongside the API docs, and a casing translation layer over 136
 generated types is both a lot of code and a class of bug; what you read in `openapi.json`
 is what you write here. The hand-curated §1 types (`AccessCheck`) keep their camelCase.
+
+**`search` is on the page request, and the server does the filtering.** All twenty
+paginated operations take it:
+
+```ts
+const page = await client.users.list({ limit: 50, search: 'ada' });
+const all  = await client.users.listAll({ limit: 200, search: 'ada' });
+```
+
+It is matched case-insensitively against the identifying fields of whatever is being
+listed — a name or username, plus the record id, so a UUID out of a log line pastes in
+as-is. Three consequences worth knowing:
+
+- **`total` counts matches, not rows**, because the filter is applied before
+  `offset`/`limit`. That is what lets a pager built on it show a page count belonging to
+  the result set it is paging. Filtering a page in JS after the fetch gives you neither.
+- **`listAll` carries the term across the whole walk**, so it returns the matches and not
+  the matches followed by the unfiltered tail.
+- **A blank term is no term.** `search: ''` and `search: '   '` send no `search` parameter
+  at all, so a box that fires on every keystroke does not ask a different question once it
+  has been cleared. The server also caps the term's length; this SDK does not copy that
+  cap, because a client-side truncation the server would not have made is a silently
+  different query.
+
+**Three model fields arrived with contract 1.31 (§27.11).** `Tenant.kind` says whether a
+tenant is ordinary or its organization's own scope, and is absent on a row written before
+that scope existed. `MtlsTrustAnchorResponse.trusted_anchors` is absent when nothing was
+reloaded — which is *not* zero: "the listener trusts no CAs" and "there was no listener to
+ask" are different states, and only one is a problem. `Certificate.bound_service_account_id`
+is resolved by `certificates.list()` and absent from `get`; the SDK does not issue a second
+request to fill it in.
+
+**Generated enums are open.** Each is a literal union with a trailing `(string & {})` arm,
+so a value this SDK's copy of the spec does not list reaches you as itself rather than
+being asserted out of existence. The named arms still autocomplete and still narrow; what
+the extra arm removes is the illusion that an exhaustive `switch` over them is exhaustive.
 
 ### Five things that bite
 
