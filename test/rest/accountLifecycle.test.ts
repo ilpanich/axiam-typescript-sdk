@@ -10,7 +10,7 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AxiamClient } from '../../src/rest/client.js';
-import { AuthError, AuthzError, Sensitive } from '../../src/rest/index.js';
+import { AuthError, AuthzError, NetworkError, Sensitive } from '../../src/rest/index.js';
 
 const BASE_URL = 'https://axiam.test';
 const A = '/api/v1/auth';
@@ -24,6 +24,8 @@ let sent: Array<{ path: string; body: unknown; url: string }> = [];
 let hits: Record<string, number> = {};
 /** Swapped per test — the `login` handler's answer. */
 let loginResponse: () => Response;
+/** Swapped per test — what `POST /users/me/resend-verification` answers. */
+let ownResendStatus: number;
 
 const enrollBody = { secret_base32: SECRET, totp_uri: TOTP_URI };
 
@@ -60,6 +62,12 @@ const server = setupServer(
     sent.push({ path: 'resend-verification', body: await request.json(), url: request.url });
     return new HttpResponse(null, { status: 200 });
   }),
+  http.post(`${BASE_URL}/api/v1/users/me/resend-verification`, async ({ request }) => {
+    sent.push({ path: 'me/resend-verification', body: await request.json(), url: request.url });
+    return ownResendStatus === 200
+      ? HttpResponse.json({ sent: true })
+      : new HttpResponse(null, { status: ownResendStatus });
+  }),
   http.post(`${BASE_URL}${A}/reset`, async ({ request }) => {
     // Uniform 200 whether or not the address exists — the whole point.
     sent.push({ path: 'reset', body: await request.json(), url: request.url });
@@ -84,6 +92,7 @@ afterAll(() => server.close());
 beforeEach(() => {
   sent = [];
   hits = {};
+  ownResendStatus = 200;
   loginResponse = () =>
     HttpResponse.json(
       { mfa_setup_required: true, setup_token: SETUP_TOKEN },
@@ -228,6 +237,44 @@ describe('§25 email verification', () => {
       email: 'alice@example.com',
       tenant_id: 'tenant-uuid',
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §25.7 — the two resends are two operations
+// ---------------------------------------------------------------------------
+
+describe('§25.7 resendOwnVerification', () => {
+  // The body assertion is the one that matters: a signature with no address
+  // parameter proves nothing about what the SDK serializes, and an address on
+  // this endpoint would let an authenticated session mail an arbitrary one.
+  it('sends no caller-supplied data', async () => {
+    await client().resendOwnVerification();
+    expect(bodyOf('me/resend-verification')).toEqual({});
+  });
+
+  // An SDK that aliased one operation to the other would reintroduce exactly
+  // the defect §25.7 describes, and every other test here would still pass.
+  it('reaches a different endpoint from the unauthenticated resend', async () => {
+    const c = client();
+    await c.resendVerification('alice@example.com', 'tenant-uuid');
+    await c.resendOwnVerification();
+    expect(sent.map((s) => s.path)).toEqual(['resend-verification', 'me/resend-verification']);
+  });
+
+  // The bug this operation exists to fix was a success return on a request that
+  // achieved nothing, so "does not resolve" is the assertion — and the absence
+  // of a second request is what rules out the §25.7 rule 2 fallback.
+  it('rejects on 409 and does not fall back to the public endpoint', async () => {
+    ownResendStatus = 409;
+    await expect(client().resendOwnVerification()).rejects.toBeInstanceOf(AuthzError);
+    expect(sent.filter((s) => s.path === 'resend-verification')).toHaveLength(0);
+  });
+
+  it('rejects on 429, as the §2 mapping of a rate limit', async () => {
+    ownResendStatus = 429;
+    await expect(client().resendOwnVerification()).rejects.toBeInstanceOf(NetworkError);
+    expect(sent.filter((s) => s.path === 'resend-verification')).toHaveLength(0);
   });
 });
 

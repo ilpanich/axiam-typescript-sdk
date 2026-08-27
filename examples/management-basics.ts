@@ -12,7 +12,7 @@
 // No network I/O: the calls are printed, not made.
 
 import { AxiamClient } from 'axiam-sdk/rest';
-import type { UpdateUserRequest } from 'axiam-sdk/rest';
+import type { TenantKind, UpdateUserRequest } from 'axiam-sdk/rest';
 
 async function main(): Promise<void> {
   const client = new AxiamClient({
@@ -41,6 +41,54 @@ async function main(): Promise<void> {
   console.log('  For everything, `listAll` walks to exhaustion:');
   console.log('      await client.users.listAll({ limit: 200 })');
   console.log('  The SDK never truncates silently — if it returns one page, `total` says so.');
+
+  section('Search rides on the page request, and the SERVER filters');
+  console.log("  await client.users.list({ limit: 50, search: 'ada' });");
+  console.log();
+  console.log('  It goes on the page request rather than as a third argument on each of');
+  console.log('  the twenty `list` methods, and that is what makes `listAll` carry it');
+  console.log('  across the whole walk — a walk that filtered page one and not page two');
+  console.log('  would hand you the matches followed by the unfiltered tail.');
+  console.log();
+  console.log('  The server applies it BEFORE offset/limit, so `total` counts matches.');
+  console.log('  Filtering the page yourself after the fetch gives you neither: the page');
+  console.log('  count would belong to a different result set than the page it labels.');
+  console.log();
+  for (const term of ['', '   ']) {
+    console.log(`  search: ${JSON.stringify(term)} -> no \`search\` key on the wire at all`);
+  }
+  console.log('  A box that fires on every keystroke sends one of those the moment it is');
+  console.log('  cleared, and "rows containing the empty string" is a different question.');
+  console.log();
+  console.log("  The server caps the term's length. This SDK does not copy that cap: a");
+  console.log('  truncation the server would not have made is a silently different query.');
+
+  section('Enums are open, so one new value cannot fail a whole page');
+  const known: TenantKind = 'organization';
+  // The cast is the point of the exercise: this is what a *server* value looks
+  // like arriving in a field typed as this union. It type-checks because of the
+  // trailing `(string & {})` arm, and that is what keeps the next kind the
+  // server adds from being a value the type says cannot exist.
+  const novel: TenantKind = 'some-kind-from-a-newer-server';
+  console.log(`  known: ${known}`);
+  console.log(`  novel: ${novel}`);
+  console.log();
+  console.log('  The named arms still autocomplete and still narrow. What the extra arm');
+  console.log('  removes is the illusion that a `switch` over them is exhaustive — and,');
+  console.log('  in an SDK that validated, the parse error that would fail the whole');
+  console.log('  `list` over one field of one record.');
+
+  section('Three fields that mean something specific when absent');
+  console.log('  Tenant.kind                       — absent on a row written before');
+  console.log('                                      organization scope existed.');
+  console.log('  MtlsTrustAnchorResponse.trusted_anchors');
+  console.log('                                    — absent means NOTHING WAS RELOADED,');
+  console.log('                                      not that the listener trusts zero');
+  console.log('                                      CAs. Only one is a problem.');
+  console.log('  Certificate.bound_service_account_id');
+  console.log('                                    — resolved by `certificates.list()`');
+  console.log('                                      only, absent from `get`. The SDK');
+  console.log('                                      spends no second request on it.');
 
   section('Sparse update: what you leave out is left alone');
   const patch: UpdateUserRequest = { email: 'new@example.com' };

@@ -4,7 +4,7 @@
 // refresh/logout already assume: email verification, both MFA enrolment paths,
 // and password reset.
 
-import { AxiamClient, Sensitive } from 'axiam-sdk/rest';
+import { AxiamClient, ConflictError, NetworkError, Sensitive } from 'axiam-sdk/rest';
 
 const client = new AxiamClient({
   baseUrl: 'https://iam.example.com',
@@ -88,8 +88,53 @@ async function verifyEmail(tokenFromLink: string): Promise<void> {
   console.log('email verified');
 }
 
+/**
+ * The **unauthenticated** resend, for a caller with no session — a sign-up
+ * screen that has an address and nothing else.
+ *
+ * Resolves whatever happens: unknown address, already verified, over the daily
+ * limit. That is not a shortcoming to work around. It takes an address from an
+ * anonymous caller, and a truthful answer there is an oracle for which
+ * addresses have accounts.
+ */
 async function resendVerification(email: string): Promise<void> {
   await client.resendVerification(email, TENANT_ID);
+}
+
+/**
+ * The **authenticated** resend — and the one a profile page wants.
+ *
+ * Wiring that button to `resendVerification` above is the defect §25.7 exists
+ * to separate: it reports success while doing nothing, because the address was
+ * already verified, or the account was locked, or the daily limit was reached,
+ * and the response looks identical in every case.
+ *
+ * Here the caller is signed in to the account it is asking about, so this one
+ * is both available and truthful. It takes no address: the server reads it off
+ * the caller's own record, and a parameter would let a session mail an
+ * arbitrary one.
+ */
+async function resendMyVerificationMail(): Promise<void> {
+  try {
+    await client.resendOwnVerification();
+    // "Sent" means ENQUEUED. Delivery is asynchronous and can still fail at the
+    // provider — a queue that accepts everything in front of one that rejects
+    // it looks exactly like this succeeding.
+    console.log('verification mail enqueued');
+  } catch (err) {
+    if (err instanceof ConflictError) {
+      console.log('already verified, or this account may not be sent one');
+      return;
+    }
+    if (err instanceof NetworkError) {
+      console.log('daily resend limit reached — try again tomorrow');
+      return;
+    }
+    throw err;
+  }
+  // Note what is NOT here: a fallback to `resendVerification` on either of
+  // those. It would turn both back into a resolved promise and rebuild the bug,
+  // with an extra round-trip (§25.7 rule 2).
 }
 
 // ---------------------------------------------------------------------------
@@ -135,4 +180,12 @@ async function confirmReset(tokenFromLink: string, newPassword: string): Promise
   console.log('password changed');
 }
 
-export { enrolTotp, signIn, verifyEmail, resendVerification, requestReset, confirmReset };
+export {
+  enrolTotp,
+  signIn,
+  verifyEmail,
+  resendVerification,
+  resendMyVerificationMail,
+  requestReset,
+  confirmReset,
+};

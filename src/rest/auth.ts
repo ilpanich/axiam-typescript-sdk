@@ -28,7 +28,15 @@ interface MfaVerifyRequestBody {
 function loginSuccessToResult(wire: LoginSuccessResponseWire): LoginResult {
   return {
     status: 'authenticated',
-    user: { id: wire.user.id, username: wire.user.username, email: wire.user.email },
+    user: {
+      id: wire.user.id,
+      username: wire.user.username,
+      email: wire.user.email,
+      // §5.2: derived server-side and response-only. `?? false` is what makes a
+      // pre-1.31 server's silence mean "no cross-tenant action", rather than
+      // `undefined` leaking into a truthiness check somewhere downstream.
+      organizationLevel: wire.user.organization_level ?? false,
+    },
     sessionId: wire.session_id,
     expiresIn: wire.expires_in,
   };

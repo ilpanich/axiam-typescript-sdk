@@ -99,3 +99,51 @@ describe('verifyMfa() (D-18)', () => {
     expect(result).not.toHaveProperty('accessToken');
   });
 });
+
+// ---------------------------------------------------------------------------
+// §5.2 — organization-level principals
+// ---------------------------------------------------------------------------
+
+describe('§5.2 organizationLevel', () => {
+  // What an application checks *before* offering a tenant switch: such a
+  // principal changes the tenant it acts on with a header on the next request,
+  // and an ordinary one cannot — so offering the switch to both turns a
+  // distinction the server made into a 403 the user discovers.
+  it.each([
+    ['true', true, true],
+    ['false', false, false],
+    // The absent row is the one that matters: a server older than contract 1.31
+    // omits the field, and `false` is the safe reading — the client then offers
+    // no cross-tenant action rather than one that would fail.
+    ['absent', undefined, false],
+  ])('carries the flag when the wire value is %s', async (_label, wire, expected) => {
+    const local = setupServer(
+      http.post(`${BASE_URL}/api/v1/auth/login`, () =>
+        HttpResponse.json(
+          {
+            user: {
+              id: 'user-1',
+              username: 'alice',
+              email: 'alice@example.com',
+              ...(wire === undefined ? {} : { organization_level: wire }),
+            },
+            session_id: 'session-1',
+            expires_in: 900,
+          },
+          { status: 200 },
+        ),
+      ),
+    );
+    local.listen({ onUnhandledRequest: 'error' });
+    try {
+      const client = new AxiamClient({ baseUrl: BASE_URL, tenantSlug: 'acme' });
+      const result = await client.login('alice@example.com', 'password123');
+      expect(result.status).toBe('authenticated');
+      if (result.status === 'authenticated') {
+        expect(result.user.organizationLevel).toBe(expected);
+      }
+    } finally {
+      local.close();
+    }
+  });
+});

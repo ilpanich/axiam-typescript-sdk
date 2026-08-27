@@ -17,6 +17,7 @@ const MFA_SETUP_ENROLL = '/api/v1/auth/mfa/setup/enroll';
 const MFA_SETUP_CONFIRM = '/api/v1/auth/mfa/setup/confirm';
 const VERIFY_EMAIL = '/api/v1/auth/verify-email';
 const RESEND_VERIFICATION = '/api/v1/auth/resend-verification';
+const RESEND_OWN_VERIFICATION = '/api/v1/users/me/resend-verification';
 const RESET_REQUEST = '/api/v1/auth/reset';
 const RESET_CONFIRM = '/api/v1/auth/reset/confirm';
 const RESET_CONTEXT = '/api/v1/auth/reset/context';
@@ -191,7 +192,13 @@ export async function mfaSetupConfirm(
 
   return {
     status: 'authenticated',
-    user: { id: wire.user.id, username: wire.user.username, email: wire.user.email },
+    user: {
+      id: wire.user.id,
+      username: wire.user.username,
+      email: wire.user.email,
+      // §5.2, same reading as `auth.ts`: absent means no cross-tenant action.
+      organizationLevel: wire.user.organization_level ?? false,
+    },
     sessionId: wire.session_id,
     expiresIn: wire.expires_in,
   };
@@ -216,7 +223,19 @@ export async function verifyEmail(
   );
 }
 
-/** `POST /api/v1/auth/resend-verification` (§25.1). */
+/**
+ * `POST /api/v1/auth/resend-verification` (§25.1) — the **unauthenticated**
+ * resend, for a caller with no session.
+ *
+ * **Resolves whatever the outcome.** The address may not exist, may already be
+ * verified, or may be over the daily limit, and this answers identically in all
+ * of them, because it takes an address from an anonymous caller and anything
+ * else is an oracle for which addresses have accounts (§25.7).
+ *
+ * A caller that *is* signed in wants {@link resendOwnVerification}, which says
+ * which of those happened. Do not reach for this one because it is the name you
+ * already knew.
+ */
 export async function resendVerification(
   client: AxiamClient,
   email: string,
@@ -229,6 +248,35 @@ export async function resendVerification(
     { email, tenant_id: tenantId },
     'resendVerification',
   );
+}
+
+/**
+ * `POST /api/v1/users/me/resend-verification` (§25.1, §25.7) — resend the
+ * **signed-in caller's own** verification mail, and say what happened.
+ *
+ * Takes no address. The server reads it off the caller's own record, and this
+ * signature deliberately offers no way to name a different one: a parameter
+ * here would let an authenticated session mail an arbitrary address.
+ *
+ * Unlike {@link resendVerification} this reports the outcome, because the
+ * caller is signed in to the account it is asking about and none of the
+ * outcomes tells it anything it did not already know:
+ *
+ * - resolves — a token was minted and the mail **enqueued**. Delivery is
+ *   asynchronous and can still fail at the provider; a queue that accepts
+ *   everything in front of one that rejects it looks exactly like this working.
+ * - `ConflictError` (from `409`) — already verified, or the account is in a
+ *   state that must not be sent a live token.
+ * - `NetworkError` (from `429`) — the daily resend limit.
+ *
+ * §25.7 rule 2 forbids falling back to the unauthenticated endpoint on either
+ * of those, and this SDK does not: the fallback would turn both failures back
+ * into a resolved promise and restore the bug this operation exists to fix,
+ * with an extra round-trip.
+ */
+export async function resendOwnVerification(client: AxiamClient): Promise<void> {
+  client.ensureOpen();
+  await post<void>(client, RESEND_OWN_VERIFICATION, {}, 'resendOwnVerification');
 }
 
 // ---------------------------------------------------------------------------

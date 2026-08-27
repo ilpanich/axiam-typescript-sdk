@@ -25,11 +25,23 @@
  */
 import { Sensitive } from '../core/sensitive.js';
 
-/** `ActorType` (generated from openapi.json). */
+/**
+ * `ActorType` (generated from openapi.json).
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
 export type ActorType =
   | "User"
   | "ServiceAccount"
-  | "System";
+  | "System"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /** `AddMemberRequest` (generated from openapi.json). */
 export interface AddMemberRequest {
@@ -75,11 +87,21 @@ export interface AssignRoleToUserRequest {
  * `None` is the default and reproduces today's behavior byte-for-byte:
  * `evaluate` allows every registration unconditionally, with no MDS lookup
  * (D8 step 1).
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
  */
 export type AttestationMode =
   | "none"
   | "indirect"
-  | "direct_required";
+  | "direct_required"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /** `AuditLogEntry` (generated from openapi.json). */
 export interface AuditLogEntry {
@@ -105,11 +127,23 @@ export interface AuditLogEntry {
   timestamp: string;
 }
 
-/** `AuditOutcome` (generated from openapi.json). */
+/**
+ * `AuditOutcome` (generated from openapi.json).
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
 export type AuditOutcome =
   | "Success"
   | "Failure"
-  | "Denied";
+  | "Denied"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /** Request to bind a certificate to a service account. */
 export interface BindCertificate {
@@ -231,6 +265,15 @@ export interface CaCertificate {
  * returned once on generation and never stored by AXIAM.
  */
 export interface Certificate {
+  /**
+   * Resolved by the list projection only.
+   *
+   * The server resolves this for a whole page in one query, so it is populated
+   * by the `list` operation and is absent from `get` (CONTRACT §27.11 rule 4).
+   * Absent there means "this read does not carry it", not "there is nothing
+   * bound" — the SDK does not issue a second request to fill it in.
+   */
+  bound_service_account_id?: string | null;
   /** `cert_type`. */
   cert_type: CertificateType;
   /** `created_at`. */
@@ -267,17 +310,41 @@ export interface CertificatePolicy {
   max_cert_validity_days: number;
 }
 
-/** Status of a certificate in its lifecycle. */
+/**
+ * Status of a certificate in its lifecycle.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
 export type CertificateStatus =
   | "Active"
   | "Revoked"
-  | "Expired";
+  | "Expired"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
-/** The purpose for which a certificate was issued. */
+/**
+ * The purpose for which a certificate was issued.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
 export type CertificateType =
   | "User"
   | "Service"
-  | "Device";
+  | "Device"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /**
  * FIDO certification level, as recorded in an MDS `statusReports` entry's
@@ -287,6 +354,14 @@ export type CertificateType =
  * < L2 < L2Plus < L3 < L3Plus`, which `WebauthnAttestationPolicy::evaluate`
  * (D8 step 9) relies on directly for the `min_certification` boundary check
  * (`entry_level >= policy_min`).
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
  */
 export type CertificationLevel =
   | "L1"
@@ -294,7 +369,9 @@ export type CertificationLevel =
   | "L2"
   | "L2Plus"
   | "L3"
-  | "L3Plus";
+  | "L3Plus"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /**
  * How a client proves its identity at the token endpoint (RFC 8705 §2, OIDC
@@ -305,12 +382,22 @@ export type CertificationLevel =
  * (see `handle_authorization_code`), and adding a public-client value here
  * before the rest of the server understands one would let an operator
  * register a client whose authentication is silently skipped.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
  */
 export type ClientAuthMethod =
   | "client_secret_post"
   | "tls_client_auth"
   | "self_signed_tls_client_auth"
-  | "private_key_jwt";
+  | "private_key_jwt"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /**
  * Which security posture a client is registered under (X5.1).
@@ -326,10 +413,20 @@ export type ClientAuthMethod =
  * The same philosophy as the rate-limit postures: ordinary clients see no
  * behaviour change at all, because [`Standard`](Self::Standard) is the serde
  * default and every row written before schema v38 decodes to it.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
  */
 export type ClientProfile =
   | "standard"
-  | "fapi2";
+  | "fapi2"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /** One credential's compliance outcome (D9). */
 export interface ComplianceReportEntry {
@@ -952,10 +1049,20 @@ export interface EncryptedExport {
  * What the server does when an interceptor does not produce a usable reply —
  * timeout, transport failure, bad signature, stale nonce, or a patch the
  * allow-list rejects.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
  */
 export type FailurePolicy =
   | "fail_closed"
-  | "fail_open";
+  | "fail_open"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /** Federation config response -- omits client_secret. */
 export interface FederationConfigResponse {
@@ -1409,10 +1516,22 @@ export function importCaCertificateRequestToWire(v: ImportCaCertificateRequest):
   };
 }
 
-/** The type of key algorithm used for a certificate. */
+/**
+ * The type of key algorithm used for a certificate.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
 export type KeyAlgorithm =
   | "Rsa4096"
-  | "Ed25519";
+  | "Ed25519"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /** Account lockout rules. */
 export interface LockoutPolicy {
@@ -1494,11 +1613,23 @@ export interface MfaMethodResponse {
   name: string;
 }
 
-/** Type of MFA method. */
+/**
+ * Type of MFA method.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
 export type MfaMethodType =
   | "Totp"
   | "Passkey"
-  | "SecurityKey";
+  | "SecurityKey"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /** Multi-factor authentication policy. */
 export interface MfaPolicy {
@@ -1529,13 +1660,32 @@ export interface MtlsTrustAnchorResponse {
   /** The flag as now stored. */
   mtls_trust_anchor: boolean;
   /**
-   * Always `true`: rustls builds its client trust store once, when the
-   * listener is constructed, so this takes effect at the next start.
+   * Whether the change still needs a restart to take effect.
+   *
+   * `false` when the live listener accepted the new anchor set — the ordinary
+   * case on a TLS deployment. `true` only when there was no listener to reload
+   * into (plaintext, or `client_auth = off`), where the flag is stored and
+   * applies at the next start.
    */
   restart_required: boolean;
+  /**
+   * How many CAs the listener now trusts for client authentication, when it
+   * was reloaded. `None` when nothing was reloaded.
+   */
+  trusted_anchors?: number | null;
 }
 
-/** Events that can trigger an admin notification. */
+/**
+ * Events that can trigger an admin notification.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
 export type NotificationEventType =
   | "login_failure"
   | "account_locked"
@@ -1553,7 +1703,9 @@ export type NotificationEventType =
   | "user_deleted"
   | "user_updated"
   | "service_account_created"
-  | "service_account_deleted";
+  | "service_account_deleted"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /** Admin notification preferences. */
 export interface NotificationPolicy {
@@ -1870,10 +2022,20 @@ export interface Permission {
  * [`PermissionEffect::Allow`] is the default, so data written before this
  * existed, and clients that send no `effect`, both mean "allow". No
  * migration.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
  */
 export type PermissionEffect =
   | "allow"
-  | "deny";
+  | "deny"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /** An OpenPGP key stored by AXIAM. */
 export interface PgpKey {
@@ -1897,20 +2059,56 @@ export interface PgpKey {
   tenant_id: string;
 }
 
-/** Key algorithm for OpenPGP keys. */
+/**
+ * Key algorithm for OpenPGP keys.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
 export type PgpKeyAlgorithm =
   | "Rsa4096"
-  | "Ed25519";
+  | "Ed25519"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
-/** The purpose of an OpenPGP key. */
+/**
+ * The purpose of an OpenPGP key.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
 export type PgpKeyPurpose =
   | "AuditSigning"
-  | "Export";
+  | "Export"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
-/** Status of an OpenPGP key. */
+/**
+ * Status of an OpenPGP key.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
 export type PgpKeyStatus =
   | "Active"
-  | "Revoked";
+  | "Revoked"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /**
  * `GET` response: the stored policy plus the unknown-AAGUID action it
@@ -2026,10 +2224,22 @@ export interface ReactorEventDescriptor {
   name: string;
 }
 
-/** How a reactor participates in an event. */
+/**
+ * How a reactor participates in an event.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
 export type ReactorMode =
   | "intercept"
-  | "listen";
+  | "listen"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /** `ReactorResponse` (generated from openapi.json). */
 export interface ReactorResponse {
@@ -2260,11 +2470,21 @@ export interface ScimTokenResponse {
 /**
  * Why a token is or is not currently usable — for display only. The
  * authentication path never surfaces this distinction on the wire.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
  */
 export type ScimTokenStatus =
   | "active"
   | "expired"
-  | "revoked";
+  | "revoked"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /** `Scope` (generated from openapi.json). */
 export interface Scope {
@@ -2468,10 +2688,22 @@ export interface SetOrgSettings {
   require_uppercase: boolean;
 }
 
-/** Whether a settings row belongs to an organization or a tenant. */
+/**
+ * Whether a settings row belongs to an organization or a tenant.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
 export type SettingsScope =
   | "Org"
-  | "Tenant";
+  | "Tenant"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /** Request body for signing an audit batch. */
 export interface SignAuditBatchRequest {
@@ -2544,6 +2776,13 @@ export interface Tenant {
   created_at: string;
   /** `id`. */
   id: string;
+  /**
+   * Whether this is an ordinary tenant or the organization's own scope.
+   *
+   * `#[serde(default)]` so every row written before organization scope existed
+   * reads back as [`TenantKind::Standard`], which is what it is.
+   */
+  kind?: TenantKind;
   /** Arbitrary key-value metadata. */
   metadata: unknown;
   /** Human-readable name. */
@@ -2557,6 +2796,29 @@ export interface Tenant {
   /** `updated_at`. */
   updated_at: string;
 }
+
+/**
+ * What a tenant *is*, as distinct from what state it is in.
+ *
+ * Reserved rather than inferred: an organization has exactly one tenant of
+ * kind [`Self::Organization`], enforced by a unique index rather than by
+ * convention. Deriving it from a magic slug or from "the oldest tenant"
+ * would make the organization scope something an operator could rename or
+ * delete by accident, and it is the scope the super-admin lives in.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type TenantKind =
+  | "standard"
+  | "organization"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /**
  * Partial tenant overrides. `None` = inherit from org baseline.
@@ -2621,10 +2883,20 @@ export interface TenantSettingsOverride {
  *
  * A `Suspended` tenant remains stored and its data isolated, but is treated
  * as administratively disabled. New tenants are `Active` by default.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
  */
 export type TenantStatus =
   | "Active"
-  | "Suspended";
+  | "Suspended"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /**
  * X4 trust for exchanging this provider's tokens (RFC 8693, external
@@ -2694,10 +2966,20 @@ export interface TokenPolicy {
  * What to do with an AAGUID that has no MDS entry (i.e. FIDO Alliance has no
  * metadata for it — not necessarily malicious, MDS coverage is incomplete
  * for some legitimate authenticators).
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
  */
 export type UnknownAaguidAction =
   | "allow"
-  | "deny";
+  | "deny"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /**
  * `UpdateFederationConfigRequest` (generated from openapi.json).
@@ -3100,14 +3382,26 @@ export interface UserResponse {
   username: string;
 }
 
-/** `UserStatus` (generated from openapi.json). */
+/**
+ * `UserStatus` (generated from openapi.json).
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
 export type UserStatus =
   | "Active"
   | "Inactive"
   | "Locked"
   | "PendingVerification"
   | "Anonymized"
-  | "Deleted";
+  | "Deleted"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /**
  * Per-tenant WebAuthn attestation policy (D5). One row per tenant; an absent

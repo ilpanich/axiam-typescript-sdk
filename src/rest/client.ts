@@ -347,9 +347,21 @@ export class AxiamClient {
     return accountMethods.verifyEmail(this, token, tenantId);
   }
 
-  /** `POST /api/v1/auth/resend-verification` (§25.1). */
+  /**
+   * `POST /api/v1/auth/resend-verification` (§25.1) — the unauthenticated
+   * resend. Resolves whatever the outcome; use {@link resendOwnVerification}
+   * when there is a session (§25.7).
+   */
   resendVerification(email: string, tenantId: string): Promise<void> {
     return accountMethods.resendVerification(this, email, tenantId);
+  }
+
+  /**
+   * `POST /api/v1/users/me/resend-verification` (§25.1, §25.7) — the
+   * authenticated resend, which takes no address and reports what happened.
+   */
+  resendOwnVerification(): Promise<void> {
+    return accountMethods.resendOwnVerification(this);
   }
 
   /** `POST /api/v1/auth/reset` (§25.1). Resolves whether or not the address exists (§25.4). */
