@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-beta04] - 2026-08-28
+
 ### Changed
+
+- Re-vendor contract 1.33, pin CodeQL by digest, record why npm needs no second attestation
+
+- Vendor contract 1.32 — §5.2.1 organization-level sign-in
 
 - **CONTRACT 1.32 — signing in an organization-level principal (§5.2.1).**
   `CONTRACT.md`, `openapi.json` and `management-registry.json` re-vendored from
