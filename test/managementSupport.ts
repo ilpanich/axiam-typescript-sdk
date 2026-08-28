@@ -2,8 +2,8 @@
 //
 // Every management operation requires an authenticated session (§27.4 rule 1
 // refuses to make a wire call without one), so each test needs a client that
-// believes it has logged in. Driving a real login 146 times would test the
-// login path 146 times and the management path once each; the precondition has
+// believes it has logged in. Driving a real login 147 times would test the
+// login path 147 times and the management path once each; the precondition has
 // its own dedicated test in `management.semantics.test.ts` instead.
 
 import { http, HttpResponse } from 'msw';

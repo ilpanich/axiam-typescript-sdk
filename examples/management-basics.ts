@@ -24,7 +24,7 @@ async function main(): Promise<void> {
   // locally, with no request, until it does.
   void client;
 
-  section('Namespaces, not 146 methods on the client');
+  section('Namespaces, not 147 methods on the client');
   console.log('  client.users.list(...)          client.roles.assignToUser(...)');
   console.log('  client.tenants.create(...)      client.certificates.generate(...)');
   console.log();

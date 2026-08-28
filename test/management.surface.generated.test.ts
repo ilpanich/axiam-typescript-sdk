@@ -71,6 +71,12 @@ describe('tenants namespace', () => {
       await client.tenants.delete(EXAMPLE_ID);
     });
   });
+  it('tenants.export_audit', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'POST', `/api/v1/organizations/${ORG_ID}/tenants/${EXAMPLE_ID}/audit-export`, 200, undefined);
+      await client.tenants.exportAudit(EXAMPLE_ID);
+    });
+  });
 });
 
 describe('users namespace', () => {
@@ -985,7 +991,7 @@ describe('platform namespace', () => {
   });
 });
 
-/** §27.9: a partial regeneration must fail here, not ship 140 of 146. */
+/** §27.9: a partial regeneration must fail here, not ship 140 of 147. */
 describe('generated surface', () => {
   it('covers exactly the operations the registry names', () => {
     const exercised = [
@@ -1114,6 +1120,7 @@ describe('generated surface', () => {
           "settings.set_tenant_override",
           "tenants.create",
           "tenants.delete",
+          "tenants.export_audit",
           "tenants.get",
           "tenants.list",
           "tenants.update",
