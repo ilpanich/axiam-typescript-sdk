@@ -154,3 +154,55 @@ describe('Node persona resolves refresh UUIDs from the access-token claims', () 
     expect(session.resolvedOrgId).toBeUndefined();
   });
 });
+
+// CONTRACT.md §5.2.1 — signing in an organization-level principal.
+//
+// The reserved tenant holding an organization's cross-tenant principals has a
+// fixed slug, `"organization"`, so §5.1's ordinary login body reaches it with
+// nothing new. What §5.2.1 adds is the rule underneath: naming *no* tenant
+// resolves that scope server-side, and an SDK MUST NOT send an empty-string
+// slug in place of naming none.
+//
+// The MUST is not hypothetical. The admin UI sent `tenant_slug: ""` from a
+// blank form field, and the server resolved a slug that cannot match — a 401
+// raised before the tenant's OPAQUE mode was read, so the 404 of §23.4 rule 10
+// never arrived, the client had no fallback to take, and an organization-level
+// administrator could not sign in at all on a deployment with OPAQUE disabled.
+describe('organization-level sign-in (§5.2.1)', () => {
+  it('reaches the reserved scope by naming its slug, like any other tenant', async () => {
+    const client = new AxiamClient({
+      baseUrl: BASE_URL,
+      tenantSlug: 'organization',
+      orgSlug: 'globex',
+    });
+    await client.login('root@example.com', 'pw');
+
+    expect(lastLoginBody).toMatchObject({
+      tenant_slug: 'organization',
+      org_slug: 'globex',
+    });
+  });
+
+  it('never puts an empty slug on the wire — construction refuses one first', () => {
+    // This is how the TypeScript SDK satisfies §5.2.1 rule 2: `''` is falsy, so
+    // it fails §5's tenant requirement at construction and there is no client
+    // from which an empty `tenant_slug` could ever be serialized. The
+    // assertion pins that, rather than the incidental fact that
+    // `buildLoginBody` also skips falsy values.
+    expect(() => new AxiamClient({ baseUrl: BASE_URL, tenantSlug: '', orgSlug: 'globex' })).toThrow(
+      /requires a tenant/,
+    );
+  });
+
+  it('omits a tenant slug it was never given, rather than sending an empty one', () => {
+    // Reached through `createSession` because `AxiamClient` refuses the
+    // construction above — the point is what the body builder does with an
+    // absent slug, which is the shape every workspace-taking route reads as
+    // "the organization's own scope".
+    const session = createSession({ baseUrl: BASE_URL, tenantId: '11111111-1111-1111-1111-111111111111', orgSlug: 'globex' });
+    const body = session.buildLoginBody('root@example.com', 'pw');
+
+    expect(body).not.toHaveProperty('tenant_slug');
+    expect(body.org_slug).toBe('globex');
+  });
+});

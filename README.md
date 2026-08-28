@@ -1120,6 +1120,35 @@ produces a `403` — so a UI that offers the switch to everyone has turned a
 distinction the server made into a failure the user discovers. `false` against a
 server older than contract 1.31, which is the safe reading of absent.
 
+#### Signing one in (§5.2.1)
+
+The reserved tenant has a fixed slug, `organization`, the same in every
+deployment — so signing in as an organization-level principal needs no new
+surface, only the ordinary constructor:
+
+```ts
+const client = new AxiamClient({
+  baseUrl: 'https://iam.example.com',
+  tenantSlug: 'organization',
+  orgSlug: 'globex',
+});
+await client.login('root@example.com', password);
+```
+
+Prefer that form. The server also reads a login body that names *no* tenant as
+"the organization's own scope", but §5 rule 2 still requires a tenant on the
+`X-Tenant-ID` header of every request after the login, so the client needs one
+either way.
+
+What §5.2.1 forbids is the third possibility: an empty-string slug. No row can
+carry one, so `tenant_slug: ""` resolves nothing — and on
+`/auth/opaque/login/start` it fails on the workspace *before* the tenant's
+OPAQUE mode is read, so the `404` that means "OPAQUE is not offered here" never
+arrives and the caller has no fallback to take. This SDK cannot emit one:
+`tenantSlug: ''` fails §5's tenant requirement at construction, and
+`buildLoginBody` omits an identifier it was not given rather than sending it
+blank.
+
 `requestPasswordReset` resolves **whether or not the address exists**, and this
 SDK exposes no way to tell the difference. That is not an omission to improve on:
 any signal distinguishing them — including one inferred from timing — turns the

@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **CONTRACT 1.32 — signing in an organization-level principal (§5.2.1).**
+  `CONTRACT.md`, `openapi.json` and `management-registry.json` re-vendored from
+  the AXIAM server.
+
+  No code change was needed here, and that is the point worth recording. §5.2.1
+  adds two rules; this SDK already satisfied both:
+
+  - Naming no tenant resolves the organization's own reserved scope on
+    `/auth/login`, `/auth/opaque/login/start`, `/auth/opaque/register/start`
+    and `/auth/webauthn/authenticate/discoverable/start`. The reserved tenant's
+    slug is `organization`, so `new AxiamClient({ tenantSlug: 'organization',
+    orgSlug })` reaches it through the ordinary constructor.
+  - An SDK **MUST NOT** send an empty-string slug. `tenantSlug: ''` is refused
+    at construction (§5 — there is no default tenant), so no client exists from
+    which one could be serialized, and `buildLoginBody` omits an identifier it
+    was not given.
+
+  Both are now pinned by tests in `test/rest/orgContext.test.ts` rather than
+  left as a property of falsy checks. The rule has teeth: sending `""` breaks
+  organization-level sign-in on all four routes, and on
+  `/auth/opaque/login/start` it does so before the tenant's OPAQUE mode is
+  read — the `404` of §23.4 rule 10 never arrives, so the client has no
+  fallback and sign-in fails even where OPAQUE is disabled.
+
 ## [1.0.0-beta02] - 2026-08-28
 
 ### Added
