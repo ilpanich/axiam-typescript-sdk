@@ -26,12 +26,16 @@
 </ul>
 <h2 id="contract-conformance" class="tsd-anchor-link">Contract conformance<a href="#contract-conformance" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>This SDK conforms to <a href="http://CONTRACT.md">CONTRACT.md</a> §1–§13 and §12.7, §14, §15, §17, §19, §20, §21, §22, §23,
-§24, §25, §26 (including §6.1 mTLS client certificates, the §10.1 minimum
+§24, §25, §26, §27 (including §6.1 mTLS client certificates, the §10.1 minimum
 local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
 <code>verifyWebhook</code> signature verifier).</p>
-<p>§12.7, §14, §15, §22, §24, §25 and §26 are named rather than folded into the range because
-they landed after this SDK already claimed §1–§13: widening the range silently would turn a
-statement that was true when written into a different claim without anyone editing it.</p>
+<p>§27 is implemented <strong>in full</strong>, both halves: the 146-operation imperative surface <em>and</em>
+the §27.6 declarative manifest with its §27.7 <code>defineManifest</code> and decorator forms. The
+contract asks an SDK that ships only one half to say which; this one ships both.</p>
+<p>§12.7, §14, §15, §22, §24, §25, §26 and §27 are named rather than folded into the range
+because they landed after this SDK already claimed §1–§13: widening the range silently
+would turn a statement that was true when written into a different claim without anyone
+editing it.</p>
 <h3 id="§101-minimum-local-verification-set" class="tsd-anchor-link">§10.1 minimum local-verification set<a href="#§101-minimum-local-verification-set" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <p><code>axiamMiddleware</code> / <code>axiamPlugin</code> (and the <code>requireAuth</code> / <code>requireAccess</code> / <code>requireRole</code>
 helpers built on them) funnel through <code>authenticateRequest</code>, which applies <strong>every</strong> §10.1
@@ -755,9 +759,39 @@ means to recover.</p>
 authorization refusal is still an <code>AuthzError</code>: the SDK matches on the body's own
 discriminant, not on the <code>403</code> alone.</p>
 <h3 id="email-verification-and-password-reset" class="tsd-anchor-link">Email verification and password reset<a href="#email-verification-and-password-reset" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<pre><code class="ts"><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">verifyEmail</span><span class="hl-1">(</span><span class="hl-4">tokenFromLink</span><span class="hl-1">, </span><span class="hl-4">tenantId</span><span class="hl-1">);</span><br/><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">resendVerification</span><span class="hl-1">(</span><span class="hl-4">email</span><span class="hl-1">, </span><span class="hl-4">tenantId</span><span class="hl-1">);</span><br/><br/><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">requestPasswordReset</span><span class="hl-1">({ </span><span class="hl-4">email</span><span class="hl-1"> });</span>
+<pre><code class="ts"><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">verifyEmail</span><span class="hl-1">(</span><span class="hl-4">tokenFromLink</span><span class="hl-1">, </span><span class="hl-4">tenantId</span><span class="hl-1">);</span><br/><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">resendVerification</span><span class="hl-1">(</span><span class="hl-4">email</span><span class="hl-1">, </span><span class="hl-4">tenantId</span><span class="hl-1">);   </span><span class="hl-6">// anonymous caller</span><br/><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">resendOwnVerification</span><span class="hl-1">();               </span><span class="hl-6">// signed-in caller</span><br/><br/><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">requestPasswordReset</span><span class="hl-1">({ </span><span class="hl-4">email</span><span class="hl-1"> });</span>
 </code><button type="button">Copy</button></pre>
 
+<p><strong>There are two resends, and picking the wrong one is silent.</strong> Use the second
+whenever you have a session.</p>
+<p><code>resendVerification</code> takes an address from an <em>unauthenticated</em> caller, so it
+resolves whatever happens — unknown address, already verified, over the daily
+limit. That constancy is the point: anything else is an oracle for which
+addresses have accounts.</p>
+<p><code>resendOwnVerification</code> is for a caller signed in to the account it is asking
+about. It takes <strong>no address at all</strong> (the server reads it off your own record,
+and a parameter would let a session mail an arbitrary one) and it says what
+happened:</p>
+<pre><code class="ts"><span class="hl-7">try</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">resendOwnVerification</span><span class="hl-1">();            </span><span class="hl-6">// minted and enqueued</span><br/><span class="hl-1">} </span><span class="hl-7">catch</span><span class="hl-1"> (</span><span class="hl-4">e</span><span class="hl-1">) {</span><br/><span class="hl-1">  </span><span class="hl-7">if</span><span class="hl-1"> (</span><span class="hl-4">e</span><span class="hl-1"> </span><span class="hl-0">instanceof</span><span class="hl-1"> </span><span class="hl-10">ConflictError</span><span class="hl-1">) { </span><span class="hl-6">/* already verified, or not eligible */</span><span class="hl-1"> }</span><br/><span class="hl-1">  </span><span class="hl-7">else</span><span class="hl-1"> </span><span class="hl-7">if</span><span class="hl-1"> (</span><span class="hl-4">e</span><span class="hl-1"> </span><span class="hl-0">instanceof</span><span class="hl-1"> </span><span class="hl-10">NetworkError</span><span class="hl-1">) { </span><span class="hl-6">/* 429 — daily limit */</span><span class="hl-1"> }</span><br/><span class="hl-1">  </span><span class="hl-7">else</span><span class="hl-1"> </span><span class="hl-7">throw</span><span class="hl-1"> </span><span class="hl-4">e</span><span class="hl-1">;</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<p>A profile page that called the <em>first</em> one reports success while doing nothing,
+which is the bug this pair exists to separate. This SDK does not fall back from
+the second to the first on either failure — that would turn both back into a
+resolved promise with an extra round-trip. And resolving means <em>enqueued</em>:
+delivery is asynchronous and can still fail at the provider.</p>
+<h3 id="organization-level-principals-§52" class="tsd-anchor-link">Organization-level principals (§5.2)<a href="#organization-level-principals-§52" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>An authenticated <code>LoginResult</code> also says whether the account is an
+<strong>organization-level</strong> principal — one whose record lives in its organization's
+reserved tenant, so its global grants apply in every tenant of that organization:</p>
+<pre><code class="ts"><span class="hl-7">if</span><span class="hl-1"> (</span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">status</span><span class="hl-1"> === </span><span class="hl-5">&#39;authenticated&#39;</span><span class="hl-1"> &amp;&amp; </span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">user</span><span class="hl-1">.</span><span class="hl-4">organizationLevel</span><span class="hl-1">) {</span><br/><span class="hl-1">  </span><span class="hl-6">// Acts on any tenant of its organization by sending a different</span><br/><span class="hl-1">  </span><span class="hl-6">// `X-Tenant-ID` on the next request. No re-login: it already is a</span><br/><span class="hl-1">  </span><span class="hl-6">// principal of every tenant there.</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Check it <em>before</em> offering a tenant switch. An ordinary tenant principal is a
+principal of exactly one tenant, and changing the header for one of those
+produces a <code>403</code> — so a UI that offers the switch to everyone has turned a
+distinction the server made into a failure the user discovers. <code>false</code> against a
+server older than contract 1.31, which is the safe reading of absent.</p>
 <p><code>requestPasswordReset</code> resolves <strong>whether or not the address exists</strong>, and this
 SDK exposes no way to tell the difference. That is not an omission to improve on:
 any signal distinguishing them — including one inferred from timing — turns the
@@ -1007,6 +1041,140 @@ identically — asymmetric caching would leak which outcome occurred through lat
 Failures are never memoized: caching a transport error as a deny would turn a blip into a
 TTL-long outage. The memo is cleared on <code>login</code>, <code>verifyMfa</code>, <code>refresh</code> and <code>logout</code>, since
 entries are keyed by subject rather than by session.</p>
+<h2 id="management-api-contractmd-§27" class="tsd-anchor-link">Management API (<a href="http://CONTRACT.md">CONTRACT.md</a> §27)<a href="#management-api-contractmd-§27" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Everything above assumes a populated tenant. <code>login</code> signs a user in,
+<code>checkAccess</code> asks about a resource, <code>verifyWebhook</code> checks a delivery signature — and
+none of them can create the user, declare the resource or register the webhook. The
+management surface is the part that can: <strong>146 operations across 24 namespaces</strong>,
+generated from <code>management-registry.json</code>, which is the whole server API minus what other
+contract sections own and minus organization creation and deletion (§27.0 keeps those out
+of reach of a client library on purpose).</p>
+<pre><code class="ts"><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">page</span><span class="hl-1">  = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-4">users</span><span class="hl-1">.</span><span class="hl-3">list</span><span class="hl-1">({ </span><span class="hl-4">limit:</span><span class="hl-1"> </span><span class="hl-12">50</span><span class="hl-1"> });</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">every</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-4">users</span><span class="hl-1">.</span><span class="hl-3">listAll</span><span class="hl-1">({ </span><span class="hl-4">limit:</span><span class="hl-1"> </span><span class="hl-12">200</span><span class="hl-1"> });</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">found</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-4">users</span><span class="hl-1">.</span><span class="hl-3">list</span><span class="hl-1">({ </span><span class="hl-4">limit:</span><span class="hl-1"> </span><span class="hl-12">50</span><span class="hl-1">, </span><span class="hl-4">search:</span><span class="hl-1"> </span><span class="hl-5">&#39;ada&#39;</span><span class="hl-1"> });</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">role</span><span class="hl-1">  = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-4">roles</span><span class="hl-1">.</span><span class="hl-3">get</span><span class="hl-1">(</span><span class="hl-4">roleId</span><span class="hl-1">);</span><br/><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-4">roles</span><span class="hl-1">.</span><span class="hl-3">assignToUser</span><span class="hl-1">(</span><span class="hl-4">roleId</span><span class="hl-1">, { </span><span class="hl-4">user_id:</span><span class="hl-1"> </span><span class="hl-4">userId</span><span class="hl-1"> });</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Operations hang off <strong>namespace handles</strong> rather than the client. Twenty namespaces have a
+<code>list</code> and fourteen a <code>get</code>, so flattening them would need a disambiguating prefix invented
+once per operation — and would bury the eight §1 methods most callers want under five times
+as many they do not. Acquiring a handle performs no I/O. <code>client.management.users</code> is the
+same handle as <code>client.users</code>, for call sites that read better with the namespace spelled
+out.</p>
+<p>Every management call goes through the session's existing axios instance, so it inherits
+CSRF forwarding (§3), the cookie jar (§4), the <code>X-Tenant-ID</code> header (§5), the TLS policy
+(§6), the reactive single-flight refresh the response interceptor already performs (§9),
+the retry policy (§16) and telemetry (§19). None of it is reimplemented, and none of it can
+be forgotten per-operation.</p>
+<p><strong>Field names are the server's, verbatim</strong> — <code>resource_type</code>, <code>is_global</code>, <code>user_id</code>. A
+management surface is read alongside the API docs, and a casing translation layer over 136
+generated types is both a lot of code and a class of bug; what you read in <code>openapi.json</code>
+is what you write here. The hand-curated §1 types (<code>AccessCheck</code>) keep their camelCase.</p>
+<p><strong><code>search</code> is on the page request, and the server does the filtering.</strong> All twenty
+paginated operations take it:</p>
+<pre><code class="ts"><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">page</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-4">users</span><span class="hl-1">.</span><span class="hl-3">list</span><span class="hl-1">({ </span><span class="hl-4">limit:</span><span class="hl-1"> </span><span class="hl-12">50</span><span class="hl-1">, </span><span class="hl-4">search:</span><span class="hl-1"> </span><span class="hl-5">&#39;ada&#39;</span><span class="hl-1"> });</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">all</span><span class="hl-1">  = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-4">users</span><span class="hl-1">.</span><span class="hl-3">listAll</span><span class="hl-1">({ </span><span class="hl-4">limit:</span><span class="hl-1"> </span><span class="hl-12">200</span><span class="hl-1">, </span><span class="hl-4">search:</span><span class="hl-1"> </span><span class="hl-5">&#39;ada&#39;</span><span class="hl-1"> });</span>
+</code><button type="button">Copy</button></pre>
+
+<p>It is matched case-insensitively against the identifying fields of whatever is being
+listed — a name or username, plus the record id, so a UUID out of a log line pastes in
+as-is. Three consequences worth knowing:</p>
+<ul>
+<li><strong><code>total</code> counts matches, not rows</strong>, because the filter is applied before
+<code>offset</code>/<code>limit</code>. That is what lets a pager built on it show a page count belonging to
+the result set it is paging. Filtering a page in JS after the fetch gives you neither.</li>
+<li><strong><code>listAll</code> carries the term across the whole walk</strong>, so it returns the matches and not
+the matches followed by the unfiltered tail.</li>
+<li><strong>A blank term is no term.</strong> <code>search: ''</code> and <code>search: '   '</code> send no <code>search</code> parameter
+at all, so a box that fires on every keystroke does not ask a different question once it
+has been cleared. The server also caps the term's length; this SDK does not copy that
+cap, because a client-side truncation the server would not have made is a silently
+different query.</li>
+</ul>
+<p><strong>Three model fields arrived with contract 1.31 (§27.11).</strong> <code>Tenant.kind</code> says whether a
+tenant is ordinary or its organization's own scope, and is absent on a row written before
+that scope existed. <code>MtlsTrustAnchorResponse.trusted_anchors</code> is absent when nothing was
+reloaded — which is <em>not</em> zero: &quot;the listener trusts no CAs&quot; and &quot;there was no listener to
+ask&quot; are different states, and only one is a problem. <code>Certificate.bound_service_account_id</code>
+is resolved by <code>certificates.list()</code> and absent from <code>get</code>; the SDK does not issue a second
+request to fill it in.</p>
+<p><strong>Generated enums are open.</strong> Each is a literal union with a trailing <code>(string &amp; {})</code> arm,
+so a value this SDK's copy of the spec does not list reaches you as itself rather than
+being asserted out of existence. The named arms still autocomplete and still narrow; what
+the extra arm removes is the illusion that an exhaustive <code>switch</code> over them is exhaustive.</p>
+<h3 id="five-things-that-bite" class="tsd-anchor-link">Five things that bite<a href="#five-things-that-bite" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p><strong>Reads retry; writes never do.</strong> Not even the idempotent-looking ones.
+<code>certificates.generate()</code> twice mints two certificates; <code>serviceAccounts.rotateSecret()</code>
+twice invalidates the secret the first call returned and you already stored.</p>
+<p><strong>Seventeen <code>PUT</code>s patch, four replace.</strong> A sparse update sends only the fields you set — an
+unset field is <em>absent</em> from the wire body, not <code>null</code>, so it is left unchanged. But
+<code>settings.setOrg()</code>, <code>emailConfig.setOrg()</code>, <code>webauthnPolicy.set()</code> and
+<code>caCertificates.setMtlsTrustAnchor()</code> <strong>replace</strong>: what you omit is not preserved. Their
+request types have required fields, so a half-filled one does not typecheck — which is the
+point, since sending a subset of <code>SetOrgSettings</code> resets the other eighteen.</p>
+<p><strong>Seven calls return a secret exactly once.</strong> Creating a service account or an OAuth2
+client, minting a SCIM token, generating a certificate, a CA, a signing CA or a PGP key.
+The field is <code>Sensitive&lt;string&gt;</code>: <code>JSON.stringify</code> gives <code>&quot;[SENSITIVE]&quot;</code>, <code>.expose()</code> gives
+the value. No later <code>get</code> returns it again, and the <code>get</code> projection has no field where it
+was — so nothing tells you it is missing.</p>
+<p><strong>404 means &quot;absent, or not yours.&quot;</strong> The server answers 404 for a resource in another
+tenant deliberately: a distinguishable &quot;exists but not yours&quot; lets a caller enumerate
+another tenant's ids.</p>
+<pre><code class="ts"><span class="hl-7">try</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-4">users</span><span class="hl-1">.</span><span class="hl-3">get</span><span class="hl-1">(</span><span class="hl-4">id</span><span class="hl-1">);</span><br/><span class="hl-1">} </span><span class="hl-7">catch</span><span class="hl-1"> (</span><span class="hl-4">e</span><span class="hl-1">) {</span><br/><span class="hl-1">  </span><span class="hl-7">if</span><span class="hl-1"> (</span><span class="hl-4">e</span><span class="hl-1"> </span><span class="hl-0">instanceof</span><span class="hl-1"> </span><span class="hl-10">NotFoundError</span><span class="hl-1">) { </span><span class="hl-6">/* absent, or another tenant&#39;s */</span><span class="hl-1"> }</span><br/><span class="hl-1">  </span><span class="hl-7">else</span><span class="hl-1"> </span><span class="hl-7">if</span><span class="hl-1"> (</span><span class="hl-4">e</span><span class="hl-1"> </span><span class="hl-0">instanceof</span><span class="hl-1"> </span><span class="hl-10">ConflictError</span><span class="hl-1">) { </span><span class="hl-6">/* 409 — the name is taken */</span><span class="hl-1"> }</span><br/><span class="hl-1">  </span><span class="hl-7">else</span><span class="hl-1"> </span><span class="hl-7">if</span><span class="hl-1"> (</span><span class="hl-4">e</span><span class="hl-1"> </span><span class="hl-0">instanceof</span><span class="hl-1"> </span><span class="hl-10">ValidationError</span><span class="hl-1">) { </span><span class="hl-7">for</span><span class="hl-1"> (</span><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">f</span><span class="hl-1"> </span><span class="hl-0">of</span><span class="hl-1"> </span><span class="hl-4">e</span><span class="hl-1">.</span><span class="hl-4">fields</span><span class="hl-1">) { </span><span class="hl-6">/* 400, per field */</span><span class="hl-1"> } }</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<p>All three are real subclasses of the §2 types — <code>NotFoundError</code> and <code>ConflictError</code> extend
+<code>AuthzError</code>, <code>ValidationError</code> extends <code>NetworkError</code> — so <code>e instanceof AuthzError</code>
+written before §27 still catches the first two.</p>
+<p><strong><code>orgId</code> and <code>tenantId</code> default from the client</strong>, and are overridable per handle with
+<code>.inOrg(id)</code> / <code>.forTenant(id)</code>. A client built with a <em>slug</em> fails locally, with no
+request, on any route that needs the UUID — the SDK will not resolve a slug behind your
+back.</p>
+<h3 id="declarative-manifests-§276-§277" class="tsd-anchor-link">Declarative manifests (§27.6, §27.7)<a href="#declarative-manifests-§276-§277" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>Calling 146 operations one at a time is rarely what an application wants. What it does at
+start-up, in a migration, or in a test fixture is assert a shape:</p>
+<pre><code class="ts"><span class="hl-7">import</span><span class="hl-1"> { </span><span class="hl-4">defineManifest</span><span class="hl-1">, </span><span class="hl-4">Sensitive</span><span class="hl-1"> } </span><span class="hl-7">from</span><span class="hl-1"> </span><span class="hl-5">&#39;axiam-sdk/rest&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-7">export</span><span class="hl-1"> </span><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">desired</span><span class="hl-1"> = </span><span class="hl-3">defineManifest</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-4">resources:</span><span class="hl-1"> [</span><br/><span class="hl-1">    { </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;docs&#39;</span><span class="hl-1">, </span><span class="hl-4">name:</span><span class="hl-1"> </span><span class="hl-5">&#39;documents&#39;</span><span class="hl-1">, </span><span class="hl-4">resourceType:</span><span class="hl-1"> </span><span class="hl-5">&#39;collection&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">scopes:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;draft&#39;</span><span class="hl-1">, </span><span class="hl-4">name:</span><span class="hl-1"> </span><span class="hl-5">&#39;draft&#39;</span><span class="hl-1">, </span><span class="hl-4">description:</span><span class="hl-1"> </span><span class="hl-5">&#39;Unpublished&#39;</span><span class="hl-1"> }] },</span><br/><span class="hl-1">  ],</span><br/><span class="hl-1">  </span><span class="hl-4">permissions:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;read&#39;</span><span class="hl-1">, </span><span class="hl-4">action:</span><span class="hl-1"> </span><span class="hl-5">&#39;document:read&#39;</span><span class="hl-1">, </span><span class="hl-4">description:</span><span class="hl-1"> </span><span class="hl-5">&#39;Read a document&#39;</span><span class="hl-1"> }],</span><br/><span class="hl-1">  </span><span class="hl-4">roles:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;editor&#39;</span><span class="hl-1">, </span><span class="hl-4">name:</span><span class="hl-1"> </span><span class="hl-5">&#39;Editor&#39;</span><span class="hl-1">, </span><span class="hl-4">description:</span><span class="hl-1"> </span><span class="hl-5">&#39;Edits documents&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">            </span><span class="hl-4">grants:</span><span class="hl-1"> [{ </span><span class="hl-4">permission:</span><span class="hl-1"> </span><span class="hl-5">&#39;read&#39;</span><span class="hl-1">, </span><span class="hl-4">scopes:</span><span class="hl-1"> [</span><span class="hl-5">&#39;draft&#39;</span><span class="hl-1">] }] }],</span><br/><span class="hl-1">  </span><span class="hl-4">groups:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;staff&#39;</span><span class="hl-1">, </span><span class="hl-4">name:</span><span class="hl-1"> </span><span class="hl-5">&#39;Staff&#39;</span><span class="hl-1">, </span><span class="hl-4">description:</span><span class="hl-1"> </span><span class="hl-5">&#39;The team&#39;</span><span class="hl-1">, </span><span class="hl-4">roles:</span><span class="hl-1"> [</span><span class="hl-5">&#39;editor&#39;</span><span class="hl-1">] }],</span><br/><span class="hl-1">  </span><span class="hl-4">users:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;alice&#39;</span><span class="hl-1">, </span><span class="hl-4">username:</span><span class="hl-1"> </span><span class="hl-5">&#39;alice&#39;</span><span class="hl-1">, </span><span class="hl-4">email:</span><span class="hl-1"> </span><span class="hl-5">&#39;alice@example.com&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">            </span><span class="hl-4">initialPassword:</span><span class="hl-1"> </span><span class="hl-0">new</span><span class="hl-1"> </span><span class="hl-3">Sensitive</span><span class="hl-1">(</span><span class="hl-4">pw</span><span class="hl-1">), </span><span class="hl-4">groups:</span><span class="hl-1"> [</span><span class="hl-5">&#39;staff&#39;</span><span class="hl-1">] }],</span><br/><span class="hl-1">});</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">plan</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-4">manifest</span><span class="hl-1">.</span><span class="hl-3">plan</span><span class="hl-1">(</span><span class="hl-4">desired</span><span class="hl-1">);   </span><span class="hl-6">// reads only — no writes</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">report</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-4">manifest</span><span class="hl-1">.</span><span class="hl-3">apply</span><span class="hl-1">(</span><span class="hl-4">desired</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<p><code>defineManifest</code> keeps the literal key types <em>and</em> validates immediately — a dangling
+cross-reference throws where the manifest is written, which for a config module is import
+time, rather than on the first <code>plan</code> against production.</p>
+<p><code>plan()</code> issues <code>GET</code>s and nothing else. It matches each spec by its natural key — a user's
+<code>username</code>, a role's <code>name</code>, a scope's <code>name</code> within its resource — and returns the ordered
+actions that would reconcile the tenant.</p>
+<ul>
+<li><strong>Nothing is ever deleted.</strong> A manifest is usually a <em>subset</em> of a tenant's truth, and a
+prune would turn &quot;make sure these three roles exist&quot; into &quot;delete the other forty&quot;. There
+is no prune option, deliberately.</li>
+<li><strong>A field the manifest does not state is never a difference</strong>, so <code>apply</code> is safe against
+a tenant that also holds hand-made state.</li>
+<li><strong>Applying twice converges</strong>: the second plan is all <code>no-change</code>. That is what makes
+re-running after a failure safe.</li>
+<li><strong>There is no transaction</strong> across 146 independent HTTP endpoints, and <code>ApplyReport</code> does
+not pretend there is. If step 12 of 30 fails, steps 1–11 have happened; the report says
+which, execution stops rather than continuing blindly, and there is no <code>rollback</code> —
+because this SDK could not honour one.</li>
+</ul>
+<p>Codebases that already declare their domain with classes get decorators instead:</p>
+<pre><code class="ts"><span class="hl-1">@</span><span class="hl-3">AxiamResource</span><span class="hl-1">({ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;docs&#39;</span><span class="hl-1">, </span><span class="hl-4">name:</span><span class="hl-1"> </span><span class="hl-5">&#39;documents&#39;</span><span class="hl-1">, </span><span class="hl-4">resourceType:</span><span class="hl-1"> </span><span class="hl-5">&#39;collection&#39;</span><span class="hl-1"> })</span><br/><span class="hl-1">@</span><span class="hl-3">AxiamScope</span><span class="hl-1">({ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;draft&#39;</span><span class="hl-1">, </span><span class="hl-4">name:</span><span class="hl-1"> </span><span class="hl-5">&#39;draft&#39;</span><span class="hl-1">, </span><span class="hl-4">description:</span><span class="hl-1"> </span><span class="hl-5">&#39;Unpublished&#39;</span><span class="hl-1"> })</span><br/><span class="hl-0">class</span><span class="hl-1"> </span><span class="hl-10">Documents</span><span class="hl-1"> {}</span><br/><br/><span class="hl-1">@</span><span class="hl-3">AxiamRole</span><span class="hl-1">({ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;editor&#39;</span><span class="hl-1">, </span><span class="hl-4">name:</span><span class="hl-1"> </span><span class="hl-5">&#39;Editor&#39;</span><span class="hl-1">, </span><span class="hl-4">description:</span><span class="hl-1"> </span><span class="hl-5">&#39;Edits documents&#39;</span><span class="hl-1"> })</span><br/><span class="hl-1">@</span><span class="hl-3">AxiamGrant</span><span class="hl-1">({ </span><span class="hl-4">permission:</span><span class="hl-1"> </span><span class="hl-5">&#39;read&#39;</span><span class="hl-1">, </span><span class="hl-4">scopes:</span><span class="hl-1"> [</span><span class="hl-5">&#39;draft&#39;</span><span class="hl-1">] })</span><br/><span class="hl-0">class</span><span class="hl-1"> </span><span class="hl-10">Editor</span><span class="hl-1"> {}</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">shape</span><span class="hl-1"> = </span><span class="hl-3">collectManifest</span><span class="hl-1">(</span><span class="hl-4">Documents</span><span class="hl-1">, </span><span class="hl-4">ReadDocument</span><span class="hl-1">, </span><span class="hl-4">Editor</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<p>TypeScript has two decorator dialects and this SDK's own <code>tsconfig.json</code> deliberately
+enables neither — so these are dual-protocol plain functions that work under both, and
+under neither: <code>AxiamResource(spec)(Documents)</code> is exactly what the <code>@</code> syntax desugars to.</p>
+<h3 id="examples" class="tsd-anchor-link">Examples<a href="#examples" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul>
+<li><a href="media/management-basics.ts"><code>examples/management-basics.ts</code></a> — the imperative surface
+and the rules above, one at a time.</li>
+<li><a href="media/management-manifest.ts"><code>examples/management-manifest.ts</code></a> — both declarative
+forms end to end.</li>
+<li><a href="media/device-mtls-provisioning.ts"><code>examples/device-mtls-provisioning.ts</code></a> —
+provisioning an IoT device and its mTLS identity: anchor the CA, create the service
+account, generate the certificate, bind it, then authenticate with it. This is the flow
+§27 exists for; before it, every step but the last had to happen out of band.</li>
+</ul>
+<h3 id="regenerating" class="tsd-anchor-link">Regenerating<a href="#regenerating" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p><code>src/management/models.ts</code> and <code>src/management/ops/</code> are generated and committed. After
+re-vendoring <code>management-registry.json</code> or <code>openapi.json</code>:</p>
+<pre><code class="bash"><span class="hl-3">npm</span><span class="hl-1"> </span><span class="hl-5">run</span><span class="hl-1"> </span><span class="hl-5">gen-management</span><span class="hl-1">          </span><span class="hl-6"># regenerate</span><br/><span class="hl-3">npm</span><span class="hl-1"> </span><span class="hl-5">run</span><span class="hl-1"> </span><span class="hl-5">gen-management:check</span><span class="hl-1">    </span><span class="hl-6"># what CI runs</span>
+</code><button type="button">Copy</button></pre>
+
 <h2 id="error-handling" class="tsd-anchor-link">Error handling<a href="#error-handling" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>Every persona throws the three <a href="http://CONTRACT.md">CONTRACT.md</a> §2 error types — <code>AuthError</code>, <code>AuthzError</code>,
 <code>NetworkError</code> — plus one <code>AuthError</code> <strong>sub-type</strong>, <code>OAuthProtocolError</code>, for RFC 6749
@@ -1129,7 +1297,8 @@ the TypeDoc API reference to this repo's GitHub Pages site.</p>
 <li>
 <ul>
 <li><a href="#has-a-third-outcome"><span> has a third outcome</span></a></li>
-<li><a href="#email-verification-and-password-reset"><span>Email verification and password reset</span></a></li></ul></li>
+<li><a href="#email-verification-and-password-reset"><span>Email verification and password reset</span></a></li>
+<li><a href="#organization-level-principals-§52"><span>Organization-<wbr/>level principals (§5.2)</span></a></li></ul></li>
 <li><a href="#device-authorization-grant-contractmd-§14"><span>Device authorization grant (, <wbr/>CONTRACT.md §14)</span></a></li>
 <li><a href="#token-exchange-contractmd-§15"><span>Token exchange (, <wbr/>CONTRACT.md §15)</span></a></li>
 <li>
@@ -1150,6 +1319,13 @@ the TypeDoc API reference to this repo's GitHub Pages site.</p>
 <li><a href="#deterministic-shutdown-§18"><span>Deterministic shutdown (§18)</span></a></li>
 <li><a href="#telemetry-hooks-§19"><span>Telemetry hooks (§19)</span></a></li>
 <li><a href="#decision-memo-§17-opt-in-off-by-default"><span>Decision memo (§17) — opt-<wbr/>in, off by default</span></a></li></ul></li>
+<li><a href="#management-api-contractmd-§27"><span>Management <wbr/>API (<wbr/>CONTRACT.md §27)</span></a></li>
+<li>
+<ul>
+<li><a href="#five-things-that-bite"><span>Five things that bite</span></a></li>
+<li><a href="#declarative-manifests-§276-§277"><span>Declarative manifests (§27.6, §27.7)</span></a></li>
+<li><a href="#examples"><span>Examples</span></a></li>
+<li><a href="#regenerating"><span>Regenerating</span></a></li></ul></li>
 <li><a href="#error-handling"><span>Error handling</span></a></li>
 <li><a href="#security-notes"><span>Security notes</span></a></li>
 <li><a href="#release-versioning"><span>Release / versioning</span></a></li>

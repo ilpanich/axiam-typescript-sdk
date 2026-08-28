@@ -12,33 +12,17 @@
 <li><a href="" aria-current="page">AxiamClient</a></li></ul>
 <h1>Class AxiamClient</h1></div>
 <section class="tsd-panel tsd-comment">
-<div class="tsd-comment tsd-typography"><p>The main entry point for the AXIAM TypeScript/JavaScript SDK — an
-isomorphic (browser + Node) REST client for authentication and
-authorization against an AXIAM server.</p>
-</div>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-remarks">
-<h4 class="tsd-anchor-link" id="remarks">Remarks<a href="#remarks" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p><code>AxiamClient</code> implements the SDK's cross-language behavioral contract
-(see <code>CONTRACT.md</code> §1–§10): the canonical <code>login</code>/<code>verifyMfa</code>/<code>refresh</code>/
-<code>logout</code>/<code>checkAccess</code>/<code>can</code>/<code>batchCheck</code> method vocabulary (§1), the
-three-way <code>AuthError</code>/<code>AuthzError</code>/<code>NetworkError</code> taxonomy (§2), automatic
-CSRF forwarding (§3), the required tenant context (§5), and a per-instance
-single-flight refresh guard that de-duplicates concurrent token refreshes
-(§9).</p>
-<p>A <code>tenantSlug</code> or <code>tenantId</code> is mandatory at construction — there is no
-default tenant, and AXIAM is a multi-tenant system where every
-authenticated call is scoped by the <code>X-Tenant-ID</code> header this client
-injects on every request (§5). Session tokens never appear as a return
-value or public property anywhere on this class: they arrive exclusively
-via <code>httpOnly</code> cookies set by the server.</p>
-</div>
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="ts"><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">client</span><span class="hl-1"> = </span><span class="hl-0">new</span><span class="hl-1"> </span><span class="hl-3">AxiamClient</span><span class="hl-1">({ </span><span class="hl-4">baseUrl:</span><span class="hl-1"> </span><span class="hl-5">&#39;https://iam.example.com&#39;</span><span class="hl-1">, </span><span class="hl-4">tenantSlug:</span><span class="hl-1"> </span><span class="hl-5">&#39;acme&#39;</span><span class="hl-1"> });</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">result</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">login</span><span class="hl-1">(</span><span class="hl-5">&#39;user@example.com&#39;</span><span class="hl-1">, </span><span class="hl-5">&#39;hunter2&#39;</span><span class="hl-1">);</span><br/><span class="hl-7">if</span><span class="hl-1"> (</span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">status</span><span class="hl-1"> === </span><span class="hl-5">&#39;mfa_required&#39;</span><span class="hl-1">) {</span><br/><span class="hl-1">  </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">verifyMfa</span><span class="hl-1">(</span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">mfaToken</span><span class="hl-1">, </span><span class="hl-5">&#39;123456&#39;</span><span class="hl-1">);</span><br/><span class="hl-1">}</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">decision</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">checkAccess</span><span class="hl-1">({ </span><span class="hl-4">action:</span><span class="hl-1"> </span><span class="hl-5">&#39;read&#39;</span><span class="hl-1">, </span><span class="hl-4">resourceId:</span><span class="hl-1"> </span><span class="hl-5">&#39;document:42&#39;</span><span class="hl-1"> });</span><br/><span class="hl-7">if</span><span class="hl-1"> (!</span><span class="hl-4">decision</span><span class="hl-1">.</span><span class="hl-4">allowed</span><span class="hl-1">) {</span><br/><span class="hl-1">  </span><span class="hl-7">throw</span><span class="hl-1"> </span><span class="hl-0">new</span><span class="hl-1"> </span><span class="hl-3">Error</span><span class="hl-1">(</span><span class="hl-4">decision</span><span class="hl-1">.</span><span class="hl-4">reason</span><span class="hl-1"> ?? </span><span class="hl-5">&#39;access denied&#39;</span><span class="hl-1">);</span><br/><span class="hl-1">}</span>
-</code><button type="button">Copy</button></pre>
-
-</div></div></section><aside class="tsd-sources">
+<div class="tsd-comment tsd-typography"><p>Every §27 namespace handle, lazily constructed per access.</p>
+</div></section>
+<section class="tsd-panel tsd-hierarchy" data-refl="2001">
+<h4>Hierarchy (<a href="../hierarchy.html#index.AxiamClient">View Summary</a>)</h4>
+<ul class="tsd-hierarchy">
+<li class="tsd-hierarchy-item"><a href="../interfaces/index.ManagementNamespaces.html" class="tsd-signature-type tsd-kind-interface">ManagementNamespaces</a>
+<ul class="tsd-hierarchy">
+<li class="tsd-hierarchy-item"><span class="tsd-hierarchy-target">AxiamClient</span></li></ul></li></ul></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L67">src/rest/client.ts:67</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L79">src/rest/client.ts:79</a></li>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L81">src/rest/client.ts:81</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -50,8 +34,37 @@ via <code>httpOnly</code> cookies set by the server.</p>
 </div></section>
 <section class="tsd-index-section">
 <h3 class="tsd-index-heading tsd-anchor-link" id="properties">Properties<a href="#properties" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<div class="tsd-index-list"><a href="#decisionmemo" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>decision<wbr/>Memo</span></a>
+<div class="tsd-index-list"><a href="#audit" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>audit</span></a>
+<a href="#cacertificates" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>ca<wbr/>Certificates</span></a>
+<a href="#certificates" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>certificates</span></a>
+<a href="#decisionmemo" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>decision<wbr/>Memo</span></a>
+<a href="#emailconfig" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>email<wbr/>Config</span></a>
+<a href="#federation" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>federation</span></a>
+<a href="#groups" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>groups</span></a>
+<a href="#notificationrules" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>notification<wbr/>Rules</span></a>
+<a href="#oauth2clients" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>oauth2<wbr/>Clients</span></a>
+<a href="#organizations" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>organizations</span></a>
+<a href="#permissions" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>permissions</span></a>
+<a href="#pgpkeys" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>pgp<wbr/>Keys</span></a>
+<a href="#platform" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>platform</span></a>
+<a href="#privacy" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>privacy</span></a>
+<a href="#reactors" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>reactors</span></a>
+<a href="#resources" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>resources</span></a>
+<a href="#roles" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>roles</span></a>
+<a href="#scimtokens" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>scim<wbr/>Tokens</span></a>
+<a href="#scopes" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>scopes</span></a>
+<a href="#serviceaccounts" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>service<wbr/>Accounts</span></a>
+<a href="#settings" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>settings</span></a>
 <a href="#telemetry" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>telemetry</span></a>
+<a href="#tenants" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>tenants</span></a>
+<a href="#users" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>users</span></a>
+<a href="#webauthnpolicy" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>webauthn<wbr/>Policy</span></a>
+<a href="#webhooks" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>webhooks</span></a>
+</div></section>
+<section class="tsd-index-section">
+<h3 class="tsd-index-heading tsd-anchor-link" id="accessors">Accessors<a href="#accessors" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-index-list"><a href="#management" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Accessor"><use href="../assets/icons.svg#icon-262144"></use></svg><span>management</span></a>
+<a href="#manifest" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Accessor"><use href="../assets/icons.svg#icon-262144"></use></svg><span>manifest</span></a>
 </div></section>
 <section class="tsd-index-section">
 <h3 class="tsd-index-heading tsd-anchor-link" id="methods">Methods<a href="#methods" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
@@ -72,6 +85,7 @@ via <code>httpOnly</code> cookies set by the server.</p>
 <a href="#passwordresetcontext" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>password<wbr/>Reset<wbr/>Context</span></a>
 <a href="#refresh" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>refresh</span></a>
 <a href="#requestpasswordreset" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>request<wbr/>Password<wbr/>Reset</span></a>
+<a href="#resendownverification" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>resend<wbr/>Own<wbr/>Verification</span></a>
 <a href="#resendverification" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>resend<wbr/>Verification</span></a>
 <a href="#verifyemail" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>verify<wbr/>Email</span></a>
 <a href="#verifymfa" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>verify<wbr/>Mfa</span></a>
@@ -97,25 +111,261 @@ via <code>httpOnly</code> cookies set by the server.</p>
 <li><span><span class="tsd-kind-parameter">options</span>: <a href="../interfaces/index.AxiamClientOptions.html" class="tsd-signature-type tsd-kind-interface">AxiamClientOptions</a></span></li>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">session</span>: <a href="index.SharedSession.html" class="tsd-signature-type tsd-kind-class">SharedSession</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">AxiamClient</a></h4><aside class="tsd-sources">
+<p>Inherited from ManagementNamespaces.constructor</p>
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L95">src/rest/client.ts:95</a></li></ul></aside></div></li></ul></section></section></details>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L109">src/rest/client.ts:109</a></li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="properties-1">Properties<a href="#properties-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="audit"><code class="tsd-tag">Readonly</code><span>audit</span><a href="#audit" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">audit</span><span class="tsd-signature-symbol">:</span> <a href="index.AuditApi.html" class="tsd-signature-type tsd-kind-class">AuditApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Append-only audit log, read-only by construction.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#audit">audit</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L144">src/management/ops/index.ts:144</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="cacertificates"><code class="tsd-tag">Readonly</code><span>ca<wbr/>Certificates</span><a href="#cacertificates" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">caCertificates</span><span class="tsd-signature-symbol">:</span> <a href="index.CaCertificatesApi.html" class="tsd-signature-type tsd-kind-class">CaCertificatesApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Organization CAs and the per-tenant signing CAs chained beneath them.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#cacertificates">caCertificates</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L107">src/management/ops/index.ts:107</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="certificates"><code class="tsd-tag">Readonly</code><span>certificates</span><a href="#certificates" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">certificates</span><span class="tsd-signature-symbol">:</span> <a href="index.CertificatesApi.html" class="tsd-signature-type tsd-kind-class">CertificatesApi</a></div>
+<div class="tsd-comment tsd-typography"><p>End-entity X.509 certificates -- the ones issued to users, services and
+IoT devices.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#certificates">certificates</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L105">src/management/ops/index.ts:105</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="decisionmemo"><code class="tsd-tag">Readonly</code><span>decision<wbr/>Memo</span><a href="#decisionmemo" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">decisionMemo</span><span class="tsd-signature-symbol">:</span> <a href="index.DecisionMemo.html" class="tsd-signature-type tsd-kind-class">DecisionMemo</a></div>
 <div class="tsd-comment tsd-typography"><p>§17 decision memo. Disabled unless <code>decisionMemoTtlMs</code> was configured.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L84">src/rest/client.ts:84</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L98">src/rest/client.ts:98</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="emailconfig"><code class="tsd-tag">Readonly</code><span>email<wbr/>Config</span><a href="#emailconfig" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">emailConfig</span><span class="tsd-signature-symbol">:</span> <a href="index.EmailConfigApi.html" class="tsd-signature-type tsd-kind-class">EmailConfigApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Transactional-mail transport, configurable at organization level and
+overridable per tenant.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#emailconfig">emailConfig</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L128">src/management/ops/index.ts:128</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="federation"><code class="tsd-tag">Readonly</code><span>federation</span><a href="#federation" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">federation</span><span class="tsd-signature-symbol">:</span> <a href="index.FederationApi.html" class="tsd-signature-type tsd-kind-class">FederationApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Upstream IdP configuration and the per-user links it produces.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#federation">federation</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L121">src/management/ops/index.ts:121</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="groups"><code class="tsd-tag">Readonly</code><span>groups</span><a href="#groups" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">groups</span><span class="tsd-signature-symbol">:</span> <a href="index.GroupsApi.html" class="tsd-signature-type tsd-kind-class">GroupsApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Named collections of users. Roles assigned to a group are inherited by
+every member.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#groups">groups</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L87">src/management/ops/index.ts:87</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="notificationrules"><code class="tsd-tag">Readonly</code><span>notification<wbr/>Rules</span><a href="#notificationrules" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">notificationRules</span><span class="tsd-signature-symbol">:</span> <a href="index.NotificationRulesApi.html" class="tsd-signature-type tsd-kind-class">NotificationRulesApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Which events raise a notification, and to whom.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#notificationrules">notificationRules</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L123">src/management/ops/index.ts:123</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="oauth2clients"><code class="tsd-tag">Readonly</code><span>oauth2<wbr/>Clients</span><a href="#oauth2clients" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">oauth2Clients</span><span class="tsd-signature-symbol">:</span> <a href="index.Oauth2ClientsApi.html" class="tsd-signature-type tsd-kind-class">Oauth2ClientsApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Registered OAuth2/OIDC clients -- the registration half of what §12, §21
+and §26 then speak to.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#oauth2clients">oauth2Clients</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L119">src/management/ops/index.ts:119</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="organizations"><code class="tsd-tag">Readonly</code><span>organizations</span><a href="#organizations" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">organizations</span><span class="tsd-signature-symbol">:</span> <a href="index.OrganizationsApi.html" class="tsd-signature-type tsd-kind-class">OrganizationsApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Organizations an SDK client may read and configure. Creation and deletion
+are outside the SDK boundary (§27.0).</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#organizations">organizations</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L72">src/management/ops/index.ts:72</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="permissions"><code class="tsd-tag">Readonly</code><span>permissions</span><a href="#permissions" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">permissions</span><span class="tsd-signature-symbol">:</span> <a href="index.PermissionsApi.html" class="tsd-signature-type tsd-kind-class">PermissionsApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Permissions -- an action on a resource, optionally narrowed by a scope.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#permissions">permissions</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L91">src/management/ops/index.ts:91</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="pgpkeys"><code class="tsd-tag">Readonly</code><span>pgp<wbr/>Keys</span><a href="#pgpkeys" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">pgpKeys</span><span class="tsd-signature-symbol">:</span> <a href="index.PgpKeysApi.html" class="tsd-signature-type tsd-kind-class">PgpKeysApi</a></div>
+<div class="tsd-comment tsd-typography"><p>OpenPGP keys used for audit signing and encrypted data export.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#pgpkeys">pgpKeys</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L109">src/management/ops/index.ts:109</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="platform"><code class="tsd-tag">Readonly</code><span>platform</span><a href="#platform" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">platform</span><span class="tsd-signature-symbol">:</span> <a href="index.PlatformApi.html" class="tsd-signature-type tsd-kind-class">PlatformApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Deployment-level probes and FIDO metadata state. Unauthenticated where the
+server leaves them so.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#platform">platform</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L154">src/management/ops/index.ts:154</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="privacy"><code class="tsd-tag">Readonly</code><span>privacy</span><a href="#privacy" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">privacy</span><span class="tsd-signature-symbol">:</span> <a href="index.PrivacyApi.html" class="tsd-signature-type tsd-kind-class">PrivacyApi</a></div>
+<div class="tsd-comment tsd-typography"><p>GDPR self-service: the authenticated account's own export and erasure.
+Scoped to the caller, never to another user.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#privacy">privacy</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L149">src/management/ops/index.ts:149</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="reactors"><code class="tsd-tag">Readonly</code><span>reactors</span><a href="#reactors" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">reactors</span><span class="tsd-signature-symbol">:</span> <a href="index.ReactorsApi.html" class="tsd-signature-type tsd-kind-class">ReactorsApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Registration of §22 AMQP extension actors -- the admin surface §22.9
+describes, which no SDK could previously reach.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#reactors">reactors</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L137">src/management/ops/index.ts:137</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="resources"><code class="tsd-tag">Readonly</code><span>resources</span><a href="#resources" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">resources</span><span class="tsd-signature-symbol">:</span> <a href="index.ResourcesApi.html" class="tsd-signature-type tsd-kind-class">ResourcesApi</a></div>
+<div class="tsd-comment tsd-typography"><p>The resource hierarchy role assignments cascade down.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#resources">resources</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L93">src/management/ops/index.ts:93</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="roles"><code class="tsd-tag">Readonly</code><span>roles</span><a href="#roles" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">roles</span><span class="tsd-signature-symbol">:</span> <a href="index.RolesApi.html" class="tsd-signature-type tsd-kind-class">RolesApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Roles, their permission sets, and their assignment to users and groups.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#roles">roles</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L89">src/management/ops/index.ts:89</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="scimtokens"><code class="tsd-tag">Readonly</code><span>scim<wbr/>Tokens</span><a href="#scimtokens" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">scimTokens</span><span class="tsd-signature-symbol">:</span> <a href="index.ScimTokensApi.html" class="tsd-signature-type tsd-kind-class">ScimTokensApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Bearer tokens for the SCIM 2.0 provisioning endpoint.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#scimtokens">scimTokens</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L132">src/management/ops/index.ts:132</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="scopes"><code class="tsd-tag">Readonly</code><span>scopes</span><a href="#scopes" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">scopes</span><span class="tsd-signature-symbol">:</span> <a href="index.ScopesApi.html" class="tsd-signature-type tsd-kind-class">ScopesApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Sub-resource granularity, always addressed under their resource.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#scopes">scopes</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L95">src/management/ops/index.ts:95</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="serviceaccounts"><code class="tsd-tag">Readonly</code><span>service<wbr/>Accounts</span><a href="#serviceaccounts" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">serviceAccounts</span><span class="tsd-signature-symbol">:</span> <a href="index.ServiceAccountsApi.html" class="tsd-signature-type tsd-kind-class">ServiceAccountsApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Machine identities, their secrets, and the certificate a device-bound one
+authenticates with.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#serviceaccounts">serviceAccounts</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L100">src/management/ops/index.ts:100</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="settings"><code class="tsd-tag">Readonly</code><span>settings</span><a href="#settings" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">settings</span><span class="tsd-signature-symbol">:</span> <a href="index.SettingsApi.html" class="tsd-signature-type tsd-kind-class">SettingsApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Effective settings, and the organization/tenant layers they resolve from.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#settings">settings</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L130">src/management/ops/index.ts:130</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="telemetry"><code class="tsd-tag">Readonly</code><span>telemetry</span><a href="#telemetry" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">telemetry</span><span class="tsd-signature-symbol">:</span> <a href="index.TelemetryReporter.html" class="tsd-signature-type tsd-kind-class">TelemetryReporter</a></div>
 <div class="tsd-comment tsd-typography"><p>§19 telemetry dispatcher. Empty unless a hook was installed.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L87">src/rest/client.ts:87</a></li></ul></aside></section></section></details>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L101">src/rest/client.ts:101</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="tenants"><code class="tsd-tag">Readonly</code><span>tenants</span><a href="#tenants" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">tenants</span><span class="tsd-signature-symbol">:</span> <a href="index.TenantsApi.html" class="tsd-signature-type tsd-kind-class">TenantsApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Tenants within an organization -- the isolation boundary every other
+namespace is scoped to.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#tenants">tenants</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L77">src/management/ops/index.ts:77</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="users"><code class="tsd-tag">Readonly</code><span>users</span><a href="#users" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">users</span><span class="tsd-signature-symbol">:</span> <a href="index.UsersApi.html" class="tsd-signature-type tsd-kind-class">UsersApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Users within the client's tenant, and the administrative side of their
+second factor and lockout state.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#users">users</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L82">src/management/ops/index.ts:82</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="webauthnpolicy"><code class="tsd-tag">Readonly</code><span>webauthn<wbr/>Policy</span><a href="#webauthnpolicy" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">webauthnPolicy</span><span class="tsd-signature-symbol">:</span> <a href="index.WebauthnPolicyApi.html" class="tsd-signature-type tsd-kind-class">WebauthnPolicyApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Per-tenant attestation policy governing the §24 ceremonies, and the
+compliance report over it.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#webauthnpolicy">webauthnPolicy</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L142">src/management/ops/index.ts:142</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="webhooks"><code class="tsd-tag">Readonly</code><span>webhooks</span><a href="#webhooks" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">webhooks</span><span class="tsd-signature-symbol">:</span> <a href="index.WebhooksApi.html" class="tsd-signature-type tsd-kind-class">WebhooksApi</a></div>
+<div class="tsd-comment tsd-typography"><p>Outbound event notifications. Delivery signatures are verified with the
+§13 helper, which this namespace configures.</p>
+</div><aside class="tsd-sources">
+<p>Inherited from <a href="../interfaces/index.ManagementNamespaces.html">ManagementNamespaces</a>.<a href="../interfaces/index.ManagementNamespaces.html#webhooks">webhooks</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/management/ops/index.ts#L114">src/management/ops/index.ts:114</a></li></ul></aside></section></section></details>
+<details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Accessors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h2 class="tsd-anchor-link" id="accessors-1">Accessors<a href="#accessors-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
+<section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="management"><span>management</span><a href="#management" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li>
+<div class="tsd-signature" id="managementmanagement"><span class="tsd-signature-keyword">get</span> <span class="tsd-kind-get-signature">management</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/index.ManagementNamespaces.html" class="tsd-signature-type tsd-kind-interface">ManagementNamespaces</a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Every §27 namespace behind one accessor (§27.2 rule 4).</p>
+<p><code>client.management.users</code> and <code>client.users</code> are the same handle; this
+exists for callers who prefer the management surface not to be mixed in
+with §1's eight methods when reading a call site.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.ManagementNamespaces.html" class="tsd-signature-type tsd-kind-interface">ManagementNamespaces</a></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L143">src/rest/client.ts:143</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="manifest"><span>manifest</span><a href="#manifest" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li>
+<div class="tsd-signature" id="manifestmanifest"><span class="tsd-signature-keyword">get</span> <span class="tsd-kind-get-signature">manifest</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.ManifestApi.html" class="tsd-signature-type tsd-kind-class">ManifestApi</a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Declarative management — <a href="http://CONTRACT.md">CONTRACT.md</a> §27.6.</p>
+<p><code>client.manifest.plan(m)</code> says what would change and writes nothing;
+<code>client.manifest.apply(m)</code> reconciles.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <a href="index.ManifestApi.html" class="tsd-signature-type tsd-kind-class">ManifestApi</a></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L132">src/rest/client.ts:132</a></li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -133,7 +383,7 @@ via <code>httpOnly</code> cookies set by the server.</p>
 <li><span><span class="tsd-kind-parameter">checks</span>: <a href="../interfaces/index.AccessCheck.html" class="tsd-signature-type tsd-kind-interface">AccessCheck</a><span class="tsd-signature-symbol">[]</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.AccessDecision.html" class="tsd-signature-type tsd-kind-interface">AccessDecision</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L224">src/rest/client.ts:224</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L264">src/rest/client.ts:264</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="can"><span>can</span><a href="#can" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -150,7 +400,7 @@ via <code>httpOnly</code> cookies set by the server.</p>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">scope</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L219">src/rest/client.ts:219</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L259">src/rest/client.ts:259</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="checkaccess"><span>check<wbr/>Access</span><a href="#checkaccess" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -165,7 +415,7 @@ via <code>httpOnly</code> cookies set by the server.</p>
 <li><span><span class="tsd-kind-parameter">check</span>: <a href="../interfaces/index.AccessCheck.html" class="tsd-signature-type tsd-kind-interface">AccessCheck</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.AccessDecision.html" class="tsd-signature-type tsd-kind-interface">AccessDecision</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L214">src/rest/client.ts:214</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L254">src/rest/client.ts:254</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="close"><span>close</span><a href="#close" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -186,7 +436,7 @@ silently reconnecting.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L123">src/rest/client.ts:123</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L163">src/rest/client.ts:163</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="confirmpasswordreset"><span>confirm<wbr/>Password<wbr/>Reset</span><a href="#confirmpasswordreset" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -201,7 +451,7 @@ silently reconnecting.</p>
 <li><span><span class="tsd-kind-parameter">confirmation</span>: <a href="../interfaces/index.PasswordResetConfirmation.html" class="tsd-signature-type tsd-kind-interface">PasswordResetConfirmation</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L328">src/rest/client.ts:328</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L380">src/rest/client.ts:380</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="login"><span>login</span><a href="#login" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -217,7 +467,7 @@ silently reconnecting.</p>
 <li><span><span class="tsd-kind-parameter">password</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.LoginResult.html" class="tsd-signature-type tsd-kind-type-alias">LoginResult</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L154">src/rest/client.ts:154</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L194">src/rest/client.ts:194</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="loginopaque"><span>login<wbr/>Opaque</span><a href="#loginopaque" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -240,7 +490,7 @@ that just failed to prove it holds the record.</p>
 <li><span><span class="tsd-kind-parameter">password</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.LoginResult.html" class="tsd-signature-type tsd-kind-type-alias">LoginResult</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L170">src/rest/client.ts:170</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L210">src/rest/client.ts:210</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="logout"><span>logout</span><a href="#logout" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -251,7 +501,7 @@ that just failed to prove it holds the record.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L209">src/rest/client.ts:209</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L249">src/rest/client.ts:249</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="mfaconfirm"><span>mfa<wbr/>Confirm</span><a href="#mfaconfirm" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -266,7 +516,7 @@ that just failed to prove it holds the record.</p>
 <li><span><span class="tsd-kind-parameter">totpCode</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L291">src/rest/client.ts:291</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L331">src/rest/client.ts:331</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="mfaenroll"><span>mfa<wbr/>Enroll</span><a href="#mfaenroll" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -277,7 +527,7 @@ that just failed to prove it holds the record.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.MfaEnrollment.html" class="tsd-signature-type tsd-kind-interface">MfaEnrollment</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L286">src/rest/client.ts:286</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L326">src/rest/client.ts:326</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="mfasetupconfirm"><span>mfa<wbr/>Setup<wbr/>Confirm</span><a href="#mfasetupconfirm" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -293,7 +543,7 @@ that just failed to prove it holds the record.</p>
 <li><span><span class="tsd-kind-parameter">totpCode</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.LoginResult.html" class="tsd-signature-type tsd-kind-type-alias">LoginResult</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L301">src/rest/client.ts:301</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L341">src/rest/client.ts:341</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="mfasetupenroll"><span>mfa<wbr/>Setup<wbr/>Enroll</span><a href="#mfasetupenroll" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -308,7 +558,7 @@ that just failed to prove it holds the record.</p>
 <li><span><span class="tsd-kind-parameter">setupToken</span>: <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <a href="index.Sensitive.html" class="tsd-signature-type tsd-kind-class">Sensitive</a><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.MfaEnrollment.html" class="tsd-signature-type tsd-kind-interface">MfaEnrollment</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L296">src/rest/client.ts:296</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L336">src/rest/client.ts:336</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="opaqueavailable"><span>opaque<wbr/>Available</span><a href="#opaqueavailable" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -322,7 +572,7 @@ rather than throwing at login time.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L194">src/rest/client.ts:194</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L234">src/rest/client.ts:234</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="opaqueenrollment"><span>opaque<wbr/>Enrollment</span><a href="#opaqueenrollment" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -342,7 +592,7 @@ valid record.</p>
 <li><span><span class="tsd-kind-parameter">password</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.OpaqueEnrollment.html" class="tsd-signature-type tsd-kind-interface">OpaqueEnrollment</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L183">src/rest/client.ts:183</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L223">src/rest/client.ts:223</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="passwordresetcontext"><span>password<wbr/>Reset<wbr/>Context</span><a href="#passwordresetcontext" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -357,7 +607,7 @@ valid record.</p>
 <li><span><span class="tsd-kind-parameter">token</span>: <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <a href="index.Sensitive.html" class="tsd-signature-type tsd-kind-class">Sensitive</a><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.PasswordResetContext.html" class="tsd-signature-type tsd-kind-interface">PasswordResetContext</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L321">src/rest/client.ts:321</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L373">src/rest/client.ts:373</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="refresh"><span>refresh</span><a href="#refresh" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -368,7 +618,7 @@ valid record.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L204">src/rest/client.ts:204</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L244">src/rest/client.ts:244</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="requestpasswordreset"><span>request<wbr/>Password<wbr/>Reset</span><a href="#requestpasswordreset" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -383,14 +633,28 @@ valid record.</p>
 <li><span><span class="tsd-kind-parameter">request</span>: <a href="../interfaces/index.PasswordResetRequest.html" class="tsd-signature-type tsd-kind-interface">PasswordResetRequest</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L316">src/rest/client.ts:316</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L368">src/rest/client.ts:368</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="resendownverification"><span>resend<wbr/>Own<wbr/>Verification</span><a href="#resendownverification" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="resendownverification-1"><span class="tsd-kind-call-signature">resendOwnVerification</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span><a href="#resendownverification-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p><code>POST /api/v1/users/me/resend-verification</code> (§25.1, §25.7) — the
+authenticated resend, which takes no address and reports what happened.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L363">src/rest/client.ts:363</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="resendverification"><span>resend<wbr/>Verification</span><a href="#resendverification" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="resendverification-1"><span class="tsd-kind-call-signature">resendVerification</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">email</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">tenantId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span><a href="#resendverification-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
-<div class="tsd-comment tsd-typography"><p><code>POST /api/v1/auth/resend-verification</code> (§25.1).</p>
+<div class="tsd-comment tsd-typography"><p><code>POST /api/v1/auth/resend-verification</code> (§25.1) — the unauthenticated
+resend. Resolves whatever the outcome; use <a href="#resendownverification" class="tsd-kind-method">resendOwnVerification</a>
+when there is a session (§25.7).</p>
 </div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
@@ -399,7 +663,7 @@ valid record.</p>
 <li><span><span class="tsd-kind-parameter">tenantId</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L311">src/rest/client.ts:311</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L355">src/rest/client.ts:355</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="verifyemail"><span>verify<wbr/>Email</span><a href="#verifyemail" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -415,7 +679,7 @@ valid record.</p>
 <li><span><span class="tsd-kind-parameter">tenantId</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L306">src/rest/client.ts:306</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L346">src/rest/client.ts:346</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="verifymfa"><span>verify<wbr/>Mfa</span><a href="#verifymfa" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -431,7 +695,7 @@ valid record.</p>
 <li><span><span class="tsd-kind-parameter">code</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.LoginResult.html" class="tsd-signature-type tsd-kind-type-alias">LoginResult</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L199">src/rest/client.ts:199</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L239">src/rest/client.ts:239</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="webauthnauthenticatefinish"><span>webauthn<wbr/>Authenticate<wbr/>Finish</span><a href="#webauthnauthenticatefinish" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -447,7 +711,7 @@ valid record.</p>
 <li><span><span class="tsd-kind-parameter">response</span>: <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <a href="../interfaces/index.WebauthnAuthenticationResponse.html" class="tsd-signature-type tsd-kind-interface">WebauthnAuthenticationResponse</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.WebauthnLoginResult.html" class="tsd-signature-type tsd-kind-interface">WebauthnLoginResult</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L259">src/rest/client.ts:259</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L299">src/rest/client.ts:299</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="webauthnauthenticatestart"><span>webauthn<wbr/>Authenticate<wbr/>Start</span><a href="#webauthnauthenticatestart" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -462,7 +726,7 @@ valid record.</p>
 <li><span><span class="tsd-kind-parameter">challengeToken</span>: <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <a href="index.Sensitive.html" class="tsd-signature-type tsd-kind-class">Sensitive</a><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.WebauthnAuthenticationChallenge.html" class="tsd-signature-type tsd-kind-interface">WebauthnAuthenticationChallenge</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L252">src/rest/client.ts:252</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L292">src/rest/client.ts:292</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="webauthndiscoverablefinish"><span>webauthn<wbr/>Discoverable<wbr/>Finish</span><a href="#webauthndiscoverablefinish" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -478,7 +742,7 @@ valid record.</p>
 <li><span><span class="tsd-kind-parameter">response</span>: <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <a href="../interfaces/index.WebauthnAuthenticationResponse.html" class="tsd-signature-type tsd-kind-interface">WebauthnAuthenticationResponse</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.WebauthnLoginResult.html" class="tsd-signature-type tsd-kind-interface">WebauthnLoginResult</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L274">src/rest/client.ts:274</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L314">src/rest/client.ts:314</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="webauthndiscoverablestart"><span>webauthn<wbr/>Discoverable<wbr/>Start</span><a href="#webauthndiscoverablestart" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -493,7 +757,7 @@ valid record.</p>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">workspace</span>: <a href="../interfaces/index.WebauthnWorkspace.html" class="tsd-signature-type tsd-kind-interface">WebauthnWorkspace</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.WebauthnAuthenticationChallenge.html" class="tsd-signature-type tsd-kind-interface">WebauthnAuthenticationChallenge</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L267">src/rest/client.ts:267</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L307">src/rest/client.ts:307</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="webauthnregisterfinish"><span>webauthn<wbr/>Register<wbr/>Finish</span><a href="#webauthnregisterfinish" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -510,7 +774,7 @@ valid record.</p>
 <li><span><span class="tsd-kind-parameter">response</span>: <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <a href="../interfaces/index.WebauthnRegistrationResponse.html" class="tsd-signature-type tsd-kind-interface">WebauthnRegistrationResponse</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.WebauthnCredential.html" class="tsd-signature-type tsd-kind-interface">WebauthnCredential</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L243">src/rest/client.ts:243</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L283">src/rest/client.ts:283</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="webauthnregisterstart"><span>webauthn<wbr/>Register<wbr/>Start</span><a href="#webauthnregisterstart" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -521,7 +785,7 @@ valid record.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.WebauthnRegistrationChallenge.html" class="tsd-signature-type tsd-kind-interface">WebauthnRegistrationChallenge</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/0191daa2253681c03cdbcbc5cb5166898c8b69b5/src/rest/client.ts#L238">src/rest/client.ts:238</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/222694b1b6980df7a4a6133d6af67ff25b4d09aa/src/rest/client.ts#L278">src/rest/client.ts:278</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -540,9 +804,11 @@ valid record.</p>
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Constructors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Constructors</summary>
 <div><a href="#constructor"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Constructor"><use href="../assets/icons.svg#icon-512"></use></svg><span>constructor</span></a></div></details>
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Properties</summary>
-<div><a href="#decisionmemo"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>decision<wbr/>Memo</span></a><a href="#telemetry"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>telemetry</span></a></div></details>
+<div><a href="#audit" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>audit</span></a><a href="#cacertificates" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>ca<wbr/>Certificates</span></a><a href="#certificates" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>certificates</span></a><a href="#decisionmemo"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>decision<wbr/>Memo</span></a><a href="#emailconfig" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>email<wbr/>Config</span></a><a href="#federation" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>federation</span></a><a href="#groups" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>groups</span></a><a href="#notificationrules" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>notification<wbr/>Rules</span></a><a href="#oauth2clients" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>oauth2<wbr/>Clients</span></a><a href="#organizations" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>organizations</span></a><a href="#permissions" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>permissions</span></a><a href="#pgpkeys" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>pgp<wbr/>Keys</span></a><a href="#platform" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>platform</span></a><a href="#privacy" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>privacy</span></a><a href="#reactors" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>reactors</span></a><a href="#resources" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>resources</span></a><a href="#roles" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>roles</span></a><a href="#scimtokens" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>scim<wbr/>Tokens</span></a><a href="#scopes" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>scopes</span></a><a href="#serviceaccounts" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>service<wbr/>Accounts</span></a><a href="#settings" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>settings</span></a><a href="#telemetry"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>telemetry</span></a><a href="#tenants" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>tenants</span></a><a href="#users" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>users</span></a><a href="#webauthnpolicy" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>webauthn<wbr/>Policy</span></a><a href="#webhooks" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>webhooks</span></a></div></details>
+<details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Accessors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Accessors</summary>
+<div><a href="#management"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Accessor"><use href="../assets/icons.svg#icon-262144"></use></svg><span>management</span></a><a href="#manifest"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Accessor"><use href="../assets/icons.svg#icon-262144"></use></svg><span>manifest</span></a></div></details>
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Methods</summary>
-<div><a href="#batchcheck"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>batch<wbr/>Check</span></a><a href="#can"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>can</span></a><a href="#checkaccess"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>check<wbr/>Access</span></a><a href="#close"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>close</span></a><a href="#confirmpasswordreset"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>confirm<wbr/>Password<wbr/>Reset</span></a><a href="#login"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>login</span></a><a href="#loginopaque"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>login<wbr/>Opaque</span></a><a href="#logout"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>logout</span></a><a href="#mfaconfirm"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>mfa<wbr/>Confirm</span></a><a href="#mfaenroll"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>mfa<wbr/>Enroll</span></a><a href="#mfasetupconfirm"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>mfa<wbr/>Setup<wbr/>Confirm</span></a><a href="#mfasetupenroll"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>mfa<wbr/>Setup<wbr/>Enroll</span></a><a href="#opaqueavailable"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>opaque<wbr/>Available</span></a><a href="#opaqueenrollment"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>opaque<wbr/>Enrollment</span></a><a href="#passwordresetcontext"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>password<wbr/>Reset<wbr/>Context</span></a><a href="#refresh"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>refresh</span></a><a href="#requestpasswordreset"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>request<wbr/>Password<wbr/>Reset</span></a><a href="#resendverification"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>resend<wbr/>Verification</span></a><a href="#verifyemail"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>verify<wbr/>Email</span></a><a href="#verifymfa"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>verify<wbr/>Mfa</span></a><a href="#webauthnauthenticatefinish"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>webauthn<wbr/>Authenticate<wbr/>Finish</span></a><a href="#webauthnauthenticatestart"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>webauthn<wbr/>Authenticate<wbr/>Start</span></a><a href="#webauthndiscoverablefinish"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>webauthn<wbr/>Discoverable<wbr/>Finish</span></a><a href="#webauthndiscoverablestart"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>webauthn<wbr/>Discoverable<wbr/>Start</span></a><a href="#webauthnregisterfinish"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>webauthn<wbr/>Register<wbr/>Finish</span></a><a href="#webauthnregisterstart"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>webauthn<wbr/>Register<wbr/>Start</span></a></div></details></div></details></div>
+<div><a href="#batchcheck"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>batch<wbr/>Check</span></a><a href="#can"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>can</span></a><a href="#checkaccess"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>check<wbr/>Access</span></a><a href="#close"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>close</span></a><a href="#confirmpasswordreset"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>confirm<wbr/>Password<wbr/>Reset</span></a><a href="#login"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>login</span></a><a href="#loginopaque"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>login<wbr/>Opaque</span></a><a href="#logout"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>logout</span></a><a href="#mfaconfirm"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>mfa<wbr/>Confirm</span></a><a href="#mfaenroll"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>mfa<wbr/>Enroll</span></a><a href="#mfasetupconfirm"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>mfa<wbr/>Setup<wbr/>Confirm</span></a><a href="#mfasetupenroll"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>mfa<wbr/>Setup<wbr/>Enroll</span></a><a href="#opaqueavailable"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>opaque<wbr/>Available</span></a><a href="#opaqueenrollment"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>opaque<wbr/>Enrollment</span></a><a href="#passwordresetcontext"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>password<wbr/>Reset<wbr/>Context</span></a><a href="#refresh"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>refresh</span></a><a href="#requestpasswordreset"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>request<wbr/>Password<wbr/>Reset</span></a><a href="#resendownverification"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>resend<wbr/>Own<wbr/>Verification</span></a><a href="#resendverification"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>resend<wbr/>Verification</span></a><a href="#verifyemail"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>verify<wbr/>Email</span></a><a href="#verifymfa"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>verify<wbr/>Mfa</span></a><a href="#webauthnauthenticatefinish"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>webauthn<wbr/>Authenticate<wbr/>Finish</span></a><a href="#webauthnauthenticatestart"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>webauthn<wbr/>Authenticate<wbr/>Start</span></a><a href="#webauthndiscoverablefinish"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>webauthn<wbr/>Discoverable<wbr/>Finish</span></a><a href="#webauthndiscoverablestart"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>webauthn<wbr/>Discoverable<wbr/>Start</span></a><a href="#webauthnregisterfinish"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>webauthn<wbr/>Register<wbr/>Finish</span></a><a href="#webauthnregisterstart"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>webauthn<wbr/>Register<wbr/>Start</span></a></div></details></div></details></div>
 <div class="site-menu">
 <nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
