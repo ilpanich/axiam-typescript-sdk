@@ -29,7 +29,7 @@
 §24, §25, §26, §27 (including §6.1 mTLS client certificates, the §10.1 minimum
 local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
 <code>verifyWebhook</code> signature verifier).</p>
-<p>§27 is implemented <strong>in full</strong>, both halves: the 146-operation imperative surface <em>and</em>
+<p>§27 is implemented <strong>in full</strong>, both halves: the 147-operation imperative surface <em>and</em>
 the §27.6 declarative manifest with its §27.7 <code>defineManifest</code> and decorator forms. The
 contract asks an SDK that ships only one half to say which; this one ships both.</p>
 <p>§12.7, §14, §15, §22, §24, §25, §26 and §27 are named rather than folded into the range
@@ -792,6 +792,25 @@ principal of exactly one tenant, and changing the header for one of those
 produces a <code>403</code> — so a UI that offers the switch to everyone has turned a
 distinction the server made into a failure the user discovers. <code>false</code> against a
 server older than contract 1.31, which is the safe reading of absent.</p>
+<h4 id="signing-one-in-§521" class="tsd-anchor-link">Signing one in (§5.2.1)<a href="#signing-one-in-§521" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4>
+<p>The reserved tenant has a fixed slug, <code>organization</code>, the same in every
+deployment — so signing in as an organization-level principal needs no new
+surface, only the ordinary constructor:</p>
+<pre><code class="ts"><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">client</span><span class="hl-1"> = </span><span class="hl-0">new</span><span class="hl-1"> </span><span class="hl-3">AxiamClient</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-4">baseUrl:</span><span class="hl-1"> </span><span class="hl-5">&#39;https://iam.example.com&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">tenantSlug:</span><span class="hl-1"> </span><span class="hl-5">&#39;organization&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">orgSlug:</span><span class="hl-1"> </span><span class="hl-5">&#39;globex&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">});</span><br/><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">login</span><span class="hl-1">(</span><span class="hl-5">&#39;root@example.com&#39;</span><span class="hl-1">, </span><span class="hl-4">password</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Prefer that form. The server also reads a login body that names <em>no</em> tenant as
+&quot;the organization's own scope&quot;, but §5 rule 2 still requires a tenant on the
+<code>X-Tenant-ID</code> header of every request after the login, so the client needs one
+either way.</p>
+<p>What §5.2.1 forbids is the third possibility: an empty-string slug. No row can
+carry one, so <code>tenant_slug: &quot;&quot;</code> resolves nothing — and on
+<code>/auth/opaque/login/start</code> it fails on the workspace <em>before</em> the tenant's
+OPAQUE mode is read, so the <code>404</code> that means &quot;OPAQUE is not offered here&quot; never
+arrives and the caller has no fallback to take. This SDK cannot emit one:
+<code>tenantSlug: ''</code> fails §5's tenant requirement at construction, and
+<code>buildLoginBody</code> omits an identifier it was not given rather than sending it
+blank.</p>
 <p><code>requestPasswordReset</code> resolves <strong>whether or not the address exists</strong>, and this
 SDK exposes no way to tell the difference. That is not an omission to improve on:
 any signal distinguishing them — including one inferred from timing — turns the
@@ -1045,7 +1064,7 @@ entries are keyed by subject rather than by session.</p>
 <p>Everything above assumes a populated tenant. <code>login</code> signs a user in,
 <code>checkAccess</code> asks about a resource, <code>verifyWebhook</code> checks a delivery signature — and
 none of them can create the user, declare the resource or register the webhook. The
-management surface is the part that can: <strong>146 operations across 24 namespaces</strong>,
+management surface is the part that can: <strong>147 operations across 24 namespaces</strong>,
 generated from <code>management-registry.json</code>, which is the whole server API minus what other
 contract sections own and minus organization creation and deletion (§27.0 keeps those out
 of reach of a client library on purpose).</p>
@@ -1127,7 +1146,7 @@ written before §27 still catches the first two.</p>
 request, on any route that needs the UUID — the SDK will not resolve a slug behind your
 back.</p>
 <h3 id="declarative-manifests-§276-§277" class="tsd-anchor-link">Declarative manifests (§27.6, §27.7)<a href="#declarative-manifests-§276-§277" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<p>Calling 146 operations one at a time is rarely what an application wants. What it does at
+<p>Calling 147 operations one at a time is rarely what an application wants. What it does at
 start-up, in a migration, or in a test fixture is assert a shape:</p>
 <pre><code class="ts"><span class="hl-7">import</span><span class="hl-1"> { </span><span class="hl-4">defineManifest</span><span class="hl-1">, </span><span class="hl-4">Sensitive</span><span class="hl-1"> } </span><span class="hl-7">from</span><span class="hl-1"> </span><span class="hl-5">&#39;axiam-sdk/rest&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-7">export</span><span class="hl-1"> </span><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">desired</span><span class="hl-1"> = </span><span class="hl-3">defineManifest</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-4">resources:</span><span class="hl-1"> [</span><br/><span class="hl-1">    { </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;docs&#39;</span><span class="hl-1">, </span><span class="hl-4">name:</span><span class="hl-1"> </span><span class="hl-5">&#39;documents&#39;</span><span class="hl-1">, </span><span class="hl-4">resourceType:</span><span class="hl-1"> </span><span class="hl-5">&#39;collection&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">scopes:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;draft&#39;</span><span class="hl-1">, </span><span class="hl-4">name:</span><span class="hl-1"> </span><span class="hl-5">&#39;draft&#39;</span><span class="hl-1">, </span><span class="hl-4">description:</span><span class="hl-1"> </span><span class="hl-5">&#39;Unpublished&#39;</span><span class="hl-1"> }] },</span><br/><span class="hl-1">  ],</span><br/><span class="hl-1">  </span><span class="hl-4">permissions:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;read&#39;</span><span class="hl-1">, </span><span class="hl-4">action:</span><span class="hl-1"> </span><span class="hl-5">&#39;document:read&#39;</span><span class="hl-1">, </span><span class="hl-4">description:</span><span class="hl-1"> </span><span class="hl-5">&#39;Read a document&#39;</span><span class="hl-1"> }],</span><br/><span class="hl-1">  </span><span class="hl-4">roles:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;editor&#39;</span><span class="hl-1">, </span><span class="hl-4">name:</span><span class="hl-1"> </span><span class="hl-5">&#39;Editor&#39;</span><span class="hl-1">, </span><span class="hl-4">description:</span><span class="hl-1"> </span><span class="hl-5">&#39;Edits documents&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">            </span><span class="hl-4">grants:</span><span class="hl-1"> [{ </span><span class="hl-4">permission:</span><span class="hl-1"> </span><span class="hl-5">&#39;read&#39;</span><span class="hl-1">, </span><span class="hl-4">scopes:</span><span class="hl-1"> [</span><span class="hl-5">&#39;draft&#39;</span><span class="hl-1">] }] }],</span><br/><span class="hl-1">  </span><span class="hl-4">groups:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;staff&#39;</span><span class="hl-1">, </span><span class="hl-4">name:</span><span class="hl-1"> </span><span class="hl-5">&#39;Staff&#39;</span><span class="hl-1">, </span><span class="hl-4">description:</span><span class="hl-1"> </span><span class="hl-5">&#39;The team&#39;</span><span class="hl-1">, </span><span class="hl-4">roles:</span><span class="hl-1"> [</span><span class="hl-5">&#39;editor&#39;</span><span class="hl-1">] }],</span><br/><span class="hl-1">  </span><span class="hl-4">users:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;alice&#39;</span><span class="hl-1">, </span><span class="hl-4">username:</span><span class="hl-1"> </span><span class="hl-5">&#39;alice&#39;</span><span class="hl-1">, </span><span class="hl-4">email:</span><span class="hl-1"> </span><span class="hl-5">&#39;alice@example.com&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">            </span><span class="hl-4">initialPassword:</span><span class="hl-1"> </span><span class="hl-0">new</span><span class="hl-1"> </span><span class="hl-3">Sensitive</span><span class="hl-1">(</span><span class="hl-4">pw</span><span class="hl-1">), </span><span class="hl-4">groups:</span><span class="hl-1"> [</span><span class="hl-5">&#39;staff&#39;</span><span class="hl-1">] }],</span><br/><span class="hl-1">});</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">plan</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-4">manifest</span><span class="hl-1">.</span><span class="hl-3">plan</span><span class="hl-1">(</span><span class="hl-4">desired</span><span class="hl-1">);   </span><span class="hl-6">// reads only — no writes</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">report</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-4">manifest</span><span class="hl-1">.</span><span class="hl-3">apply</span><span class="hl-1">(</span><span class="hl-4">desired</span><span class="hl-1">);</span>
 </code><button type="button">Copy</button></pre>
@@ -1146,7 +1165,7 @@ is no prune option, deliberately.</li>
 a tenant that also holds hand-made state.</li>
 <li><strong>Applying twice converges</strong>: the second plan is all <code>no-change</code>. That is what makes
 re-running after a failure safe.</li>
-<li><strong>There is no transaction</strong> across 146 independent HTTP endpoints, and <code>ApplyReport</code> does
+<li><strong>There is no transaction</strong> across 147 independent HTTP endpoints, and <code>ApplyReport</code> does
 not pretend there is. If step 12 of 30 fails, steps 1–11 have happened; the report says
 which, execution stops rather than continuing blindly, and there is no <code>rollback</code> —
 because this SDK could not honour one.</li>
@@ -1298,7 +1317,10 @@ the TypeDoc API reference to this repo's GitHub Pages site.</p>
 <ul>
 <li><a href="#has-a-third-outcome"><span> has a third outcome</span></a></li>
 <li><a href="#email-verification-and-password-reset"><span>Email verification and password reset</span></a></li>
-<li><a href="#organization-level-principals-§52"><span>Organization-<wbr/>level principals (§5.2)</span></a></li></ul></li>
+<li><a href="#organization-level-principals-§52"><span>Organization-<wbr/>level principals (§5.2)</span></a></li>
+<li>
+<ul>
+<li><a href="#signing-one-in-§521"><span>Signing one in (§5.2.1)</span></a></li></ul></li></ul></li>
 <li><a href="#device-authorization-grant-contractmd-§14"><span>Device authorization grant (, <wbr/>CONTRACT.md §14)</span></a></li>
 <li><a href="#token-exchange-contractmd-§15"><span>Token exchange (, <wbr/>CONTRACT.md §15)</span></a></li>
 <li>

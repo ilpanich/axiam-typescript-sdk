@@ -142,7 +142,7 @@ Four things worth knowing before you point this at a real tenant:
  3. Applying twice converges: the second plan is all no-change. That is the
     property that makes re-running after a failure safe.
 
- 4. There is no transaction across 146 independent HTTP endpoints, and
+ 4. There is no transaction across 147 independent HTTP endpoints, and
     ApplyReport does not pretend there is. If step 12 of 30 fails, steps 1-11
     have happened; the report says which, execution stops rather than
     continuing blindly, and there is no rollback — because the SDK could not
