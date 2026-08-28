@@ -318,5 +318,13 @@ jobs:
       # over OIDC, so a NODE_AUTH_TOKEN here would mean the trusted publisher
       # is configured and never used, and the provenance attestation — the
       # reason for the whole exercise — would be decorative.
+      #
+      # T-148 / H-1: no separate `attest-build-provenance` step, because
+      # `--provenance` already produces one. npm's provenance is a Sigstore
+      # attestation over the published tarball, signed with this workflow's
+      # OIDC identity and recorded in Rekor — the same construction, published
+      # where the consumer already looks (`npm audit signatures`). A second
+      # attestation in GitHub's store would say the same thing in a place npm
+      # users do not check.
       - name: Publish to npm with provenance
         run: npm publish --access public --provenance --tag "${NPM_DIST_TAG}"

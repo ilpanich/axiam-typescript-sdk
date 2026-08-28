@@ -14,10 +14,10 @@
 // an error — every generated call goes through `sendManagement`, so §3 (CSRF),
 // §4 (the cookie jar), §5 (X-Tenant-ID), §9 (single-flight refresh), §16 and
 // §19 are inherited from the shared axios instance rather than reimplemented
-// 146 times.
+// 147 times.
 //
 // The generated test matters as much as the generated code. This repo's
-// coverage floor is 94% of lines and 95% of functions, and 146 hand-written
+// coverage floor is 94% of lines and 95% of functions, and 147 hand-written
 // smoke tests is the chore that gets three-quarters done.
 //
 //   node scripts/gen-management.mjs            # write
@@ -801,7 +801,7 @@ function emitOpsIndex() {
     ' * One handle per §27 namespace, and the accessors that reach them.',
     ' *',
     ' * §27.2 makes this namespacing normative rather than stylistic: twenty',
-    ' * namespaces have a `list` and fourteen a `get`, so flattening 146 operations',
+    ' * namespaces have a `list` and fourteen a `get`, so flattening 147 operations',
     ' * onto the client would need a disambiguating prefix invented once per',
     ' * operation — and would bury the eight §1 methods most callers actually want',
     ' * under five times as many they do not.',
@@ -1025,7 +1025,7 @@ function emitTest() {
     lines.push('');
   }
 
-  lines.push('/** §27.9: a partial regeneration must fail here, not ship 140 of 146. */');
+  lines.push('/** §27.9: a partial regeneration must fail here, not ship 140 of 147. */');
   lines.push("describe('generated surface', () => {");
   lines.push("  it('covers exactly the operations the registry names', () => {");
   lines.push(`    const exercised = ${JSON.stringify(all.sort(), null, 6).replace(/\n/g, '\n    ')};`);

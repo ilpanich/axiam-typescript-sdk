@@ -1,7 +1,7 @@
 /**
  * Declarative management — CONTRACT.md §27.6.
  *
- * The 146 operations of §27 are the floor, not the ceiling. What an
+ * The 147 operations of §27 are the floor, not the ceiling. What an
  * application actually does at start-up, in a migration, or in a test fixture
  * is **assert a shape**: this tenant has these resources, with these scopes,
  * these permissions, these roles, and these bindings. Written imperatively

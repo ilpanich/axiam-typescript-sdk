@@ -135,4 +135,20 @@ export class TenantsApi {
     });
   }
 
+  /**
+   * `POST /api/v1/organizations/{org_id}/tenants/{tenant_id}/audit-export`
+   *
+   * Not retried on failure (§27.4 rule 8): every write on this surface is
+   * issued exactly once, including the ones that look idempotent.
+   */
+  async exportAudit(tenantId: string): Promise<void> {
+    const orgId = resolveOrg(this.#client, this.#scope, "tenants.export_audit");
+    await sendManagement<void>(this.#client, {
+      operation: 'tenants.export_audit',
+      method: 'POST',
+      pathTemplate: '/api/v1/organizations/{org_id}/tenants/{tenant_id}/audit-export',
+      path: `/api/v1/organizations/${orgId}/tenants/${encodeURIComponent(tenantId)}/audit-export`,
+    });
+  }
+
 }
