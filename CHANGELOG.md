@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-beta02] - 2026-08-28
+
 ### Added
+
+- Contract 1.31 — list search, the truthful resend, organization scope
+
+- Declarative manifests, plan/apply, and the §27.7 forms
+
+- Generate the §27 surface — 146 operations, 24 namespaces
 
 - **CONTRACT 1.31 — the AXIAM server PR #383 surface.** `CONTRACT.md`,
   `openapi.json` and `management-registry.json` re-vendored, and the six things
@@ -71,6 +79,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Re-vendor openapi.json and management-registry.json from axiam main (#84)
+
+- Re-vendor the contract artifacts: spec digest + §27.10 posture (#82)
+
+- README, examples, and the CI codegen gate
+
+- Re-vendor CONTRACT.md, openapi.json and the §27 registry
+
 - **Generated management enums are open.** Each is now a literal union with a
   trailing `(string & {})` arm, so a value this SDK's copy of the spec does not
   list reaches a caller as itself rather than being asserted out of existence
@@ -80,6 +96,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   server adds would break.
 
 ### Fixed
+
+- The search doc linked to an internal symbol
 
 - **`scripts/gen-management.mjs` no longer drops a projected list element.** The
   server answers `GET /api/v1/certificates` with `Certificate` plus one resolved
