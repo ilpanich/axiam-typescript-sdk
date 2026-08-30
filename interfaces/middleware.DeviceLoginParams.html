@@ -16,7 +16,7 @@
 </div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">DeviceLoginParams</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#configuration">configuration</a><span class="tsd-signature-symbol">?:</span> <a href="middleware.OidcConfiguration.html" class="tsd-signature-type tsd-kind-interface">OidcConfiguration</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#onusercode">onUserCode</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">authorization</span><span class="tsd-signature-symbol">:</span> <a href="middleware.DeviceAuthorization.html" class="tsd-signature-type tsd-kind-interface">DeviceAuthorization</a><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#scope">scope</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#tenantid">tenantId</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/74f866d01f68f8372ed42ccc5718902cb8b6b1ed/src/node/oidcTypes.ts#L495">src/node/oidcTypes.ts:495</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/290a9fc36429f668929252fc8ac05e8bad47aa65/src/node/oidcTypes.ts#L495">src/node/oidcTypes.ts:495</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -38,7 +38,7 @@
 <div class="tsd-comment tsd-typography"><p>A pre-fetched discovery document.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/74f866d01f68f8372ed42ccc5718902cb8b6b1ed/src/node/oidcTypes.ts#L501">src/node/oidcTypes.ts:501</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/290a9fc36429f668929252fc8ac05e8bad47aa65/src/node/oidcTypes.ts#L501">src/node/oidcTypes.ts:501</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="onusercode"><span>on<wbr/>User<wbr/>Code</span><a href="#onusercode" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">onUserCode</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">authorization</span><span class="tsd-signature-symbol">:</span> <a href="middleware.DeviceAuthorization.html" class="tsd-signature-type tsd-kind-interface">DeviceAuthorization</a><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></div>
@@ -47,21 +47,21 @@
 it: what the device does with it is the application's decision.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/74f866d01f68f8372ed42ccc5718902cb8b6b1ed/src/node/oidcTypes.ts#L507">src/node/oidcTypes.ts:507</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/290a9fc36429f668929252fc8ac05e8bad47aa65/src/node/oidcTypes.ts#L507">src/node/oidcTypes.ts:507</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="scope"><code class="tsd-tag">Optional</code><span>scope</span><a href="#scope" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">scope</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></div>
 <div class="tsd-comment tsd-typography"><p>Scopes to request.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/74f866d01f68f8372ed42ccc5718902cb8b6b1ed/src/node/oidcTypes.ts#L497">src/node/oidcTypes.ts:497</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/290a9fc36429f668929252fc8ac05e8bad47aa65/src/node/oidcTypes.ts#L497">src/node/oidcTypes.ts:497</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="tenantid"><code class="tsd-tag">Optional</code><span>tenant<wbr/>Id</span><a href="#tenantid" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">tenantId</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Tenant UUID for the <code>tenant_id</code> query parameter.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/74f866d01f68f8372ed42ccc5718902cb8b6b1ed/src/node/oidcTypes.ts#L499">src/node/oidcTypes.ts:499</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/290a9fc36429f668929252fc8ac05e8bad47aa65/src/node/oidcTypes.ts#L499">src/node/oidcTypes.ts:499</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

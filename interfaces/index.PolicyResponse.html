@@ -24,7 +24,7 @@ its effect.</p>
 </div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">PolicyResponse</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#allowed_aaguids">allowed_aaguids</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#block_revoked_status">block_revoked_status</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#blocked_aaguids">blocked_aaguids</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#effective_unknown_aaguid">effective_unknown_aaguid</a><span class="tsd-signature-symbol">:</span> <a href="../types/index.UnknownAaguidAction.html" class="tsd-signature-type tsd-kind-type-alias">UnknownAaguidAction</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#min_certification">min_certification</a><span class="tsd-signature-symbol">?:</span> <a href="../types/index.CertificationLevel.html" class="tsd-signature-type tsd-kind-type-alias">CertificationLevel</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#mode">mode</a><span class="tsd-signature-symbol">:</span> <a href="../types/index.AttestationMode.html" class="tsd-signature-type tsd-kind-type-alias">AttestationMode</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#require_fido_certified">require_fido_certified</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#unknown_aaguid">unknown_aaguid</a><span class="tsd-signature-symbol">?:</span> <a href="../types/index.UnknownAaguidAction.html" class="tsd-signature-type tsd-kind-type-alias">UnknownAaguidAction</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/74f866d01f68f8372ed42ccc5718902cb8b6b1ed/src/management/models.ts#L2125">src/management/models.ts:2125</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/290a9fc36429f668929252fc8ac05e8bad47aa65/src/management/models.ts#L2212">src/management/models.ts:2212</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -56,7 +56,7 @@ tenant, which is visible immediately, rather than an open one, which is
 not.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/74f866d01f68f8372ed42ccc5718902cb8b6b1ed/src/management/models.ts#L2136">src/management/models.ts:2136</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/290a9fc36429f668929252fc8ac05e8bad47aa65/src/management/models.ts#L2223">src/management/models.ts:2223</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="block_revoked_status"><span>block_<wbr/>revoked_<wbr/>status</span><a href="#block_revoked_status" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">block_revoked_status</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
@@ -64,14 +64,14 @@ not.</p>
 <code>*_COMPROMISE</code> status (sticky — D8 step 7).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/74f866d01f68f8372ed42ccc5718902cb8b6b1ed/src/management/models.ts#L2141">src/management/models.ts:2141</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/290a9fc36429f668929252fc8ac05e8bad47aa65/src/management/models.ts#L2228">src/management/models.ts:2228</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="blocked_aaguids"><code class="tsd-tag">Optional</code><span>blocked_<wbr/>aaguids</span><a href="#blocked_aaguids" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">blocked_aaguids</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></div>
 <div class="tsd-comment tsd-typography"><p><code>blocked_aaguids</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/74f866d01f68f8372ed42ccc5718902cb8b6b1ed/src/management/models.ts#L2143">src/management/models.ts:2143</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/290a9fc36429f668929252fc8ac05e8bad47aa65/src/management/models.ts#L2230">src/management/models.ts:2230</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="effective_unknown_aaguid"><span>effective_<wbr/>unknown_<wbr/>aaguid</span><a href="#effective_unknown_aaguid" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">effective_unknown_aaguid</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.UnknownAaguidAction.html" class="tsd-signature-type tsd-kind-type-alias">UnknownAaguidAction</a></div>
@@ -80,21 +80,21 @@ not.</p>
 it.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/74f866d01f68f8372ed42ccc5718902cb8b6b1ed/src/management/models.ts#L2149">src/management/models.ts:2149</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/290a9fc36429f668929252fc8ac05e8bad47aa65/src/management/models.ts#L2236">src/management/models.ts:2236</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="min_certification"><code class="tsd-tag">Optional</code><span>min_<wbr/>certification</span><a href="#min_certification" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">min_certification</span><span class="tsd-signature-symbol">?:</span> <a href="../types/index.CertificationLevel.html" class="tsd-signature-type tsd-kind-type-alias">CertificationLevel</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></div>
 <div class="tsd-comment tsd-typography"><p><code>min_certification</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/74f866d01f68f8372ed42ccc5718902cb8b6b1ed/src/management/models.ts#L2151">src/management/models.ts:2151</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/290a9fc36429f668929252fc8ac05e8bad47aa65/src/management/models.ts#L2238">src/management/models.ts:2238</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="mode"><span>mode</span><a href="#mode" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">mode</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.AttestationMode.html" class="tsd-signature-type tsd-kind-type-alias">AttestationMode</a></div>
 <div class="tsd-comment tsd-typography"><p><code>mode</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/74f866d01f68f8372ed42ccc5718902cb8b6b1ed/src/management/models.ts#L2153">src/management/models.ts:2153</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/290a9fc36429f668929252fc8ac05e8bad47aa65/src/management/models.ts#L2240">src/management/models.ts:2240</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="require_fido_certified"><span>require_<wbr/>fido_<wbr/>certified</span><a href="#require_fido_certified" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">require_fido_certified</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
@@ -102,14 +102,14 @@ it.</p>
 checked before) <code>min_certification</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/74f866d01f68f8372ed42ccc5718902cb8b6b1ed/src/management/models.ts#L2158">src/management/models.ts:2158</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/290a9fc36429f668929252fc8ac05e8bad47aa65/src/management/models.ts#L2245">src/management/models.ts:2245</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="unknown_aaguid"><code class="tsd-tag">Optional</code><span>unknown_<wbr/>aaguid</span><a href="#unknown_aaguid" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">unknown_aaguid</span><span class="tsd-signature-symbol">?:</span> <a href="../types/index.UnknownAaguidAction.html" class="tsd-signature-type tsd-kind-type-alias">UnknownAaguidAction</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></div>
 <div class="tsd-comment tsd-typography"><p><code>unknown_aaguid</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/74f866d01f68f8372ed42ccc5718902cb8b6b1ed/src/management/models.ts#L2160">src/management/models.ts:2160</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/290a9fc36429f668929252fc8ac05e8bad47aa65/src/management/models.ts#L2247">src/management/models.ts:2247</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
