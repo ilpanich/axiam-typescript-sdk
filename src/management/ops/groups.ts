@@ -183,4 +183,59 @@ export class GroupsApi {
     return wire;
   }
 
+  /** `GET /api/v1/groups/{group_id}/service-accounts` */
+  async listServiceAccounts(groupId: string, page: PageRequest = {}): Promise<Page<models.ServiceAccountResponse>> {
+    const wire = await sendManagement<Page<models.ServiceAccountResponse>>(this.#client, {
+      operation: 'groups.list_service_accounts',
+      method: 'GET',
+      pathTemplate: '/api/v1/groups/{group_id}/service-accounts',
+      path: `/api/v1/groups/${encodeURIComponent(groupId)}/service-accounts`,
+      query: { ...pageQuery(page) },
+    });
+    return wire;
+  }
+
+  /**
+   * Walk `groups.list_service_accounts` to exhaustion, concatenating every
+   * page.
+   *
+   * The auto-paging form §27.4 rule 4 requires. It stops on an empty page even
+   * if `total` disagrees, so a misreporting server costs one wasted request
+   * rather than an unbounded loop.
+   */
+  listServiceAccountsAll(groupId: string, start: PageRequest = {}): Promise<models.ServiceAccountResponse[]> {
+    return collectPages(start, (p) => this.listServiceAccounts(groupId, p));
+  }
+
+  /**
+   * `POST /api/v1/groups/{group_id}/service-accounts`
+   *
+   * Not retried on failure (§27.4 rule 8): every write on this surface is
+   * issued exactly once, including the ones that look idempotent.
+   */
+  async addServiceAccount(groupId: string, body: models.AddServiceAccountMemberRequest): Promise<void> {
+    await sendManagement<void>(this.#client, {
+      operation: 'groups.add_service_account',
+      method: 'POST',
+      pathTemplate: '/api/v1/groups/{group_id}/service-accounts',
+      path: `/api/v1/groups/${encodeURIComponent(groupId)}/service-accounts`,
+      body: body,
+    });
+  }
+
+  /**
+   * `DELETE /api/v1/groups/{group_id}/service-accounts/{service_account_id}`
+   *
+   * Not retried on failure (§27.4 rule 8): every write on this surface is
+   * issued exactly once, including the ones that look idempotent.
+   */
+  async removeServiceAccount(groupId: string, serviceAccountId: string): Promise<void> {
+    await sendManagement<void>(this.#client, {
+      operation: 'groups.remove_service_account',
+      method: 'DELETE',
+      pathTemplate: '/api/v1/groups/{group_id}/service-accounts/{service_account_id}',
+      path: `/api/v1/groups/${encodeURIComponent(groupId)}/service-accounts/${encodeURIComponent(serviceAccountId)}`,
+    });
+  }
+
 }

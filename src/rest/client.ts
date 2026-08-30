@@ -213,7 +213,12 @@ export class AxiamClient {
 
   /**
    * Build an OPAQUE registration record to send with any request that sets a
-   * password (§23). The server cannot build one — it never sees the plaintext.
+   * password (§23), sealed against the tenant this client is **acting on**.
+   * The server cannot build one — it never sees the plaintext.
+   *
+   * Right for creating **another** account (§27 `users.create`); for the
+   * caller's *own* password change use {@link opaqueEnrollmentForSelf}, which
+   * seals against the tenant the account lives in (§5.2.2 rule 2).
    *
    * Asynchronous because it performs a `register/start` round trip: the
    * envelope is sealed under the server's oblivious PRF, so unlike the SRP
@@ -222,6 +227,23 @@ export class AxiamClient {
    */
   opaqueEnrollment(password: string): Promise<opaqueMethods.OpaqueEnrollment> {
     return opaqueMethods.opaqueEnrollment(this, password);
+  }
+
+  /**
+   * Build an OPAQUE registration record for the **caller's own** new password,
+   * sealed against the tenant the caller's account lives in (§5.2.2 rule 2).
+   *
+   * Identical to {@link opaqueEnrollment} for every ordinary principal — the
+   * two tenants are the same value there. They diverge for an
+   * organization-level principal that has selected another tenant to act on,
+   * and a record sealed against the acting one is refused with *"the OPAQUE
+   * session was issued for a different tenant"*.
+   *
+   * Requires a completed login: the principal tenant is reported by the login
+   * response, so there is nothing to seal against before then.
+   */
+  opaqueEnrollmentForSelf(password: string): Promise<opaqueMethods.OpaqueEnrollment> {
+    return opaqueMethods.opaqueEnrollmentForSelf(this, password);
   }
 
   /**

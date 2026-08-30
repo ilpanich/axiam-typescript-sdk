@@ -58,6 +58,17 @@ export class SharedSession {
    * successful login (Node persona). Mirrors the Rust SDK's `resolved_org_id`.
    */
   resolvedOrgId: string | undefined;
+  /**
+   * The tenant the signed-in principal's record *lives* in — CONTRACT.md
+   * §5.2.2 — as reported by the login response.
+   *
+   * Distinct from `resolvedTenantId`, which is the tenant being acted on: the
+   * two diverge for an organization-level principal that has selected another
+   * one. Read by `opaqueEnrollmentForSelf`, which must seal a §23 record
+   * against the account's own tenant rather than whichever one this client is
+   * currently pointed at. `undefined` until a login completes.
+   */
+  resolvedPrincipalTenantId: string | undefined;
   /** Mutable CSRF token store — populated by the request/response interceptors (D-05). */
   csrfToken: string | undefined;
   /** Set true once a successful login/verifyMfa has completed. */

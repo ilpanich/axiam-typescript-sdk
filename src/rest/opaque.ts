@@ -19,6 +19,7 @@ import {
 } from '../core/opaque.js';
 import { login, mfaSetupRequired } from './auth.js';
 import type { AxiamClient } from './client.js';
+import { userInfoFromWire } from './auth.js';
 import type { LoginResult, LoginSuccessResponseWire, MfaRequiredResponseWire } from './types.js';
 
 const OPAQUE_REGISTER_START_PATH = '/api/v1/auth/opaque/register/start';
@@ -253,21 +254,22 @@ export async function loginOpaque(
   await client.session.onAuthenticated?.();
   return {
     status: 'authenticated',
-    user: {
-      id: wire.user.id,
-      username: wire.user.username,
-      email: wire.user.email,
-      // §5.2, same reading as `auth.ts`: absent means no cross-tenant action.
-      organizationLevel: wire.user.organization_level ?? false,
-    },
+    user: userInfoFromWire(wire.user),
     sessionId: wire.session_id,
     expiresIn: wire.expires_in,
   };
 }
 
 /**
- * Build a registration record for `password`, to send with any request that
- * sets one (user creation, change-password, reset completion).
+ * Build a registration record for `password`, sealed against the tenant this
+ * client is **acting on**.
+ *
+ * That is the right tenant when the record is for an account being created in
+ * it — §27 `users.create`, and the reset-completion flow, which names its own
+ * tenant. It is the **wrong** tenant for the caller's own password change
+ * once an organization-level principal has selected another one to act on:
+ * the account's credentials live where the account does. Use
+ * {@link opaqueEnrollmentForSelf} there — CONTRACT.md §5.2.2 rule 2.
  *
  * This performs a `register/start` round trip, which the SRP verifier it
  * replaces did not need: OPAQUE's envelope is sealed under the server's
@@ -284,6 +286,51 @@ export async function opaqueEnrollment(
   client: AxiamClient,
   password: string,
 ): Promise<OpaqueEnrollment> {
+  return enroll(client, password, undefined);
+}
+
+/**
+ * Build a registration record for the **caller's own** new password, sealed
+ * against the tenant the caller's account lives in.
+ *
+ * CONTRACT.md §5.2.2 rule 2. `POST /auth/password/change` and the record that
+ * accompanies it are about the account, not about whatever tenant the client
+ * is currently pointed at, and a record sealed against the acting tenant is
+ * refused with *"the OPAQUE session was issued for a different tenant"*.
+ *
+ * The distinction only bites for an organization-level principal that has
+ * selected another tenant to act on; for everyone else the two tenants are the
+ * same value and this behaves identically to {@link opaqueEnrollment}. It is
+ * still the function to call for a self-service password change, because which
+ * principal is signed in is not something the call site usually knows.
+ *
+ * @throws NetworkError when no login has completed on this client yet — the
+ * principal tenant is reported by the login response, so there is nothing to
+ * seal against before then.
+ */
+export async function opaqueEnrollmentForSelf(
+  client: AxiamClient,
+  password: string,
+): Promise<OpaqueEnrollment> {
+  const principalTenantId = client.session.resolvedPrincipalTenantId;
+  if (!principalTenantId) {
+    throw new NetworkError(
+      'OPAQUE: no principal tenant is known yet — sign in before building a '
+      + 'registration record for your own password',
+    );
+  }
+  return enroll(client, password, principalTenantId);
+}
+
+/**
+ * The shared body of the two enrolment functions; they differ only in the
+ * tenant the record is sealed against.
+ */
+async function enroll(
+  client: AxiamClient,
+  password: string,
+  principalTenantId: string | undefined,
+): Promise<OpaqueEnrollment> {
   client.ensureOpen();
 
   const exchange = await startRegistration(password);
@@ -294,6 +341,13 @@ export async function opaqueEnrollment(
   };
   delete body.password;
   delete body.username_or_email;
+  if (principalTenantId !== undefined) {
+    // Name the principal tenant by id and drop the slug: a slug that named the
+    // acting tenant would otherwise out-vote the id server-side, which is the
+    // exact confusion this path exists to avoid.
+    body.tenant_id = principalTenantId;
+    delete body.tenant_slug;
+  }
 
   let started: RegisterStartWire;
   try {

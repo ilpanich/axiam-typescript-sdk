@@ -139,7 +139,7 @@ export class RolesApi {
       method: 'POST',
       pathTemplate: '/api/v1/roles/{role_id}/users',
       path: `/api/v1/roles/${encodeURIComponent(roleId)}/users`,
-      body: body,
+      body: models.omitEmptyTenantScope(body),
     });
   }
 
@@ -182,7 +182,7 @@ export class RolesApi {
       method: 'POST',
       pathTemplate: '/api/v1/roles/{role_id}/groups',
       path: `/api/v1/roles/${encodeURIComponent(roleId)}/groups`,
-      body: body,
+      body: models.omitEmptyTenantScope(body),
     });
   }
 
@@ -241,6 +241,49 @@ export class RolesApi {
       method: 'DELETE',
       pathTemplate: '/api/v1/roles/{role_id}/permissions/{permission_id}',
       path: `/api/v1/roles/${encodeURIComponent(roleId)}/permissions/${encodeURIComponent(permissionId)}`,
+    });
+  }
+
+  /** `GET /api/v1/roles/{role_id}/service-accounts` */
+  async listServiceAccounts(roleId: string): Promise<models.RoleServiceAccountAssignment[]> {
+    const wire = await sendManagement<models.RoleServiceAccountAssignment[]>(this.#client, {
+      operation: 'roles.list_service_accounts',
+      method: 'GET',
+      pathTemplate: '/api/v1/roles/{role_id}/service-accounts',
+      path: `/api/v1/roles/${encodeURIComponent(roleId)}/service-accounts`,
+    });
+    return wire;
+  }
+
+  /**
+   * `POST /api/v1/roles/{role_id}/service-accounts`
+   *
+   * Not retried on failure (§27.4 rule 8): every write on this surface is
+   * issued exactly once, including the ones that look idempotent.
+   */
+  async assignToServiceAccount(roleId: string, body: models.AssignRoleToServiceAccountRequest): Promise<void> {
+    await sendManagement<void>(this.#client, {
+      operation: 'roles.assign_to_service_account',
+      method: 'POST',
+      pathTemplate: '/api/v1/roles/{role_id}/service-accounts',
+      path: `/api/v1/roles/${encodeURIComponent(roleId)}/service-accounts`,
+      body: models.omitEmptyTenantScope(body),
+    });
+  }
+
+  /**
+   * `DELETE /api/v1/roles/{role_id}/service-accounts/{service_account_id}`
+   *
+   * Not retried on failure (§27.4 rule 8): every write on this surface is
+   * issued exactly once, including the ones that look idempotent.
+   */
+  async unassignFromServiceAccount(roleId: string, serviceAccountId: string, resourceId?: string): Promise<void> {
+    await sendManagement<void>(this.#client, {
+      operation: 'roles.unassign_from_service_account',
+      method: 'DELETE',
+      pathTemplate: '/api/v1/roles/{role_id}/service-accounts/{service_account_id}',
+      path: `/api/v1/roles/${encodeURIComponent(roleId)}/service-accounts/${encodeURIComponent(serviceAccountId)}`,
+      query: { 'resource_id': resourceId },
     });
   }
 

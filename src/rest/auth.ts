@@ -8,8 +8,10 @@
 import { AxiamError, mapHttpStatusToError, NetworkError, Sensitive, sanitizeAxiosError } from '../core/index.js';
 import type { AxiamClient } from './client.js';
 import type {
+  AxiamUserInfo,
   LoginResult,
   LoginSuccessResponseWire,
+  LoginUserInfoWire,
   MfaRequiredResponseWire,
   MfaSetupRequiredResponseWire,
   RefreshSuccessResponseWire,
@@ -25,18 +27,49 @@ interface MfaVerifyRequestBody {
   totp_code: string;
 }
 
-function loginSuccessToResult(wire: LoginSuccessResponseWire): LoginResult {
+/**
+ * Map the wire user object onto {@link AxiamUserInfo}.
+ *
+ * Shared by the three response paths that complete a login — password,
+ * OPAQUE, and the account-lifecycle flows — which previously each carried
+ * their own copy of this mapping and a comment saying "same reading as
+ * `auth.ts`". Contract 1.34 turned that duplication into a hazard: five more
+ * fields, and a copy that forwards three of them is a bug nothing catches.
+ */
+export function userInfoFromWire(user: LoginUserInfoWire): AxiamUserInfo {
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    // §5.2: derived server-side and response-only. `?? false` is what makes a
+    // pre-1.31 server's silence mean "no cross-tenant action", rather than
+    // `undefined` leaking into a truthiness check somewhere downstream.
+    organizationLevel: user.organization_level ?? false,
+    tenantId: user.tenant_id,
+    // §5.2.2 rule 1: absent means equal. A server older than contract 1.34
+    // omits this and cannot switch the acting tenant either, so falling back
+    // to `tenant_id` is not a guess — it is the only value it could have had.
+    principalTenantId: user.principal_tenant_id ?? user.tenant_id,
+    principalTenantSlug: user.principal_tenant_slug ?? undefined,
+    orgId: user.org_id ?? undefined,
+    // §5.2.3: absent means unrestricted, and `null` from the server means the
+    // same thing — neither should surface as an empty list, which would read
+    // as "reaches nothing".
+    reachableTenantIds: user.reachable_tenant_ids ?? undefined,
+  };
+}
+
+function loginSuccessToResult(wire: LoginSuccessResponseWire, client?: AxiamClient): LoginResult {
+  const user = userInfoFromWire(wire.user);
+  // §5.2.2: remember where this principal lives, so a later
+  // `opaqueEnrollmentForSelf` seals against the account's own tenant without
+  // a second round trip.
+  if (client && user.principalTenantId) {
+    client.session.resolvedPrincipalTenantId = user.principalTenantId;
+  }
   return {
     status: 'authenticated',
-    user: {
-      id: wire.user.id,
-      username: wire.user.username,
-      email: wire.user.email,
-      // §5.2: derived server-side and response-only. `?? false` is what makes a
-      // pre-1.31 server's silence mean "no cross-tenant action", rather than
-      // `undefined` leaking into a truthiness check somewhere downstream.
-      organizationLevel: wire.user.organization_level ?? false,
-    },
+    user,
     sessionId: wire.session_id,
     expiresIn: wire.expires_in,
   };
@@ -118,7 +151,7 @@ export async function login(client: AxiamClient, email: string, password: string
     // from the jar now that the session cookie(s) have landed. No-op for the
     // browser SharedSession, which has no onAuthenticated implementation.
     await client.session.onAuthenticated?.();
-    return loginSuccessToResult(response.data as LoginSuccessResponseWire);
+    return loginSuccessToResult(response.data as LoginSuccessResponseWire, client);
   } catch (err) {
     // §25.2 rule 1: a recoverable, guided state, not a refusal. Checked
     // before the guard below because a 403 is never pre-mapped: the response
@@ -169,7 +202,7 @@ export async function verifyMfa(client: AxiamClient, mfaToken: string, code: str
     client.session.authenticated = true;
     // CR-01/D-05: same post-authentication sync as login()'s 200 branch.
     await client.session.onAuthenticated?.();
-    return loginSuccessToResult(response.data);
+    return loginSuccessToResult(response.data, client);
   } catch (err) {
     // Already mapped by the response interceptor — rethrow rather than bury
     // it in a NetworkError. MFA_VERIFY_PATH is not a SKIP_REFRESH url, so
