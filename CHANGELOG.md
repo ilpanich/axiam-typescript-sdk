@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-beta05] - 2026-08-30
+
 ### Added
+
+- Contract 1.35, carrying 1.34 — service-account RBAC, principal tenant, tenant scope
 
 - **Contract 1.35, which carries contract 1.34 with it.** Nothing had been
   fanned out since 1.33, so this re-vendors `CONTRACT.md`, `openapi.json` and
@@ -40,6 +44,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   narrowed principal's reach. Omitted means unrestricted, which is what every
   assignment written before the field existed already meant.
 
+### Changed
+
+- **One mapper for the login user object, instead of three.** `auth.ts`,
+  `accountLifecycle.ts` and `opaque.ts` each carried their own copy of the
+  wire-to-`AxiamUserInfo` mapping, two of them annotated "same reading as
+  `auth.ts`". Contract 1.34 turned that duplication into a hazard — five more
+  fields, and a copy forwarding three of them is a bug nothing catches — so
+  they now share `userInfoFromWire`.
+
 ### Fixed
 
 - **A registration record for your own password was sealed against the wrong
@@ -65,15 +78,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `JSON.stringify` drops `undefined` but keeps `[]`, and `[]` is exactly what
   collecting into an array produces for "no tenants named". The three
   assignment operations now normalise the body before sending.
-
-### Changed
-
-- **One mapper for the login user object, instead of three.** `auth.ts`,
-  `accountLifecycle.ts` and `opaque.ts` each carried their own copy of the
-  wire-to-`AxiamUserInfo` mapping, two of them annotated "same reading as
-  `auth.ts`". Contract 1.34 turned that duplication into a hazard — five more
-  fields, and a copy forwarding three of them is a bug nothing catches — so
-  they now share `userInfoFromWire`.
 
 ### Note on `X-Tenant-ID` vs `X-Axiam-Tenant`
 
