@@ -160,4 +160,26 @@ export class ServiceAccountsApi {
     });
   }
 
+  /** `GET /api/v1/service-accounts/{service_account_id}/roles` */
+  async listRoles(serviceAccountId: string): Promise<models.RoleAssignment[]> {
+    const wire = await sendManagement<models.RoleAssignment[]>(this.#client, {
+      operation: 'service_accounts.list_roles',
+      method: 'GET',
+      pathTemplate: '/api/v1/service-accounts/{service_account_id}/roles',
+      path: `/api/v1/service-accounts/${encodeURIComponent(serviceAccountId)}/roles`,
+    });
+    return wire;
+  }
+
+  /** `GET /api/v1/service-accounts/{service_account_id}/groups` */
+  async listGroups(serviceAccountId: string): Promise<models.Group[]> {
+    const wire = await sendManagement<models.Group[]>(this.#client, {
+      operation: 'service_accounts.list_groups',
+      method: 'GET',
+      pathTemplate: '/api/v1/service-accounts/{service_account_id}/groups',
+      path: `/api/v1/service-accounts/${encodeURIComponent(serviceAccountId)}/groups`,
+    });
+    return wire;
+  }
+
 }

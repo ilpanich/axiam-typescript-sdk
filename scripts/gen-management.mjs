@@ -304,6 +304,37 @@ function emitModels() {
  *   secret an ordinary string.
  */
 import { Sensitive } from '../core/sensitive.js';
+
+/**
+ * Drops a \`tenant_scope\` that names no tenants.
+ *
+ * CONTRACT.md §5.2.3 rule 1: the server refuses \`tenant_scope: []\` with
+ * \`400\`. An assignment reaching no tenant contributes nothing anywhere, so it
+ * is a grant that does not exist rather than a restriction, and the server
+ * declines to guess which was meant.
+ *
+ * \`JSON.stringify\` already drops \`undefined\`, so the absent case needs no
+ * help. \`[]\` is the one that does: the natural way to build the field is to
+ * collect into an array and pass it, which yields \`[]\` for "no tenants named"
+ * and would put the refused shape on the wire. Both spellings of absent
+ * therefore travel the same way — by not appearing.
+ *
+ * Returns the body unchanged when there is nothing to drop, so the common
+ * path allocates nothing.
+ */
+export function omitEmptyTenantScope<T>(body: T): T {
+  if (
+    body
+    && typeof body === 'object'
+    && 'tenant_scope' in body
+    && Array.isArray((body as { tenant_scope?: unknown }).tenant_scope)
+    && (body as { tenant_scope: unknown[] }).tenant_scope.length === 0
+  ) {
+    const { tenant_scope: _dropped, ...rest } = body as Record<string, unknown>;
+    return rest as T;
+  }
+  return body;
+}
 `,
   ];
 
@@ -706,6 +737,13 @@ function emitOperation(namespace, opname, op, secrets) {
     const schema = op.request_schema;
     args.push(`body: models.${pascal(schema)}`);
     bodyExpr = secrets.has(schema) ? `models.${camel(pascal(schema))}ToWire(body)` : 'body';
+    // CONTRACT.md §5.2.3 rule 1 — see `omitEmptyTenantScope`. Applied at the
+    // call site rather than inside `sendManagement` so it is visible in the
+    // generated code that a body is being normalised, and so it costs nothing
+    // on the 152 operations that have no such field.
+    if (SCHEMAS[schema]?.properties?.tenant_scope) {
+      bodyExpr = `models.omitEmptyTenantScope(${bodyExpr})`;
+    }
   } else if (op.request_body === 'untyped') {
     args.push('body: unknown');
     bodyExpr = 'body';

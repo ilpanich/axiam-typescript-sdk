@@ -9,6 +9,7 @@
 
 import { mapHttpStatusToError, NetworkError, Sensitive, sanitizeAxiosError } from '../core/index.js';
 import type { AxiamClient } from './client.js';
+import { userInfoFromWire } from './auth.js';
 import type { LoginResult, LoginSuccessResponseWire } from './types.js';
 
 const MFA_ENROLL = '/api/v1/auth/mfa/enroll';
@@ -192,13 +193,7 @@ export async function mfaSetupConfirm(
 
   return {
     status: 'authenticated',
-    user: {
-      id: wire.user.id,
-      username: wire.user.username,
-      email: wire.user.email,
-      // §5.2, same reading as `auth.ts`: absent means no cross-tenant action.
-      organizationLevel: wire.user.organization_level ?? false,
-    },
+    user: userInfoFromWire(wire.user),
     sessionId: wire.session_id,
     expiresIn: wire.expires_in,
   };

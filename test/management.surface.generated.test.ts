@@ -200,6 +200,25 @@ describe('groups namespace', () => {
       await client.groups.listRoles(EXAMPLE_ID);
     });
   });
+  it('groups.list_service_accounts', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/groups/${EXAMPLE_ID}/service-accounts`, 200, {"items":[{"client_id":"example","created_at":"2026-08-26T00:00:00Z","id":"11111111-1111-4111-8111-111111111111","name":"example","status":"Active","tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z"}],"total":1,"offset":0,"limit":50});
+      await client.groups.listServiceAccounts(EXAMPLE_ID, { limit: 50 });
+      await client.groups.listServiceAccountsAll(EXAMPLE_ID, { limit: 50 });
+    });
+  });
+  it('groups.add_service_account', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'POST', `/api/v1/groups/${EXAMPLE_ID}/service-accounts`, 204, undefined);
+      await client.groups.addServiceAccount(EXAMPLE_ID, { service_account_id: '11111111-1111-4111-8111-111111111111' });
+    });
+  });
+  it('groups.remove_service_account', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'DELETE', `/api/v1/groups/${EXAMPLE_ID}/service-accounts/${EXAMPLE_ID}`, 204, undefined);
+      await client.groups.removeServiceAccount(EXAMPLE_ID, EXAMPLE_ID);
+    });
+  });
 });
 
 describe('roles namespace', () => {
@@ -286,6 +305,24 @@ describe('roles namespace', () => {
     await withServer(async (server, client) => {
       mountJson(server, 'DELETE', `/api/v1/roles/${EXAMPLE_ID}/permissions/${EXAMPLE_ID}`, 204, undefined);
       await client.roles.revokePermission(EXAMPLE_ID, EXAMPLE_ID);
+    });
+  });
+  it('roles.list_service_accounts', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/roles/${EXAMPLE_ID}/service-accounts`, 200, [{"service_account":{"client_id":"example","created_at":"2026-08-26T00:00:00Z","id":"11111111-1111-4111-8111-111111111111","name":"example","status":"Active","tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z"}}]);
+      await client.roles.listServiceAccounts(EXAMPLE_ID);
+    });
+  });
+  it('roles.assign_to_service_account', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'POST', `/api/v1/roles/${EXAMPLE_ID}/service-accounts`, 204, undefined);
+      await client.roles.assignToServiceAccount(EXAMPLE_ID, { service_account_id: '11111111-1111-4111-8111-111111111111' });
+    });
+  });
+  it('roles.unassign_from_service_account', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'DELETE', `/api/v1/roles/${EXAMPLE_ID}/service-accounts/${EXAMPLE_ID}`, 204, undefined);
+      await client.roles.unassignFromServiceAccount(EXAMPLE_ID, EXAMPLE_ID, undefined);
     });
   });
 });
@@ -445,6 +482,18 @@ describe('service_accounts namespace', () => {
     await withServer(async (server, client) => {
       mountJson(server, 'POST', `/api/v1/service-accounts/${EXAMPLE_ID}/bind-certificate`, 200, undefined);
       await client.serviceAccounts.bindCertificate(EXAMPLE_ID, { certificate_id: '11111111-1111-4111-8111-111111111111' });
+    });
+  });
+  it('service_accounts.list_roles', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/service-accounts/${EXAMPLE_ID}/roles`, 200, [{"role":{"created_at":"2026-08-26T00:00:00Z","description":"example","id":"11111111-1111-4111-8111-111111111111","is_global":true,"name":"example","tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z"}}]);
+      await client.serviceAccounts.listRoles(EXAMPLE_ID);
+    });
+  });
+  it('service_accounts.list_groups', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/service-accounts/${EXAMPLE_ID}/groups`, 200, [{"created_at":"2026-08-26T00:00:00Z","description":"example","id":"11111111-1111-4111-8111-111111111111","metadata":{},"name":"example","tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z"}]);
+      await client.serviceAccounts.listGroups(EXAMPLE_ID);
     });
   });
 });
@@ -1029,13 +1078,16 @@ describe('generated surface', () => {
           "federation.oidc_callback",
           "federation.update_config",
           "groups.add_member",
+          "groups.add_service_account",
           "groups.create",
           "groups.delete",
           "groups.get",
           "groups.list",
           "groups.list_members",
           "groups.list_roles",
+          "groups.list_service_accounts",
           "groups.remove_member",
+          "groups.remove_service_account",
           "groups.update",
           "notification_rules.create",
           "notification_rules.delete",
@@ -1083,6 +1135,7 @@ describe('generated surface', () => {
           "resources.list_children",
           "resources.update",
           "roles.assign_to_group",
+          "roles.assign_to_service_account",
           "roles.assign_to_user",
           "roles.create",
           "roles.delete",
@@ -1091,9 +1144,11 @@ describe('generated surface', () => {
           "roles.list",
           "roles.list_groups",
           "roles.list_permissions",
+          "roles.list_service_accounts",
           "roles.list_users",
           "roles.revoke_permission",
           "roles.unassign_from_group",
+          "roles.unassign_from_service_account",
           "roles.unassign_from_user",
           "roles.update",
           "scim_tokens.create",
@@ -1109,6 +1164,8 @@ describe('generated surface', () => {
           "service_accounts.delete",
           "service_accounts.get",
           "service_accounts.list",
+          "service_accounts.list_groups",
+          "service_accounts.list_roles",
           "service_accounts.rotate_secret",
           "service_accounts.update",
           "settings.delete_tenant_override",

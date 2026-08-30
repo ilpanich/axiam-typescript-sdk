@@ -26,6 +26,37 @@
 import { Sensitive } from '../core/sensitive.js';
 
 /**
+ * Drops a `tenant_scope` that names no tenants.
+ *
+ * CONTRACT.md §5.2.3 rule 1: the server refuses `tenant_scope: []` with
+ * `400`. An assignment reaching no tenant contributes nothing anywhere, so it
+ * is a grant that does not exist rather than a restriction, and the server
+ * declines to guess which was meant.
+ *
+ * `JSON.stringify` already drops `undefined`, so the absent case needs no
+ * help. `[]` is the one that does: the natural way to build the field is to
+ * collect into an array and pass it, which yields `[]` for "no tenants named"
+ * and would put the refused shape on the wire. Both spellings of absent
+ * therefore travel the same way — by not appearing.
+ *
+ * Returns the body unchanged when there is nothing to drop, so the common
+ * path allocates nothing.
+ */
+export function omitEmptyTenantScope<T>(body: T): T {
+  if (
+    body
+    && typeof body === 'object'
+    && 'tenant_scope' in body
+    && Array.isArray((body as { tenant_scope?: unknown }).tenant_scope)
+    && (body as { tenant_scope: unknown[] }).tenant_scope.length === 0
+  ) {
+    const { tenant_scope: _dropped, ...rest } = body as Record<string, unknown>;
+    return rest as T;
+  }
+  return body;
+}
+
+/**
  * `ActorType` (generated from openapi.json).
  *
  * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
@@ -49,6 +80,12 @@ export interface AddMemberRequest {
   user_id: string;
 }
 
+/** `AddServiceAccountMemberRequest` (generated from openapi.json). */
+export interface AddServiceAccountMemberRequest {
+  /** `service_account_id`. */
+  service_account_id: string;
+}
+
 /**
  * API-based provider configuration (SendGrid, Postmark, Resend, Brevo).
  *
@@ -70,12 +107,62 @@ export interface AssignRoleToGroupRequest {
   group_id: string;
   /** `resource_id`. */
   resource_id?: string | null;
+  /**
+   * The tenants this assignment reaches.
+   *
+   * Only meaningful for an assignment made in an organization's scope, whose
+   * global roles otherwise reach every tenant of the organization; naming
+   * tenants here confines the assignment to those and to nothing else, the
+   * organization's own scope included. Omitted — the default — reaches
+   * wherever the role does.
+   *
+   * Refused with 400 outside an organization scope, when empty, and when it
+   * names a tenant of another organization or the organization's own scope
+   * tenant.
+   */
+  tenant_scope?: string[] | null;
+}
+
+/** `AssignRoleToServiceAccountRequest` (generated from openapi.json). */
+export interface AssignRoleToServiceAccountRequest {
+  /** `resource_id`. */
+  resource_id?: string | null;
+  /** `service_account_id`. */
+  service_account_id: string;
+  /**
+   * The tenants this assignment reaches.
+   *
+   * Only meaningful for an assignment made in an organization's scope, whose
+   * global roles otherwise reach every tenant of the organization; naming
+   * tenants here confines the assignment to those and to nothing else, the
+   * organization's own scope included. Omitted — the default — reaches
+   * wherever the role does.
+   *
+   * Refused with 400 outside an organization scope, when empty, and when it
+   * names a tenant of another organization or the organization's own scope
+   * tenant.
+   */
+  tenant_scope?: string[] | null;
 }
 
 /** `AssignRoleToUserRequest` (generated from openapi.json). */
 export interface AssignRoleToUserRequest {
   /** `resource_id`. */
   resource_id?: string | null;
+  /**
+   * The tenants this assignment reaches.
+   *
+   * Only meaningful for an assignment made in an organization's scope, whose
+   * global roles otherwise reach every tenant of the organization; naming
+   * tenants here confines the assignment to those and to nothing else, the
+   * organization's own scope included. Omitted — the default — reaches
+   * wherever the role does.
+   *
+   * Refused with 400 outside an organization scope, when empty, and when it
+   * names a tenant of another organization or the organization's own scope
+   * tenant.
+   */
+  tenant_scope?: string[] | null;
   /** `user_id`. */
   user_id: string;
 }
@@ -2393,6 +2480,8 @@ export interface RoleAssignment {
   resource_id?: string | null;
   /** `role`. */
   role: Role;
+  /** The tenants this assignment reaches. See [`TenantScope`]. */
+  tenant_scope?: string[] | null;
 }
 
 /** A group together with the resource scope of its assignment of this role. */
@@ -2401,12 +2490,41 @@ export interface RoleGroupAssignment {
   group: Group;
   /** `None` means the role was assigned globally (no resource scope). */
   resource_id?: string | null;
+  /**
+   * The tenants this assignment reaches, or omitted for "wherever the role
+   * does". Shown next to the assignment so an operator can tell a deliberately
+   * narrowed grant from an organization-wide one.
+   */
+  tenant_scope?: string[] | null;
+}
+
+/** A service account together with the resource scope of its assignment. */
+export interface RoleServiceAccountAssignment {
+  /** `None` means the role was assigned globally (no resource scope). */
+  resource_id?: string | null;
+  /**
+   * The assigned service account. Carries no secret — the client secret is
+   * returned once, at creation, and never again.
+   */
+  service_account: ServiceAccountResponse;
+  /**
+   * The tenants this assignment reaches, or omitted for "wherever the role
+   * does". Shown next to the assignment so an operator can tell a deliberately
+   * narrowed grant from an organization-wide one.
+   */
+  tenant_scope?: string[] | null;
 }
 
 /** A user together with the resource scope of their assignment of this role. */
 export interface RoleUserAssignment {
   /** `None` means the role was assigned globally (no resource scope). */
   resource_id?: string | null;
+  /**
+   * The tenants this assignment reaches, or omitted for "wherever the role
+   * does". Shown next to the assignment so an operator can tell a deliberately
+   * narrowed grant from an organization-wide one.
+   */
+  tenant_scope?: string[] | null;
   /** The assigned user. */
   user: UserResponse;
 }

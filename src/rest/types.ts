@@ -23,6 +23,22 @@ export interface LoginUserInfoWire {
    * action rather than one that would 403.
    */
   organization_level?: boolean;
+  /** CONTRACT.md §5.2.2 — the tenant being **acted on**. */
+  tenant_id?: string;
+  /**
+   * CONTRACT.md §5.2.2 — the tenant this principal's record **lives in**.
+   *
+   * Absent on a server older than contract 1.34, which cannot switch the
+   * acting tenant either, so absent reads as equal to `tenant_id` rather than
+   * as unknown.
+   */
+  principal_tenant_id?: string;
+  /** CONTRACT.md §5.2.2 — slug of `principal_tenant_id`. */
+  principal_tenant_slug?: string | null;
+  /** CONTRACT.md §5.2.2 — the caller's organization, as a UUID. */
+  org_id?: string | null;
+  /** CONTRACT.md §5.2.3 — the tenants this caller's roles reach, if narrowed. */
+  reachable_tenant_ids?: string[] | null;
 }
 
 /** 200 OK body from /api/v1/auth/login, /api/v1/auth/mfa/verify, and (subset) /api/v1/auth/refresh. */
@@ -70,7 +86,7 @@ export interface AxiamUserInfo {
    *
    * Such a principal's record lives in its organization's reserved tenant, so
    * its global grants apply in every tenant of that organization, and it can
-   * act on a different one by sending a different `X-Tenant-ID` on the next
+   * act on a different one by sending a different `X-Axiam-Tenant` on the next
    * request — no re-login, because it already is a principal of every tenant
    * there.
    *
@@ -81,8 +97,53 @@ export interface AxiamUserInfo {
    *
    * `false` against a server older than contract 1.31, which is the safe
    * direction: no cross-tenant action offered.
+   *
+   * Since contract 1.35 that reach can be narrowed per assignment, so this
+   * flag alone no longer decides what to offer — consult
+   * {@link AxiamUserInfo.reachableTenantIds} as well (§5.2.3 rule 3).
    */
   organizationLevel: boolean;
+  /** The tenant this session is **acting on** — CONTRACT.md §5.2.2. */
+  tenantId?: string;
+  /**
+   * The tenant this principal's record **lives in** — CONTRACT.md §5.2.2.
+   *
+   * This is where the account's own credentials belong, and what a §23
+   * registration record for *this* account must be sealed against — see
+   * `opaqueEnrollmentForSelf`.
+   *
+   * Falls back to {@link AxiamUserInfo.tenantId} when the server omits it,
+   * which is exactly right there: a server older than contract 1.34 cannot
+   * switch the acting tenant, so the two cannot differ.
+   */
+  principalTenantId?: string;
+  /**
+   * Slug of {@link AxiamUserInfo.principalTenantId} — `"organization"` for an
+   * organization-level principal.
+   */
+  principalTenantSlug?: string;
+  /**
+   * The caller's organization as a UUID — CONTRACT.md §5.2.2 rule 3.
+   *
+   * Read this rather than resolving a slug through `GET
+   * /api/v1/organizations`, which is `super-admin`-only and returns only the
+   * caller's own organization.
+   */
+  orgId?: string;
+  /**
+   * The tenants this caller's roles reach, when narrowed — CONTRACT.md §5.2.3.
+   *
+   * `undefined` means **unrestricted**, which is both the common case and the
+   * only thing a server older than contract 1.35 can mean. A present list is a
+   * deliberately narrowed organization-level account: confine any tenant
+   * switch to it, because naming anything outside is refused at the header
+   * (§5.2.3 rule 4).
+   *
+   * Note the pairing with {@link AxiamUserInfo.organizationLevel}: a narrowed
+   * account still reports `true` there, so gating on that flag alone offers
+   * tenants the server will refuse.
+   */
+  reachableTenantIds?: string[];
 }
 
 /**
