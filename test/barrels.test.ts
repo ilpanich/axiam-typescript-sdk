@@ -102,7 +102,10 @@ describe('barrel entry points', () => {
 
   it('/node exposes the §12 OIDC/SSO relying-party surface', async () => {
     const mod = await import('../src/node/index.js');
-    // Factory + client class carrying the nine canonical §12.2 operations.
+    // Factory + client class carrying the thirteen canonical §12.2 operations.
+    // §12.2 forbids splitting them across two hosts, so contract 1.38's four
+    // public login-provider operations are asserted on the SAME class as the
+    // nine that preceded them, not on a second one.
     expect(typeof mod.createOidcClient).toBe('function');
     expect(typeof mod.OidcClient).toBe('function');
     for (const operation of [
@@ -115,6 +118,10 @@ describe('barrel entry points', () => {
       'revoke',
       'ssoStart',
       'ssoComplete',
+      'ssoProviders',
+      'ssoStartOauth2',
+      'ssoCompleteOauth2',
+      'ssoCompleteHandoff',
     ]) {
       expect(typeof (mod.OidcClient.prototype as unknown as Record<string, unknown>)[operation]).toBe(
         'function',
