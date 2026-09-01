@@ -21,7 +21,7 @@ this response.</p>
 </div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">GeneratedCaCertificate</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#chain_pem">chain_pem</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#created_at">created_at</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#fingerprint">fingerprint</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#id">id</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#key_algorithm">key_algorithm</a><span class="tsd-signature-symbol">:</span> <a href="../types/index.KeyAlgorithm.html" class="tsd-signature-type tsd-kind-type-alias">KeyAlgorithm</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#key_custody">key_custody</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#key_locator">key_locator</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#mtls_trust_anchor">mtls_trust_anchor</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#not_after">not_after</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#not_before">not_before</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#organization_id">organization_id</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#parent_ca_id">parent_ca_id</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#private_key_pem">private_key_pem</a><span class="tsd-signature-symbol">?:</span> <a href="../classes/index.Sensitive.html" class="tsd-signature-type tsd-kind-class">Sensitive</a><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#public_cert_pem">public_cert_pem</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#status">status</a><span class="tsd-signature-symbol">:</span> <a href="../types/index.CertificateStatus.html" class="tsd-signature-type tsd-kind-type-alias">CertificateStatus</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#subject">subject</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#tenant_id">tenant_id</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/890c37d1e0ddb893cec63b9a35fa65780f4a2c16/src/management/models.ts#L1209">src/management/models.ts:1209</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L1331">src/management/models.ts:1331</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -62,35 +62,35 @@ will ever see — a relying party cannot validate an AXIAM-issued leaf
 without it, and <code>root/generate/internal</code> returns it exactly once.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/890c37d1e0ddb893cec63b9a35fa65780f4a2c16/src/management/models.ts#L1220">src/management/models.ts:1220</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L1342">src/management/models.ts:1342</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="created_at"><span>created_<wbr/>at</span><a href="#created_at" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">created_at</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p><code>created_at</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/890c37d1e0ddb893cec63b9a35fa65780f4a2c16/src/management/models.ts#L1222">src/management/models.ts:1222</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L1344">src/management/models.ts:1344</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="fingerprint"><span>fingerprint</span><a href="#fingerprint" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">fingerprint</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>SHA-256 fingerprint of the certificate.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/890c37d1e0ddb893cec63b9a35fa65780f4a2c16/src/management/models.ts#L1224">src/management/models.ts:1224</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L1346">src/management/models.ts:1346</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="id"><span>id</span><a href="#id" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p><code>id</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/890c37d1e0ddb893cec63b9a35fa65780f4a2c16/src/management/models.ts#L1226">src/management/models.ts:1226</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L1348">src/management/models.ts:1348</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="key_algorithm"><span>key_<wbr/>algorithm</span><a href="#key_algorithm" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">key_algorithm</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.KeyAlgorithm.html" class="tsd-signature-type tsd-kind-type-alias">KeyAlgorithm</a></div>
 <div class="tsd-comment tsd-typography"><p><code>key_algorithm</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/890c37d1e0ddb893cec63b9a35fa65780f4a2c16/src/management/models.ts#L1228">src/management/models.ts:1228</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L1350">src/management/models.ts:1350</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="key_custody"><code class="tsd-tag">Optional</code><span>key_<wbr/>custody</span><a href="#key_custody" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">key_custody</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
@@ -100,7 +100,7 @@ custodian does not strand the CAs that already exist. Not secret — an
 operator needs to see it, and it discloses only where a key is kept.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/890c37d1e0ddb893cec63b9a35fa65780f4a2c16/src/management/models.ts#L1236">src/management/models.ts:1236</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L1358">src/management/models.ts:1358</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="key_locator"><code class="tsd-tag">Optional</code><span>key_<wbr/>locator</span><a href="#key_locator" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">key_locator</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></div>
@@ -108,7 +108,7 @@ operator needs to see it, and it discloses only where a key is kept.</p>
 database custody, whose locator is the row itself.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/890c37d1e0ddb893cec63b9a35fa65780f4a2c16/src/management/models.ts#L1241">src/management/models.ts:1241</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L1363">src/management/models.ts:1363</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="mtls_trust_anchor"><code class="tsd-tag">Optional</code><span>mtls_<wbr/>trust_<wbr/>anchor</span><a href="#mtls_trust_anchor" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">mtls_trust_anchor</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
@@ -135,28 +135,28 @@ rather than pretending the change took effect.</p>
 the TLS posture it has today.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/890c37d1e0ddb893cec63b9a35fa65780f4a2c16/src/management/models.ts#L1271">src/management/models.ts:1271</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L1393">src/management/models.ts:1393</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="not_after"><span>not_<wbr/>after</span><a href="#not_after" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">not_after</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Validity end.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/890c37d1e0ddb893cec63b9a35fa65780f4a2c16/src/management/models.ts#L1273">src/management/models.ts:1273</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L1395">src/management/models.ts:1395</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="not_before"><span>not_<wbr/>before</span><a href="#not_before" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">not_before</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Validity start.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/890c37d1e0ddb893cec63b9a35fa65780f4a2c16/src/management/models.ts#L1275">src/management/models.ts:1275</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L1397">src/management/models.ts:1397</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="organization_id"><span>organization_<wbr/>id</span><a href="#organization_id" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">organization_id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>The organization this CA belongs to.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/890c37d1e0ddb893cec63b9a35fa65780f4a2c16/src/management/models.ts#L1277">src/management/models.ts:1277</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L1399">src/management/models.ts:1399</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="parent_ca_id"><code class="tsd-tag">Optional</code><span>parent_<wbr/>ca_<wbr/>id</span><a href="#parent_ca_id" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">parent_ca_id</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></div>
@@ -165,7 +165,7 @@ the TLS posture it has today.</p>
 imported and has no parent inside AXIAM.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/890c37d1e0ddb893cec63b9a35fa65780f4a2c16/src/management/models.ts#L1284">src/management/models.ts:1284</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L1406">src/management/models.ts:1406</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="private_key_pem"><code class="tsd-tag">Optional</code><span>private_<wbr/>key_<wbr/>pem</span><a href="#private_key_pem" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">private_key_pem</span><span class="tsd-signature-symbol">?:</span> <a href="../classes/index.Sensitive.html" class="tsd-signature-type tsd-kind-class">Sensitive</a><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span></div>
@@ -179,7 +179,7 @@ custodian that does produce a key.</p>
 <code>.expose()</code> to read it.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/890c37d1e0ddb893cec63b9a35fa65780f4a2c16/src/management/models.ts#L1297">src/management/models.ts:1297</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L1419">src/management/models.ts:1419</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="public_cert_pem"><span>public_<wbr/>cert_<wbr/>pem</span><a href="#public_cert_pem" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">public_cert_pem</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
@@ -188,21 +188,21 @@ custodian that does produce a key.</p>
 intermediate rather than the root beneath which it was created.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/890c37d1e0ddb893cec63b9a35fa65780f4a2c16/src/management/models.ts#L1304">src/management/models.ts:1304</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L1426">src/management/models.ts:1426</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="status"><span>status</span><a href="#status" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">status</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.CertificateStatus.html" class="tsd-signature-type tsd-kind-type-alias">CertificateStatus</a></div>
 <div class="tsd-comment tsd-typography"><p><code>status</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/890c37d1e0ddb893cec63b9a35fa65780f4a2c16/src/management/models.ts#L1306">src/management/models.ts:1306</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L1428">src/management/models.ts:1428</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="subject"><span>subject</span><a href="#subject" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">subject</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>The certificate subject (e.g., <code>CN=ACME Corp Root CA</code>).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/890c37d1e0ddb893cec63b9a35fa65780f4a2c16/src/management/models.ts#L1308">src/management/models.ts:1308</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L1430">src/management/models.ts:1430</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="tenant_id"><code class="tsd-tag">Optional</code><span>tenant_<wbr/>id</span><a href="#tenant_id" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">tenant_id</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></div>
@@ -214,7 +214,7 @@ certificates chain through a CA that can be revoked and replaced without
 touching the anchor the rest of the estate trusts.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/890c37d1e0ddb893cec63b9a35fa65780f4a2c16/src/management/models.ts#L1318">src/management/models.ts:1318</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L1440">src/management/models.ts:1440</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
