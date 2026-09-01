@@ -702,26 +702,26 @@ describe('oauth2_clients namespace', () => {
 describe('federation namespace', () => {
   it('federation.list_configs', async () => {
     await withServer(async (server, client) => {
-      mountJson(server, 'GET', `/api/v1/federation-configs`, 200, {"items":[{"attribute_map":{},"client_id":"example","created_at":"2026-08-26T00:00:00Z","enabled":true,"id":"11111111-1111-4111-8111-111111111111","protocol":"example","provider":"example","tenant_id":"11111111-1111-4111-8111-111111111111","token_exchange":{"accepted_audiences":[],"enabled":true,"max_token_age_secs":1,"scope_map":{},"subject_mapping":"example"},"updated_at":"2026-08-26T00:00:00Z"}],"total":1,"offset":0,"limit":50});
+      mountJson(server, 'GET', `/api/v1/federation-configs`, 200, {"items":[{"allow_tenant_inheritance":true,"allowed_algorithms":[],"allowed_issuer_tenants":[],"attribute_map":{},"client_id":"example","created_at":"2026-08-26T00:00:00Z","effective_scopes":[],"enabled":true,"has_bundled_mark":true,"id":"11111111-1111-4111-8111-111111111111","mints_client_secret":true,"pkce_required":true,"protocol":"example","provider":"example","provider_kind":"example","scopes":[],"tenant_id":"11111111-1111-4111-8111-111111111111","token_exchange":{"accepted_audiences":[],"enabled":true,"max_token_age_secs":1,"scope_map":{},"subject_mapping":"example"},"updated_at":"2026-08-26T00:00:00Z"}],"total":1,"offset":0,"limit":50});
       await client.federation.listConfigs({ limit: 50 });
       await client.federation.listConfigsAll({ limit: 50 });
     });
   });
   it('federation.create_config', async () => {
     await withServer(async (server, client) => {
-      mountJson(server, 'POST', `/api/v1/federation-configs`, 201, {"attribute_map":{},"client_id":"example","created_at":"2026-08-26T00:00:00Z","enabled":true,"id":"11111111-1111-4111-8111-111111111111","protocol":"example","provider":"example","tenant_id":"11111111-1111-4111-8111-111111111111","token_exchange":{"accepted_audiences":[],"enabled":true,"max_token_age_secs":1,"scope_map":{},"subject_mapping":"example"},"updated_at":"2026-08-26T00:00:00Z"});
+      mountJson(server, 'POST', `/api/v1/federation-configs`, 201, {"allow_tenant_inheritance":true,"allowed_algorithms":[],"allowed_issuer_tenants":[],"attribute_map":{},"client_id":"example","created_at":"2026-08-26T00:00:00Z","effective_scopes":[],"enabled":true,"has_bundled_mark":true,"id":"11111111-1111-4111-8111-111111111111","mints_client_secret":true,"pkce_required":true,"protocol":"example","provider":"example","provider_kind":"example","scopes":[],"tenant_id":"11111111-1111-4111-8111-111111111111","token_exchange":{"accepted_audiences":[],"enabled":true,"max_token_age_secs":1,"scope_map":{},"subject_mapping":"example"},"updated_at":"2026-08-26T00:00:00Z"});
       await client.federation.createConfig({ client_id: 'example', client_secret: new Sensitive('example'), protocol: 'example', provider: 'example' });
     });
   });
   it('federation.get_config', async () => {
     await withServer(async (server, client) => {
-      mountJson(server, 'GET', `/api/v1/federation-configs/${EXAMPLE_ID}`, 200, {"attribute_map":{},"client_id":"example","created_at":"2026-08-26T00:00:00Z","enabled":true,"id":"11111111-1111-4111-8111-111111111111","protocol":"example","provider":"example","tenant_id":"11111111-1111-4111-8111-111111111111","token_exchange":{"accepted_audiences":[],"enabled":true,"max_token_age_secs":1,"scope_map":{},"subject_mapping":"example"},"updated_at":"2026-08-26T00:00:00Z"});
+      mountJson(server, 'GET', `/api/v1/federation-configs/${EXAMPLE_ID}`, 200, {"allow_tenant_inheritance":true,"allowed_algorithms":[],"allowed_issuer_tenants":[],"attribute_map":{},"client_id":"example","created_at":"2026-08-26T00:00:00Z","effective_scopes":[],"enabled":true,"has_bundled_mark":true,"id":"11111111-1111-4111-8111-111111111111","mints_client_secret":true,"pkce_required":true,"protocol":"example","provider":"example","provider_kind":"example","scopes":[],"tenant_id":"11111111-1111-4111-8111-111111111111","token_exchange":{"accepted_audiences":[],"enabled":true,"max_token_age_secs":1,"scope_map":{},"subject_mapping":"example"},"updated_at":"2026-08-26T00:00:00Z"});
       await client.federation.getConfig(EXAMPLE_ID);
     });
   });
   it('federation.update_config', async () => {
     await withServer(async (server, client) => {
-      mountJson(server, 'PUT', `/api/v1/federation-configs/${EXAMPLE_ID}`, 200, {"attribute_map":{},"client_id":"example","created_at":"2026-08-26T00:00:00Z","enabled":true,"id":"11111111-1111-4111-8111-111111111111","protocol":"example","provider":"example","tenant_id":"11111111-1111-4111-8111-111111111111","token_exchange":{"accepted_audiences":[],"enabled":true,"max_token_age_secs":1,"scope_map":{},"subject_mapping":"example"},"updated_at":"2026-08-26T00:00:00Z"});
+      mountJson(server, 'PUT', `/api/v1/federation-configs/${EXAMPLE_ID}`, 200, {"allow_tenant_inheritance":true,"allowed_algorithms":[],"allowed_issuer_tenants":[],"attribute_map":{},"client_id":"example","created_at":"2026-08-26T00:00:00Z","effective_scopes":[],"enabled":true,"has_bundled_mark":true,"id":"11111111-1111-4111-8111-111111111111","mints_client_secret":true,"pkce_required":true,"protocol":"example","provider":"example","provider_kind":"example","scopes":[],"tenant_id":"11111111-1111-4111-8111-111111111111","token_exchange":{"accepted_audiences":[],"enabled":true,"max_token_age_secs":1,"scope_map":{},"subject_mapping":"example"},"updated_at":"2026-08-26T00:00:00Z"});
       await client.federation.updateConfig(EXAMPLE_ID, {  });
     });
   });
