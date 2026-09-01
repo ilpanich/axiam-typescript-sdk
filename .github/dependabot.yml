@@ -10,6 +10,15 @@ updates:
       interval: weekly
       day: monday
     groups:
+      # @nestjs/core declares `peer @nestjs/common@^<its own major>`, so the two
+      # can only move together. A major bump falls outside minor-patch below, so
+      # ungrouped it arrives as one PR per package and each fails `npm ci` with
+      # an ERESOLVE conflict against its still-unbumped sibling. Match every
+      # update type, and keep this ahead of minor-patch: a dependency joins the
+      # first group it matches.
+      nestjs:
+        patterns:
+          - "@nestjs/*"
       minor-patch:
         update-types:
           - minor
@@ -31,3 +40,12 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    groups:
+      # github/codeql-action/* are sub-actions of one release: init writes the
+      # configuration file that analyze reads back, and analyze refuses a file
+      # stamped with a different version. Split across separate PRs they land at
+      # different versions and the CodeQL job fails with "Loaded a configuration
+      # file for version X, but running version Y". Keep them in a single PR.
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
