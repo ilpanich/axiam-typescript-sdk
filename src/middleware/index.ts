@@ -94,6 +94,13 @@ export type {
   SsoCompleteResult,
   SsoStartParams,
   SsoStartResult,
+  // Contract 1.38's four public login-provider operations, same rationale.
+  FederationProvider,
+  FederationProviderList,
+  SsoCompleteHandoffParams,
+  SsoCompleteOauth2Params,
+  SsoProvidersParams,
+  SsoStartOauth2Params,
   // §12.7/§14/§15/§20. Re-exported here for the same reason as the types above:
   // `OidcClient` is part of this entry point's public surface, so every type
   // its methods name must be reachable from here or typedoc reports a
@@ -113,6 +120,15 @@ export type {
   RequestingPartyToken,
   ResourceSet,
   UmaExchangeTicketParams,
+} from '../node/oidcTypes.js';
+// Value exports the same methods' documentation links to: the §12.1 note 10
+// protocol discriminants and the note 12 handoff constants.
+export {
+  HANDOFF_CODE_TTL_SECS,
+  HANDOFF_QUERY_PARAM,
+  PROTOCOL_OAUTH2,
+  PROTOCOL_OIDC_CONNECT,
+  PROTOCOL_SAML,
 } from '../node/oidcTypes.js';
 export type { IdTokenClaims } from '../node/oidcIdToken.js';
 export {
