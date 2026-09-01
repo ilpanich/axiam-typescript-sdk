@@ -397,6 +397,186 @@ export interface SsoCompleteResult {
 }
 
 // ---------------------------------------------------------------------------
+// Public "Sign in with X" login providers (contract 1.38)
+// ---------------------------------------------------------------------------
+
+/**
+ * `protocol` value selecting `ssoStart` (CONTRACT.md §12.1 note 10).
+ */
+export const PROTOCOL_OIDC_CONNECT = 'OidcConnect';
+
+/** `protocol` value selecting `ssoStartOauth2` (§12.1 note 10). */
+export const PROTOCOL_OAUTH2 = 'OAuth2';
+
+/**
+ * `protocol` value selecting the SAML login endpoint, which is **not** a §12
+ * vocabulary operation (§12.1 note 10).
+ */
+export const PROTOCOL_SAML = 'Saml';
+
+/**
+ * The query parameter the server delivers a handoff code in, on the SPA's own
+ * callback URL (CONTRACT.md §12.1 note 12).
+ */
+export const HANDOFF_QUERY_PARAM = 'axiam_handoff';
+
+/**
+ * How long a handoff code is valid, in seconds (§12.1 note 12).
+ *
+ * @remarks
+ * It exists to survive one redirect. Redeem it immediately, once.
+ */
+export const HANDOFF_CODE_TTL_SECS = 60;
+
+/**
+ * One sign-in button (wire schema `PublicFederationProvider`).
+ *
+ * @remarks
+ * This is an **unauthenticated** response and carries only what a button
+ * needs. There is no `client_id`, no `metadata_url`, no endpoint URL and no
+ * secret — absent by construction rather than filtered out — and §12.1 note 9
+ * forbids an SDK from expecting one.
+ */
+export interface FederationProvider {
+  /**
+   * Config id, to be echoed back to the matching start operation.
+   *
+   * Pass it through unmodified: inheritance is resolved server-side (§12.1
+   * note 13) and this id is how the server is told what resolution produced.
+   */
+  id: string;
+  /**
+   * Which provider this is, for the button's branding — `google`, `github`,
+   * `generic_oidc`, … **Not** what selects the start operation; see
+   * {@link protocol}.
+   */
+  providerKind: string;
+  /** The operator's display name for the provider. */
+  displayName: string;
+  /**
+   * `OidcConnect`, `Saml` or `OAuth2` — the value that selects which start
+   * operation to call (§12.1 note 10). Compare against
+   * {@link PROTOCOL_OIDC_CONNECT}, {@link PROTOCOL_OAUTH2} and
+   * {@link PROTOCOL_SAML}.
+   *
+   * Kept as the wire string rather than narrowed to a union the SDK enforces:
+   * the server owns this vocabulary, and a value added server-side must not
+   * become a parse failure for the whole list.
+   *
+   * An `OAuth2` provider issues **no ID token** — the server authenticates by
+   * calling a configured userinfo endpoint, so there is no signature, no
+   * `nonce` and no `aud` (§12.1 note 11). A surface rendering these buttons
+   * SHOULD make that distinction visible rather than presenting the two as
+   * equivalent.
+   */
+  protocol: string;
+  /**
+   * Whether AXIAM ships this provider's own sign-in mark, which its button
+   * must then use. `false` for the generic kinds, whose buttons read "Sign in
+   * with `displayName`" and use {@link buttonIcon} where one was uploaded.
+   */
+  hasBundledMark: boolean;
+  /**
+   * `true` when the provider is inherited from the organization rather than
+   * configured on this tenant (§12.1 note 13). Informational — it is not
+   * needed to sign in, and nothing in this SDK computes it.
+   */
+  inherited: boolean;
+  /**
+   * The operator's uploaded button icon as a bounded raster `data:` URL.
+   *
+   * `undefined` for most providers: present only for generic ones whose
+   * operator uploaded a mark.
+   */
+  buttonIcon?: string;
+}
+
+/**
+ * The result of `ssoProviders` (wire schema
+ * `PublicFederationProvidersResponse`).
+ *
+ * @remarks
+ * An **empty** {@link providers} is a normal success, never an error (§12.1
+ * note 9).
+ */
+export interface FederationProviderList {
+  /** The providers to offer, in a stable server-defined order. */
+  providers: FederationProvider[];
+}
+
+/**
+ * Arguments to `ssoProviders` (`GET /api/v1/auth/federation/providers`).
+ *
+ * @remarks
+ * Every field is optional and all four travel as **query** parameters — this
+ * is a `GET` with no body (§12.1). Unset forms fall back to the session's own
+ * configuration (§5.1); when neither the arguments nor the session supply a
+ * workspace the request is still sent, and still answers `200` with an empty
+ * list.
+ */
+export interface SsoProvidersParams {
+  /** Organization UUID. Alternative to {@link orgSlug}. */
+  orgId?: string;
+  /** Organization slug, as typed on a login page. */
+  orgSlug?: string;
+  /** Tenant UUID. Alternative to {@link tenantSlug}. */
+  tenantId?: string;
+  /** Tenant slug. Omitted or blank means the organization's own scope. */
+  tenantSlug?: string;
+}
+
+/**
+ * Arguments to `ssoStartOauth2` (`POST /api/v1/auth/federation/oauth2/start`).
+ *
+ * @remarks
+ * Deliberately identical in shape to {@link SsoStartParams}, because the wire
+ * schemas are: `OAuth2StartRequest` and `OidcStartRequest` differ in name
+ * only. There is **no** PKCE field, and there must not be — the verifier is
+ * generated and held server-side (§12.1 note 11).
+ */
+export interface SsoStartOauth2Params {
+  /** UUID of the federation configuration, from {@link FederationProvider.id}. */
+  federationConfigId: string;
+  /**
+   * The SPA callback route. Sent to the provider verbatim, so it must match
+   * what is registered there byte for byte.
+   */
+  redirectUri: string;
+  /** Tenant UUID; defaults to the session's configuration (§5.1). */
+  tenantId?: string;
+  /** Tenant slug. Alternative to {@link tenantId}. */
+  tenantSlug?: string;
+  /** Organization UUID; defaults to the session's configuration (§5.1). */
+  orgId?: string;
+  /** Organization slug. Alternative to {@link orgId}. */
+  orgSlug?: string;
+}
+
+/**
+ * Arguments to `ssoCompleteOauth2`
+ * (`POST /api/v1/auth/federation/oauth2/callback`).
+ */
+export interface SsoCompleteOauth2Params {
+  /** The `state` the provider redirected back with — the one `ssoStartOauth2` returned, unmodified. */
+  state: string;
+  /** The authorization code the provider redirected back with. */
+  code: string;
+}
+
+/**
+ * Arguments to `ssoCompleteHandoff` (`POST /api/v1/auth/federation/handoff`).
+ */
+export interface SsoCompleteHandoffParams {
+  /**
+   * The single-use code read from the {@link HANDOFF_QUERY_PARAM} query
+   * parameter on the SPA's callback URL.
+   *
+   * Valid for {@link HANDOFF_CODE_TTL_SECS} seconds and redeemable **once**.
+   */
+  code: string;
+}
+
+// ---------------------------------------------------------------------------
 // Wire types (snake_case, mirror the server schemas verbatim)
 // ---------------------------------------------------------------------------
 
@@ -434,6 +614,37 @@ export interface SsoLoginSuccessResponseWire {
   session_id: string;
   expires_in: number;
   redirect_uri: string;
+}
+
+/** One item of `GET /api/v1/auth/federation/providers` (wire schema `PublicFederationProvider`). */
+export interface PublicFederationProviderWire {
+  id: string;
+  provider_kind: string;
+  display_name: string;
+  protocol: string;
+  has_bundled_mark: boolean;
+  inherited: boolean;
+  button_icon?: string | null;
+}
+
+/** 200 body of `GET /api/v1/auth/federation/providers` (wire schema `PublicFederationProvidersResponse`). */
+export interface PublicFederationProvidersResponseWire {
+  providers: PublicFederationProviderWire[];
+}
+
+/**
+ * 200 body of `POST /api/v1/auth/federation/oauth2/start` (wire schema
+ * `OAuth2StartResponse`).
+ *
+ * @remarks
+ * The PKCE verifier is **not** here and never will be: it stays server-side in
+ * the login-state row, for the same reason the OIDC `nonce` does (§12.1
+ * note 11).
+ */
+export interface OAuth2StartResponseWire {
+  authorize_url: string;
+  state: string;
+  expires_in_secs: number;
 }
 
 // ---------------------------------------------------------------------------

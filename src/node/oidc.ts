@@ -1,8 +1,10 @@
-// OIDC / SSO relying-party helpers — CONTRACT.md §12 (contract 1.4).
+// OIDC / SSO relying-party helpers — CONTRACT.md §12 (contract 1.38).
 //
-// The nine canonical §12 operations, under the exact §12.2 TypeScript names:
-// oidcDiscover, oidcBegin, oidcExchange, oidcRefresh, loginClientCredentials,
-// introspect, revoke, ssoStart, ssoComplete.
+// The thirteen canonical §12 operations, under the exact §12.2 TypeScript
+// names: oidcDiscover, oidcBegin, oidcExchange, oidcRefresh,
+// loginClientCredentials, introspect, revoke, ssoStart, ssoComplete, and — as
+// of contract 1.38 — ssoProviders, ssoStartOauth2, ssoCompleteOauth2,
+// ssoCompleteHandoff.
 //
 // ── Why a separate class instead of methods on AxiamClient ─────────────────
 // `AxiamClient` lives in the browser-safe `src/rest/` core, and CI's SC#1
@@ -62,6 +64,14 @@ import type {
   SsoLoginSuccessResponseWire,
   SsoStartParams,
   SsoStartResult,
+  FederationProvider,
+  FederationProviderList,
+  OAuth2StartResponseWire,
+  PublicFederationProvidersResponseWire,
+  SsoCompleteHandoffParams,
+  SsoCompleteOauth2Params,
+  SsoProvidersParams,
+  SsoStartOauth2Params,
   TokenResponseWire,
   DeviceAuthorization,
   DeviceAuthorizationResponseWire,
@@ -93,6 +103,18 @@ export const SSO_START_PATH = '/api/v1/auth/federation/oidc/start';
 
 /** Path of the federation SSO step-2 (callback) endpoint. */
 export const SSO_CALLBACK_PATH = '/api/v1/auth/federation/oidc/callback';
+
+/** Path of the public provider-listing endpoint (contract 1.38). */
+export const SSO_PROVIDERS_PATH = '/api/v1/auth/federation/providers';
+
+/** Path of the plain-OAuth2 federation step-1 endpoint (contract 1.38). */
+export const SSO_OAUTH2_START_PATH = '/api/v1/auth/federation/oauth2/start';
+
+/** Path of the plain-OAuth2 federation step-2 (callback) endpoint (contract 1.38). */
+export const SSO_OAUTH2_CALLBACK_PATH = '/api/v1/auth/federation/oauth2/callback';
+
+/** Path of the handoff-code redemption endpoint (contract 1.38). */
+export const SSO_HANDOFF_PATH = '/api/v1/auth/federation/handoff';
 
 /**
  * Minimum — and default — discovery-cache TTL. CONTRACT.md §12.3 rule 6 sets
@@ -906,6 +928,205 @@ export class OidcClient {
       expiresIn: response.data.expires_in,
       redirectUri: response.data.redirect_uri,
     };
+  }
+
+  // -------------------------------------------------------------------------
+  // 10. ssoProviders  (contract 1.38)
+  // -------------------------------------------------------------------------
+
+  /**
+   * `GET /api/v1/auth/federation/providers` (§12.1) — which "Sign in with X"
+   * buttons to render for a workspace.
+   *
+   * @remarks
+   * The identifiers travel as **query** parameters; this is a `GET` and sends
+   * no body. The neighbouring start operations take the same four in a JSON
+   * body, and the two are one copy-paste apart, which is why there is a test
+   * asserting the location.
+   *
+   * **An empty list is a success.** An unknown organization, a known one with
+   * nothing configured, and a request naming no workspace at all all answer
+   * `200` with an empty `providers` array (§12.1 note 9). This method returns
+   * every one of them as an ordinary result and synthesises no not-found: the
+   * endpoint is deliberately shaped so it cannot be used to enumerate
+   * organization or tenant slugs, and an SDK that reintroduced the
+   * distinction would reintroduce the oracle. A caller learns it named the
+   * workspace wrongly at the start operations, where every failure is a
+   * uniform `401`.
+   *
+   * For the same reason this does **not** refuse client-side when no
+   * organization resolves, unlike {@link ssoStart} and
+   * {@link ssoStartOauth2}, which do.
+   */
+  async ssoProviders(params: SsoProvidersParams = {}): Promise<FederationProviderList> {
+    const tenantId = params.tenantId ?? this.#session.tenantId;
+    const tenantSlug = params.tenantSlug ?? this.#session.tenantSlug;
+    const orgId = params.orgId ?? this.#session.orgId;
+    const orgSlug = params.orgSlug ?? this.#session.orgSlug;
+
+    const query = new URLSearchParams();
+    if (orgId) {
+      query.set('org_id', orgId);
+    } else if (orgSlug) {
+      query.set('org_slug', orgSlug);
+    }
+    if (tenantId) {
+      query.set('tenant_id', tenantId);
+    } else if (tenantSlug) {
+      query.set('tenant_slug', tenantSlug);
+    }
+
+    const search = query.toString();
+    const url = search ? `${SSO_PROVIDERS_PATH}?${search}` : SSO_PROVIDERS_PATH;
+    let response: AxiosResponse<PublicFederationProvidersResponseWire>;
+    try {
+      response = await this.#session.axios.get<PublicFederationProvidersResponseWire>(url);
+    } catch (err) {
+      throw mapOidcError(err, url, 'ssoProviders request failed');
+    }
+
+    return {
+      providers: (response.data.providers ?? []).map(
+        (wire): FederationProvider => ({
+          id: wire.id,
+          providerKind: wire.provider_kind,
+          displayName: wire.display_name,
+          protocol: wire.protocol,
+          hasBundledMark: wire.has_bundled_mark,
+          inherited: wire.inherited,
+          ...(wire.button_icon ? { buttonIcon: wire.button_icon } : {}),
+        }),
+      ),
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // 11. ssoStartOauth2  (contract 1.38)
+  // -------------------------------------------------------------------------
+
+  /**
+   * `POST /api/v1/auth/federation/oauth2/start` (§12.1) — step 1 of a login
+   * through a **plain-OAuth2** upstream (GitHub, Facebook, `generic_oauth2`).
+   *
+   * @remarks
+   * Call this, rather than {@link ssoStart}, exactly when the provider's
+   * `protocol` is `OAuth2` (§12.1 note 10). The server refuses a mismatch
+   * with `400` rather than accepting it silently, so a client that assumes
+   * OIDC fails on every GitHub button.
+   *
+   * PKCE is mandatory on this path — it is the only replay protection left
+   * once there is no `nonce` — and is generated and stored **server-side**.
+   * Nothing about it appears in this request or its response (§12.1 note 11),
+   * and this method computes no verifier.
+   *
+   * @throws AuthError client-side, without a wire call, when tenant or org
+   *   context cannot be resolved. On the wire, a **`400`** can mean the
+   *   `redirectUri` is not on an origin the deployment accepts (§12.1 rule
+   *   12a) and surfaces as `NetworkError` — §2's `400` row, this taxonomy's
+   *   configuration/programming-error member, as distinct from the
+   *   `AuthError` a `401` gets. It is not retried; the same origin will be
+   *   refused again.
+   */
+  async ssoStartOauth2(params: SsoStartOauth2Params): Promise<SsoStartResult> {
+    const tenantId = params.tenantId ?? this.#session.tenantId;
+    const tenantSlug = params.tenantSlug ?? this.#session.tenantSlug;
+    const orgId = params.orgId ?? this.#session.orgId;
+    const orgSlug = params.orgSlug ?? this.#session.orgSlug;
+
+    if (!tenantId && !tenantSlug) {
+      throw new AuthError(
+        'ssoStartOauth2 requires tenant context: pass tenantId or tenantSlug, or construct the client with one (CONTRACT.md §5.1).',
+      );
+    }
+    if (!orgId && !orgSlug) {
+      throw new AuthError(
+        'ssoStartOauth2 requires organization context: pass orgId or orgSlug, or construct the client with one (CONTRACT.md §5.1).',
+      );
+    }
+
+    const body: Record<string, string> = {
+      federation_config_id: params.federationConfigId,
+      redirect_uri: params.redirectUri,
+    };
+    if (tenantId) {
+      body.tenant_id = tenantId;
+    } else if (tenantSlug) {
+      body.tenant_slug = tenantSlug;
+    }
+    if (orgId) {
+      body.org_id = orgId;
+    } else if (orgSlug) {
+      body.org_slug = orgSlug;
+    }
+
+    const response = await this.#postJson<OAuth2StartResponseWire>(
+      SSO_OAUTH2_START_PATH,
+      body,
+      'ssoStartOauth2 request failed',
+    );
+    return {
+      authorizeUrl: response.data.authorize_url,
+      state: response.data.state,
+      expiresInSecs: response.data.expires_in_secs,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // 12. ssoCompleteOauth2  (contract 1.38)
+  // -------------------------------------------------------------------------
+
+  /**
+   * `POST /api/v1/auth/federation/oauth2/callback` (§12.1) — step 2 of a
+   * plain-OAuth2 login.
+   *
+   * @remarks
+   * The session arrives as **`Set-Cookie`** (§12.1 note 6), so this call must
+   * go through the §4 cookie jar exactly as {@link ssoComplete} must.
+   *
+   * §12.4 does not apply: an `OAuth2` provider issues no ID token, so there
+   * is nothing to validate. The server authenticated the user by calling a
+   * configured userinfo endpoint with the access token it had just received —
+   * configuration and transport trust rather than cryptographic trust (§12.1
+   * note 11).
+   */
+  async ssoCompleteOauth2(params: SsoCompleteOauth2Params): Promise<SsoCompleteResult> {
+    return this.#completeFederationSession(
+      SSO_OAUTH2_CALLBACK_PATH,
+      { state: params.state, code: params.code },
+      'ssoCompleteOauth2 request failed',
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // 13. ssoCompleteHandoff  (contract 1.38)
+  // -------------------------------------------------------------------------
+
+  /**
+   * `POST /api/v1/auth/federation/handoff` (§12.1) — redeem the single-use
+   * code the SAML and Apple flows deliver.
+   *
+   * @remarks
+   * Those two protocols return **cross-site**, so the server cannot set
+   * `SameSite=Strict` session cookies on that response. It instead redirects
+   * the browser to the SPA's callback URL with an `axiam_handoff` query
+   * parameter ({@link HANDOFF_QUERY_PARAM}); this call posts that code back
+   * same-origin, and *this* response is the one carrying the cookies (§12.1
+   * note 12).
+   *
+   * **The code is gone either way.** It is valid for
+   * {@link HANDOFF_CODE_TTL_SECS} seconds and redeemable **once**. Redeem it
+   * from the same origin, immediately, and never retry a failed redemption: a
+   * `401` is terminal, and this method makes exactly one wire call so that it
+   * cannot become a retry by accident. Unknown, expired and already-redeemed
+   * all answer the same `401`, deliberately — telling them apart is not
+   * something a caller gets to do.
+   */
+  async ssoCompleteHandoff(params: SsoCompleteHandoffParams): Promise<SsoCompleteResult> {
+    return this.#completeFederationSession(
+      SSO_HANDOFF_PATH,
+      { code: params.code },
+      'ssoCompleteHandoff request failed',
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -1779,6 +2000,30 @@ export class OidcClient {
     } catch (err) {
       throw mapOidcError(err, url, fallbackMessage);
     }
+  }
+
+  /**
+   * The shared body of the federation POSTs that establish a session: one
+   * wire call, then the same post-login sync `login()`/`verifyMfa()` perform
+   * (§4, §3) — reading the freshly-set `axiam_csrf`/`axiam_access` cookies out
+   * of the jar.
+   */
+  async #completeFederationSession(
+    url: string,
+    body: Record<string, string>,
+    fallbackMessage: string,
+  ): Promise<SsoCompleteResult> {
+    const response = await this.#postJson<SsoLoginSuccessResponseWire>(url, body, fallbackMessage);
+
+    this.#session.authenticated = true;
+    await this.#session.onAuthenticated?.();
+
+    return {
+      userId: response.data.user_id,
+      sessionId: response.data.session_id,
+      expiresIn: response.data.expires_in,
+      redirectUri: response.data.redirect_uri,
+    };
   }
 
   /** POST a JSON body (the federation endpoints) through the session transport. */

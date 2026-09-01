@@ -56,6 +56,10 @@ export {
   MIN_DISCOVERY_TTL_MS,
   SSO_CALLBACK_PATH,
   SSO_START_PATH,
+  SSO_HANDOFF_PATH,
+  SSO_OAUTH2_CALLBACK_PATH,
+  SSO_OAUTH2_START_PATH,
+  SSO_PROVIDERS_PATH,
   ACCESS_TOKEN_TYPE,
   BACKCHANNEL_LOGOUT_EVENT,
   DEFAULT_POLL_INTERVAL_SECS,
@@ -86,6 +90,12 @@ export type {
   SsoCompleteResult,
   SsoStartParams,
   SsoStartResult,
+  FederationProvider,
+  FederationProviderList,
+  SsoCompleteHandoffParams,
+  SsoCompleteOauth2Params,
+  SsoProvidersParams,
+  SsoStartOauth2Params,
   DeviceAuthorization,
   DeviceAuthorizeParams,
   // §26 pushed authorization requests (RFC 9126).
@@ -103,6 +113,15 @@ export type {
   RptPermission,
   UmaChallenge,
   UmaExchangeTicketParams,
+} from './oidcTypes.js';
+// Value exports from the same module: the §12.1 note 10 protocol discriminants
+// and the note 12 handoff constants a caller driving the browser hop needs.
+export {
+  HANDOFF_CODE_TTL_SECS,
+  HANDOFF_QUERY_PARAM,
+  PROTOCOL_OAUTH2,
+  PROTOCOL_OIDC_CONNECT,
+  PROTOCOL_SAML,
 } from './oidcTypes.js';
 export {
   MemoryOidcStateStore,

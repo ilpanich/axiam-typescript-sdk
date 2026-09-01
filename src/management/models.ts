@@ -593,12 +593,43 @@ export interface CreateCertificateRequest {
 /** `CreateFederationConfigRequest` (generated from openapi.json). */
 export interface CreateFederationConfigRequest {
   /**
+   * Whether tenants of this organization may inherit this provider. Only
+   * meaningful on a config in the organization-scope tenant.
+   */
+  allow_tenant_inheritance?: boolean | null;
+  /**
    * Accepted JWT signing algorithms (OIDC) or signature algorithms (SAML).
    * Defaults to `["RS256"]` when not provided (CQ-B40/REQ-14 AC-5).
    */
   allowed_algorithms?: string[] | null;
+  /**
+   * External IdP tenant identifiers accepted when the provider publishes a
+   * templated issuer (Entra ID's `{tenantid}`).
+   */
+  allowed_issuer_tenants?: string[] | null;
+  /**
+   * Apple Key ID of the `.p8` signing key (10 characters). With both Apple
+   * identifiers set, `client_secret` is the `.p8` key itself and AXIAM mints a
+   * fresh five-minute client secret per token exchange.
+   */
+  apple_key_id?: string | null;
+  /** Apple Team ID (10 characters). */
+  apple_team_id?: string | null;
   /** Maps external IdP attributes to AXIAM user fields. */
   attribute_map?: unknown;
+  /** OAuth2-variant authorization endpoint. Required for `OAuth2`. */
+  authorization_endpoint?: string | null;
+  /**
+   * Sign-in-button icon for a **generic** provider, as a base64 raster data
+   * URL (`data:image/png;base64,…`), already cropped to
+   * `PROVIDER_ICON_SIZE_PX` square by the client.
+   *
+   * Refused for the branded kinds: Google, Apple and Microsoft all publish
+   * sign-in-button rules that require their own mark, so substituting a
+   * picture would produce a button that breaks the guidelines it exists to
+   * follow.
+   */
+  button_icon?: string | null;
   /** OAuth2 client ID registered with the external IdP. */
   client_id: string;
   /**
@@ -619,8 +650,31 @@ export interface CreateFederationConfigRequest {
   protocol: string;
   /** Display name for the identity provider (e.g., "Google", "Okta"). */
   provider: string;
+  /**
+   * Which provider this is: `google`, `github`, `facebook`, `apple`,
+   * `microsoft`, `generic_oidc`, `generic_oauth2` or `generic_saml`.
+   *
+   * Selects the sign-in button's branding, the per-kind defaults, and the key
+   * on which a tenant config overrides an inherited organization one. Omitted
+   * ⇒ derived from `protocol`, which is what every config written before this
+   * field existed means.
+   */
+  provider_kind?: string | null;
+  /**
+   * Operator-chosen identifier, **required** for the `generic_*` kinds and
+   * refused for the branded ones.
+   */
+  provider_slug?: string | null;
+  /** Send PKCE on the authorization request. Forced on for `OAuth2`. */
+  require_pkce?: boolean | null;
+  /** Scopes to request. Omitted or empty ⇒ the per-kind default. */
+  scopes?: string[] | null;
+  /** OAuth2-variant token endpoint. Required for `OAuth2`. */
+  token_endpoint?: string | null;
   /** `token_exchange`. */
   token_exchange?: TokenExchangeTrustRequest | null;
+  /** OAuth2-variant userinfo endpoint. Required for `OAuth2`. */
+  userinfo_endpoint?: string | null;
 }
 
 /**
@@ -631,15 +685,27 @@ export interface CreateFederationConfigRequest {
  * because a consumer should read it.
  */
 export interface CreateFederationConfigRequestWire {
+  allow_tenant_inheritance?: boolean | null;
   allowed_algorithms?: string[] | null;
+  allowed_issuer_tenants?: string[] | null;
+  apple_key_id?: string | null;
+  apple_team_id?: string | null;
   attribute_map?: unknown;
+  authorization_endpoint?: string | null;
+  button_icon?: string | null;
   client_id: string;
   client_secret: string;
   idp_signing_cert_pem?: string | null;
   metadata_url?: string | null;
   protocol: string;
   provider: string;
+  provider_kind?: string | null;
+  provider_slug?: string | null;
+  require_pkce?: boolean | null;
+  scopes?: string[] | null;
+  token_endpoint?: string | null;
   token_exchange?: TokenExchangeTrustRequest | null;
+  userinfo_endpoint?: string | null;
 }
 
 /**
@@ -1153,28 +1219,84 @@ export type FailurePolicy =
 
 /** Federation config response -- omits client_secret. */
 export interface FederationConfigResponse {
+  /** Whether tenants of this organization may inherit this provider. */
+  allow_tenant_inheritance: boolean;
+  /**
+   * Accepted signing algorithms. Returned for OIDC and SAML; meaningless, and
+   * therefore empty, for the OAuth2 variant.
+   */
+  allowed_algorithms: string[];
+  /** Accepted external IdP tenants for a templated issuer. */
+  allowed_issuer_tenants: string[];
+  /** Apple Key ID. */
+  apple_key_id?: string | null;
+  /** Apple Team ID. Not secret — the `.p8` key is, and it is never returned. */
+  apple_team_id?: string | null;
   /** `attribute_map`. */
   attribute_map: unknown;
+  /** OAuth2-variant authorization endpoint. */
+  authorization_endpoint?: string | null;
+  /** Custom sign-in-button icon, when one is set. */
+  button_icon?: string | null;
   /** `client_id`. */
   client_id: string;
   /** `created_at`. */
   created_at: string;
+  /**
+   * The per-kind default that an empty `scopes` resolves to. Returned so the
+   * admin UI can show what will actually be requested without duplicating the
+   * table.
+   */
+  effective_scopes: string[];
   /** `enabled`. */
   enabled: boolean;
+  /**
+   * Whether AXIAM ships this provider's own mark. When true the button uses it
+   * and `button_icon` is refused; when false the button reads "Sign in with
+   * <provider>" and may carry a custom icon.
+   */
+  has_bundled_mark: boolean;
   /** `id`. */
   id: string;
   /** `metadata_url`. */
   metadata_url?: string | null;
+  /**
+   * Whether AXIAM mints this provider's client secret itself, per exchange,
+   * rather than sending a stored one. True only for an Apple config with both
+   * identifiers set.
+   */
+  mints_client_secret: boolean;
+  /**
+   * Whether PKCE is sent on the authorization request. Always true for the
+   * OAuth2 variant regardless of the stored flag.
+   */
+  pkce_required: boolean;
   /** `protocol`. */
   protocol: string;
   /** `provider`. */
   provider: string;
+  /**
+   * Which provider this is. Derived from `protocol` for a config written
+   * before the field existed.
+   */
+  provider_kind: string;
+  /** Operator-chosen identifier for a `generic_*` kind. */
+  provider_slug?: string | null;
+  /**
+   * Scopes as stored. Empty means "use the per-kind default"; see
+   * `effective_scopes`.
+   */
+  scopes: string[];
   /** `tenant_id`. */
   tenant_id: string;
+  /** OAuth2-variant token endpoint. */
+  token_endpoint?: string | null;
   /** X4 external token-exchange trust. */
   token_exchange: TokenExchangeTrustResponse;
   /** `updated_at`. */
   updated_at: string;
+  /** OAuth2-variant userinfo endpoint. */
+  userinfo_endpoint?: string | null;
 }
 
 /** `FederationLinkResponse` (generated from openapi.json). */
@@ -3107,10 +3229,22 @@ export type UnknownAaguidAction =
  * than sent as `null` (§27.4 rule 5).
  */
 export interface UpdateFederationConfigRequest {
+  /** Whether tenants may inherit this organization-level provider. */
+  allow_tenant_inheritance?: boolean | null;
   /** Accepted signature algorithms (CQ-B40/REQ-14 AC-5). */
   allowed_algorithms?: string[] | null;
+  /** Accepted external IdP tenants for a templated issuer. Replaced wholesale. */
+  allowed_issuer_tenants?: string[] | null;
+  /** Apple Key ID. `Some(None)` clears it. */
+  apple_key_id?: string | null;
+  /** Apple Team ID. `Some(None)` clears it. */
+  apple_team_id?: string | null;
   /** `attribute_map`. */
   attribute_map?: unknown;
+  /** OAuth2-variant authorization endpoint. `Some(None)` clears it. */
+  authorization_endpoint?: string | null;
+  /** Sign-in-button icon for a generic provider. `Some(None)` clears it. */
+  button_icon?: string | null;
   /** `client_id`. */
   client_id?: string | null;
   /**
@@ -3131,8 +3265,21 @@ export interface UpdateFederationConfigRequest {
   metadata_url?: string | null;
   /** `provider`. */
   provider?: string | null;
+  /** Operator-chosen identifier for a `generic_*` kind. `Some(None)` clears it. */
+  provider_slug?: string | null;
+  /** Send PKCE on the authorization request. */
+  require_pkce?: boolean | null;
+  /**
+   * Scopes to request. Replaced wholesale; empty restores the per-kind
+   * default.
+   */
+  scopes?: string[] | null;
+  /** OAuth2-variant token endpoint. `Some(None)` clears it. */
+  token_endpoint?: string | null;
   /** `token_exchange`. */
   token_exchange?: TokenExchangeTrustRequest | null;
+  /** OAuth2-variant userinfo endpoint. `Some(None)` clears it. */
+  userinfo_endpoint?: string | null;
 }
 
 /**
@@ -3143,15 +3290,26 @@ export interface UpdateFederationConfigRequest {
  * because a consumer should read it.
  */
 export interface UpdateFederationConfigRequestWire {
+  allow_tenant_inheritance?: boolean | null;
   allowed_algorithms?: string[] | null;
+  allowed_issuer_tenants?: string[] | null;
+  apple_key_id?: string | null;
+  apple_team_id?: string | null;
   attribute_map?: unknown;
+  authorization_endpoint?: string | null;
+  button_icon?: string | null;
   client_id?: string | null;
   client_secret?: string;
   enabled?: boolean | null;
   idp_signing_cert_pem?: string | null;
   metadata_url?: string | null;
   provider?: string | null;
+  provider_slug?: string | null;
+  require_pkce?: boolean | null;
+  scopes?: string[] | null;
+  token_endpoint?: string | null;
   token_exchange?: TokenExchangeTrustRequest | null;
+  userinfo_endpoint?: string | null;
 }
 
 /**
