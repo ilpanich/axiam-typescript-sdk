@@ -16,7 +16,7 @@
 </div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">CreateCaCertificateRequest</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#intermediate_subject">intermediate_subject</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#intermediate_validity_days">intermediate_validity_days</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#issue_from_root">issue_from_root</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#key_algorithm">key_algorithm</a><span class="tsd-signature-symbol">:</span> <a href="../types/index.KeyAlgorithm.html" class="tsd-signature-type tsd-kind-type-alias">KeyAlgorithm</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#subject">subject</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#validity_days">validity_days</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L548">src/management/models.ts:548</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/fc19d3a3160ba7ed4c0df26082a24c9bc36a7c54/src/management/models.ts#L548">src/management/models.ts:548</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -44,14 +44,14 @@ it, and this names the second. Defaults to the root's subject with
 produces one self-signed CA and has no second certificate to name.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L557">src/management/models.ts:557</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/fc19d3a3160ba7ed4c0df26082a24c9bc36a7c54/src/management/models.ts#L557">src/management/models.ts:557</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="intermediate_validity_days"><code class="tsd-tag">Optional</code><span>intermediate_<wbr/>validity_<wbr/>days</span><a href="#intermediate_validity_days" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">intermediate_validity_days</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></div>
 <div class="tsd-comment tsd-typography"><p>Validity of the signing intermediate, in days. Defaults to the root's.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L559">src/management/models.ts:559</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/fc19d3a3160ba7ed4c0df26082a24c9bc36a7c54/src/management/models.ts#L559">src/management/models.ts:559</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="issue_from_root"><code class="tsd-tag">Optional</code><span>issue_<wbr/>from_<wbr/>root</span><a href="#issue_from_root" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">issue_from_root</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
@@ -62,28 +62,28 @@ have that intermediate revoked and replaced without redistributing the
 trust anchor, and a root that signs leaves cannot.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L568">src/management/models.ts:568</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/fc19d3a3160ba7ed4c0df26082a24c9bc36a7c54/src/management/models.ts#L568">src/management/models.ts:568</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="key_algorithm"><span>key_<wbr/>algorithm</span><a href="#key_algorithm" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">key_algorithm</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.KeyAlgorithm.html" class="tsd-signature-type tsd-kind-type-alias">KeyAlgorithm</a></div>
 <div class="tsd-comment tsd-typography"><p><code>key_algorithm</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L570">src/management/models.ts:570</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/fc19d3a3160ba7ed4c0df26082a24c9bc36a7c54/src/management/models.ts#L570">src/management/models.ts:570</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="subject"><span>subject</span><a href="#subject" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">subject</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p><code>subject</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L572">src/management/models.ts:572</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/fc19d3a3160ba7ed4c0df26082a24c9bc36a7c54/src/management/models.ts#L572">src/management/models.ts:572</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="validity_days"><span>validity_<wbr/>days</span><a href="#validity_days" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">validity_days</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>Validity duration in days.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/b2a6b0181573bb7fdae42fa0c39d42a87eeefc18/src/management/models.ts#L574">src/management/models.ts:574</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/fc19d3a3160ba7ed4c0df26082a24c9bc36a7c54/src/management/models.ts#L574">src/management/models.ts:574</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
