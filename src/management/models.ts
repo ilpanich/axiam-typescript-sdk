@@ -2774,6 +2774,8 @@ export interface SecuritySettings {
   token: TokenPolicy;
   /** `updated_at`. */
   updated_at: string;
+  /** `webauthn`. */
+  webauthn: WebauthnPolicy;
 }
 
 /**
@@ -2926,6 +2928,8 @@ export interface SetOrgSettings {
   require_symbols: boolean;
   /** `require_uppercase`. */
   require_uppercase: boolean;
+  /** `webauthn_user_verification`. */
+  webauthn_user_verification?: string;
 }
 
 /**
@@ -3116,6 +3120,8 @@ export interface TenantSettingsOverride {
   require_symbols?: boolean | null;
   /** `require_uppercase`. */
   require_uppercase?: boolean | null;
+  /** `webauthn_user_verification`. */
+  webauthn_user_verification?: string | null;
 }
 
 /**
@@ -3714,6 +3720,30 @@ export interface WebauthnAttestationPolicy {
   require_fido_certified: boolean;
   /** `unknown_aaguid`. */
   unknown_aaguid?: UnknownAaguidAction | null;
+}
+
+/**
+ * WebAuthn ceremony policy.
+ *
+ * One field today. It is a struct rather than a bare field on
+ * [`SecuritySettings`] so that the next WebAuthn control has an obvious
+ * home, and so the admin UI can group them.
+ *
+ * The *attestation* policy is deliberately not here: it lives in
+ * [`crate::models::webauthn_policy::WebauthnAttestationPolicy`], is
+ * tenant-only, and cannot join this model because AAGUID allow/block lists
+ * have no "more restrictive than" ordering to validate an override against.
+ * User verification does, so it can.
+ */
+export interface WebauthnPolicy {
+  /**
+   * How hard the authenticator must prove *who* is present.
+   *
+   * Applies to enrolment and to second-factor authentication. Usernameless
+   * sign-in is held to `required` whatever this says — see
+   * [`WebauthnUserVerification`].
+   */
+  webauthn_user_verification: string;
 }
 
 /** Webhook response — omits the shared secret. */
