@@ -69,15 +69,6 @@ jobs:
       - name: Build
         run: npm run build
 
-      # CONTRACT §27.8: the management surface is generated from the vendored
-      # management-registry.json and committed. This fails when the two have
-      # drifted -- which happens whenever the registry is re-vendored and
-      # nobody re-ran the generator, and which would otherwise ship 146
-      # methods pointing at last release's routes.
-      - name: §27 management surface is regenerated
-        run: |
-          node scripts/gen-management.mjs --check
-
       - name: Typecheck
         run: npm run typecheck
 
@@ -167,6 +158,33 @@ jobs:
           esac
           npm publish --dry-run --tag "${dist_tag}"
 
+  # CONTRACT §27.8: the management surface is generated from the vendored
+  # management-registry.json and committed. This fails when the two have
+  # drifted -- which happens whenever the registry is re-vendored and nobody
+  # re-ran the generator, and which would otherwise ship 146 methods pointing
+  # at last release's routes.
+  #
+  # R-2 (T-235): this was a step inside the `test` job, which is
+  # `pull_request`-only, so a stale surface reaching a tag by any route other
+  # than `scripts/mass-tag.sh` met no repository-side gate at all — and npm
+  # never lets a version number be reused. It is its own job now, with no
+  # `if:`, so it runs on tag pushes too without dragging the whole two-Node
+  # test matrix onto a trigger it does not run on today. The `publish` job
+  # `needs:` it.
+  #
+  # The generator reads the two vendored JSON artifacts and writes TypeScript
+  # with `node:fs` alone — no dependency, so no `npm ci` and no buf here.
+  management-drift-check:
+    name: §27 management surface drift-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: '22'
+      - name: Fail on drift — committed §27 surface must match the registry
+        run: node scripts/gen-management.mjs --check
+
   # Publishing to npm is IRREVERSIBLE — a version number can never be reclaimed.
   # Git tags are NOT branch-scoped, so without this gate a release tag cut on a
   # feature branch would ship unreviewed code to the world. The publish job
@@ -192,7 +210,7 @@ jobs:
   publish:
     name: Publish to npm
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: verify-tag-on-main
+    needs: [management-drift-check, verify-tag-on-main]
     runs-on: ubuntu-latest
     # Manual-on-tag, side-effecting job: only runs when a maintainer pushes a
     # vX.Y.Z tag. It is never triggered by a PR (T-17-26), so no publishing
