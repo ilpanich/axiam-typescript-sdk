@@ -45,6 +45,17 @@ export class SharedSession {
   /** Expected `aud` for locally-verified access tokens (§10.1 rule 6), if configured; `undefined` means no audience check. */
   readonly expectedAudience: string | undefined;
   /**
+   * True when this session was constructed with a §6.1 mTLS client identity
+   * (`clientCert` + `clientKey`), and therefore presents a client certificate
+   * on every request it makes.
+   *
+   * Read by the §12 OIDC helpers to decide whether CONTRACT.md §21.3 rule 2
+   * applies: an `mtls_endpoint_aliases` entry is preferred only on a call that
+   * is actually going over mutual TLS, and a session without an identity must
+   * keep using the top-level endpoints.
+   */
+  readonly presentsClientCertificate: boolean;
+  /**
    * Resolved tenant UUID used to build the `refresh` body (`RefreshRequest`
    * requires the UUID form, not a slug). Seeded from `orgId`/`tenantId` config
    * when the UUID was supplied, then updated from the access-token `tenant_id`
@@ -95,6 +106,10 @@ export class SharedSession {
     this.orgSlug = options.orgSlug;
     this.expectedIssuer = options.expectedIssuer;
     this.expectedAudience = options.expectedAudience;
+    // Both halves, because §6.1 is all-or-nothing: `resolveClientIdentity`
+    // rejects one without the other before this line is reached.
+    this.presentsClientCertificate =
+      options.clientCert !== undefined && options.clientKey !== undefined;
     // Seed the resolved UUIDs from any UUID-form config so the browser persona
     // (which cannot decode the httpOnly access token) can still build a valid
     // refresh body. The Node persona later overwrites these from the

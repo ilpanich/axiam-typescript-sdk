@@ -55,6 +55,7 @@ import type {
   OidcBeginParams,
   OidcConfiguration,
   OidcExchangeParams,
+  MtlsEndpointAliases,
   OidcRefreshParams,
   OidcStartResponseWire,
   OidcTokenSet,
@@ -782,7 +783,7 @@ export class OidcClient {
       form.set('token_type_hint', params.tokenTypeHint);
     }
 
-    const url = this.#endpointUrl(configuration.introspection_endpoint, params.tenantId);
+    const url = this.#endpointUrl(this.#requiredEndpoint(configuration, 'introspection_endpoint'), params.tenantId);
     const response = await this.#postForm<IntrospectionResponseWire>(url, form, 'introspect request failed');
     const wire = response.data;
     return {
@@ -822,7 +823,7 @@ export class OidcClient {
       form.set('token_type_hint', params.tokenTypeHint);
     }
 
-    const url = this.#endpointUrl(configuration.revocation_endpoint, params.tenantId);
+    const url = this.#endpointUrl(this.#requiredEndpoint(configuration, 'revocation_endpoint'), params.tenantId);
     await this.#postForm<void>(url, form, 'revoke request failed');
   }
 
@@ -1144,7 +1145,7 @@ export class OidcClient {
    */
   async deviceAuthorize(params: DeviceAuthorizeParams = {}): Promise<DeviceAuthorization> {
     const configuration = params.configuration ?? (await this.oidcDiscover());
-    const endpoint = configuration.device_authorization_endpoint;
+    const endpoint = this.#optionalEndpoint(configuration, 'device_authorization_endpoint');
     if (!endpoint) {
       throw new AuthError(
         "the authorization server's discovery document advertises no " +
@@ -1221,7 +1222,7 @@ export class OidcClient {
    */
   async oidcPar(params: OidcParParams): Promise<PushedAuthorizationRequest> {
     const configuration = params.configuration ?? (await this.oidcDiscover());
-    const endpoint = configuration.pushed_authorization_request_endpoint;
+    const endpoint = this.#optionalEndpoint(configuration, 'pushed_authorization_request_endpoint');
     if (!endpoint) {
       throw new AuthError(
         "the authorization server's discovery document advertises no " +
@@ -1439,7 +1440,7 @@ export class OidcClient {
     form.set('client_id', this.#options.clientId);
     form.set('client_secret', this.#requireClientSecret('tokenExchange'));
 
-    const url = this.#endpointUrl(configuration.token_endpoint, params.tenantId);
+    const url = this.#endpointUrl(this.#requiredEndpoint(configuration, 'token_endpoint'), params.tenantId);
     const { data } = await this.#postForm<TokenExchangeResponseWire>(
       url,
       form,
@@ -1603,7 +1604,7 @@ export class OidcClient {
     form.set('client_id', this.#options.clientId);
     form.set('client_secret', this.#requireClientSecret('umaExchangeTicket'));
 
-    const url = this.#endpointUrl(configuration.token_endpoint, params.tenantId);
+    const url = this.#endpointUrl(this.#requiredEndpoint(configuration, 'token_endpoint'), params.tenantId);
     // One POST, no retry wrapper. See the rule-6 note above — this is the §16
     // exception, and it is load-bearing rather than stylistic.
     let data: RptResponseWire;
@@ -1843,7 +1844,7 @@ export class OidcClient {
     form: URLSearchParams,
     tenantId: string | undefined,
   ): Promise<TokenResponseWire> {
-    const url = this.#endpointUrl(configuration.token_endpoint, tenantId);
+    const url = this.#endpointUrl(this.#requiredEndpoint(configuration, 'token_endpoint'), tenantId);
     const response = await this.#postForm<TokenResponseWire>(url, form, 'token request failed');
     return response.data;
   }
@@ -1889,6 +1890,55 @@ export class OidcClient {
     const verifier = createJwksVerifier(jwksUri);
     this.#verifiers.set(jwksUri, verifier);
     return verifier;
+  }
+
+  /**
+   * The RFC 8705 §5 alias for `name`, or `undefined` when this call is not
+   * going over mutual TLS or the document publishes no aliases (CONTRACT.md
+   * §21.3 rule 2).
+   *
+   * Three things this deliberately does NOT do, each of them a documented way
+   * to get rule 2 wrong:
+   *
+   *   * It never treats an absent `mtls_endpoint_aliases` as an error. Absence
+   *     means "no separate mTLS host", not "mTLS unsupported" — a deployment
+   *     running `client_auth = optional` on one listener serves both
+   *     populations at the conventional endpoints and correctly publishes
+   *     nothing.
+   *   * It is keyed by {@link MtlsEndpointAliases}, so only the six aliasable
+   *     endpoints can reach it. `authorization_endpoint`,
+   *     `end_session_endpoint` and `jwks_uri` are unrepresentable here rather
+   *     than merely unused: they are front-channel or public, and an mTLS host
+   *     would raise a certificate-chooser dialog in the user's browser.
+   *   * It never touches `issuer`, which is an identifier and not an endpoint.
+   *     §10.1 rule 3 still compares a token's `iss` to `configuration.issuer`
+   *     by exact string, including for a token minted at an alias endpoint.
+   */
+  #aliasFor(configuration: OidcConfiguration, name: keyof MtlsEndpointAliases): string | undefined {
+    if (!this.#session.presentsClientCertificate) {
+      return undefined;
+    }
+    return configuration.mtls_endpoint_aliases?.[name];
+  }
+
+  /** An always-advertised endpoint, preferring its §21.3 rule 2 mTLS alias. */
+  #requiredEndpoint(
+    configuration: OidcConfiguration,
+    name: 'token_endpoint' | 'userinfo_endpoint' | 'revocation_endpoint' | 'introspection_endpoint',
+  ): string {
+    return this.#aliasFor(configuration, name) ?? configuration[name];
+  }
+
+  /**
+   * A conditionally-advertised endpoint, preferring its §21.3 rule 2 mTLS
+   * alias. `undefined` still means "this server does not support the feature" —
+   * the caller raises that, and never concatenates a URL onto the issuer.
+   */
+  #optionalEndpoint(
+    configuration: OidcConfiguration,
+    name: 'device_authorization_endpoint' | 'pushed_authorization_request_endpoint',
+  ): string | undefined {
+    return this.#aliasFor(configuration, name) ?? configuration[name];
   }
 
   /**

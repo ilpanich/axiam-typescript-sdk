@@ -80,6 +80,7 @@ export type {
   IntrospectionResult,
   IntrospectParams,
   LoginClientCredentialsParams,
+  MtlsEndpointAliases,
   OidcBeginParams,
   OidcConfiguration,
   OidcExchangeParams,
