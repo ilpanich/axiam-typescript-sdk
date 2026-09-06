@@ -84,6 +84,7 @@ export type {
   IntrospectParams,
   IntrospectionResult,
   LoginClientCredentialsParams,
+  MtlsEndpointAliases,
   OidcBeginParams,
   OidcConfiguration,
   OidcExchangeParams,

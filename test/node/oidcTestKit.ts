@@ -12,7 +12,7 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { createNodeSession, type NodeSession } from '../../src/node/session.js';
 import { createOidcClient, DISCOVERY_PATH, OidcClient } from '../../src/node/oidc.js';
-import type { OidcConfiguration } from '../../src/node/oidcTypes.js';
+import type { MtlsEndpointAliases, OidcConfiguration } from '../../src/node/oidcTypes.js';
 
 export const BASE_URL = 'https://axiam-oidc.test';
 export const TENANT_ID = '11111111-2222-3333-4444-555555555555';
@@ -28,6 +28,42 @@ export const ISSUER = 'https://iam.example.com';
 export const DEVICE_AUTHORIZATION_ENDPOINT = `${BASE_URL}/oauth2/device_authorization`;
 export const END_SESSION_ENDPOINT = `${BASE_URL}/oauth2/end_session`;
 export const PAR_ENDPOINT = `${BASE_URL}/oauth2/par`;
+
+// ── RFC 8705 §5 mTLS endpoint aliases (CONTRACT.md §21.3 rule 2) ────────────
+// A second origin, standing in for the listener that performs the mutual-TLS
+// handshake. Distinct from BASE_URL on purpose: every assertion about which
+// endpoint was chosen is then a host comparison rather than a path one.
+export const MTLS_BASE_URL = 'https://mtls.axiam-oidc.test';
+export const MTLS_TOKEN_ENDPOINT = `${MTLS_BASE_URL}/oauth2/token`;
+export const MTLS_INTROSPECT_ENDPOINT = `${MTLS_BASE_URL}/oauth2/introspect`;
+export const MTLS_REVOKE_ENDPOINT = `${MTLS_BASE_URL}/oauth2/revoke`;
+export const MTLS_DEVICE_AUTHORIZATION_ENDPOINT = `${MTLS_BASE_URL}/oauth2/device_authorization`;
+export const MTLS_PAR_ENDPOINT = `${MTLS_BASE_URL}/oauth2/par`;
+
+/**
+ * A syntactically valid PEM pair. `resolveClientIdentity` checks the shape and
+ * the https.Agent is built eagerly, but msw intercepts above the socket, so no
+ * handshake ever runs against these.
+ */
+export const CLIENT_CERT_PEM = [
+  '-----BEGIN CERTIFICATE-----',
+  'MIIBkTCB+wIJAKZ0000000000MA0GCSqGSIb3DQEBCwUAMBQxEjAQBgNVBAMMCWxv',
+  '-----END CERTIFICATE-----',
+  '',
+].join('\n');
+export const CLIENT_KEY_PEM = '-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIA==\n-----END PRIVATE KEY-----\n';
+
+/** The six RFC 8705 §5 aliases, every one on {@link MTLS_BASE_URL}. */
+export function mtlsEndpointAliases(): MtlsEndpointAliases {
+  return {
+    token_endpoint: MTLS_TOKEN_ENDPOINT,
+    userinfo_endpoint: `${MTLS_BASE_URL}/oauth2/userinfo`,
+    revocation_endpoint: MTLS_REVOKE_ENDPOINT,
+    introspection_endpoint: MTLS_INTROSPECT_ENDPOINT,
+    device_authorization_endpoint: MTLS_DEVICE_AUTHORIZATION_ENDPOINT,
+    pushed_authorization_request_endpoint: MTLS_PAR_ENDPOINT,
+  };
+}
 
 /** A discovery document pointing every endpoint at the mocked origin. */
 export function discoveryDocument(overrides: Partial<OidcConfiguration> = {}): OidcConfiguration {
@@ -285,9 +321,21 @@ export function createServer(): ReturnType<typeof setupServer> {
 
 /** Build a NodeSession + OidcClient pair against the mocked origin. */
 export function createClient(
-  options: { clientSecret?: string; tenantId?: string; discoveryTtlMs?: number; clockSkewSec?: number } = {},
+  options: {
+    clientSecret?: string;
+    tenantId?: string;
+    discoveryTtlMs?: number;
+    clockSkewSec?: number;
+    /** Configure a §6.1 mTLS client identity, so §21.3 rule 2 applies to every call. */
+    mtls?: boolean;
+  } = {},
 ): { session: NodeSession; oidc: OidcClient } {
-  const session = createNodeSession({ baseUrl: BASE_URL, tenantId: TENANT_ID, orgId: ORG_ID });
+  const session = createNodeSession({
+    baseUrl: BASE_URL,
+    tenantId: TENANT_ID,
+    orgId: ORG_ID,
+    ...(options.mtls ? { clientCert: CLIENT_CERT_PEM, clientKey: CLIENT_KEY_PEM } : {}),
+  });
   const oidc = createOidcClient(session, {
     clientId: CLIENT_ID,
     ...(options.clientSecret !== undefined ? { clientSecret: options.clientSecret } : {}),
