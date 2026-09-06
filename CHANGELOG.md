@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `umaExchangeTicket` (all `token_endpoint`), plus `introspect`, `revoke`,
   `deviceAuthorize` and `oidcPar`.
 
+  Every member of `MtlsEndpointAliases` is itself optional: AXIAM always
+  publishes all six, but RFC 8705 §5 permits an OP to alias fewer, and an
+  endpoint the object does not name falls back to the top-level entry rather
+  than failing the document.
+
   Absence of the member means "this deployment terminates mutual TLS on the
   issuer's own host", never "mTLS is unsupported": a client without the member
   keeps using the conventional endpoints instead of failing. No alias is

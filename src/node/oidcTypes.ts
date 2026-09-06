@@ -45,20 +45,28 @@ import type { IdTokenClaims } from './oidcIdToken.js';
  * sending a browser to an mTLS host raises a native certificate-chooser dialog
  * most users cannot answer. `issuer` is not aliased either, and §10.1 rule 3
  * still compares `iss` against it by exact string.
+ *
+ * Every member is optional even though the server's schema marks all six
+ * required. AXIAM builds them from one path through a shared macro and so
+ * always publishes the complete set, but RFC 8705 §5 permits an OP to alias
+ * fewer, and the shape of this member must never be why a client stops
+ * working — the same principle rule 2 point 1 states for the object as a
+ * whole, one level in. An absent entry falls back to the top-level endpoint of
+ * the same name, exactly as an absent object does.
  */
 export interface MtlsEndpointAliases {
   /** The mTLS token endpoint — RFC 8705 §2 client authentication and §3 the mint of a certificate-bound token. */
-  token_endpoint: string;
+  token_endpoint?: string;
   /** The mTLS userinfo endpoint — OIDC Core §5.3, reached with an access token that may carry `cnf`. */
-  userinfo_endpoint: string;
+  userinfo_endpoint?: string;
   /** The mTLS revocation endpoint — RFC 7009 §2.1, which authenticates the client. */
-  revocation_endpoint: string;
+  revocation_endpoint?: string;
   /** The mTLS introspection endpoint — RFC 7662 §2.1, which authenticates the caller. */
-  introspection_endpoint: string;
+  introspection_endpoint?: string;
   /** The mTLS device authorization endpoint — RFC 8628 §3.1, which authenticates the client. */
-  device_authorization_endpoint: string;
+  device_authorization_endpoint?: string;
   /** The mTLS pushed authorization request endpoint — RFC 9126 §2, which authenticates the client. */
-  pushed_authorization_request_endpoint: string;
+  pushed_authorization_request_endpoint?: string;
 }
 
 /**

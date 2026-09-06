@@ -217,6 +217,23 @@ describe('§21.3 rule 2 consequence 1 — absence means "no separate host"', () 
     expect(hits).toEqual([TOKEN_ENDPOINT, `${BASE_URL}/oauth2/revoke`]);
   });
 
+  it('falls back per endpoint when the alias object names only some of the six', async () => {
+    const state = createMockState();
+    // RFC 8705 §5 does not require an OP to alias all six, and the shape of the
+    // member must never be why a client stops working: an object naming only
+    // `token_endpoint` is valid, and every endpoint it omits falls back.
+    const hits = setup(
+      state,
+      discoveryDocument({ mtls_endpoint_aliases: { token_endpoint: MTLS_TOKEN_ENDPOINT } }),
+    );
+    const { oidc } = createClient({ clientSecret: CLIENT_SECRET, mtls: true });
+
+    await oidc.oidcExchange({ code: CODE, codeVerifier: 'v'.repeat(43), redirectUri: REDIRECT_URI, nonce: NONCE });
+    await oidc.introspect({ token: 'access-token-value' });
+
+    expect(hits).toEqual([MTLS_TOKEN_ENDPOINT, `${BASE_URL}/oauth2/introspect`]);
+  });
+
   it('still reports an unsupported grant when neither the top level nor an alias names the endpoint', async () => {
     const state = createMockState();
     const document = discoveryDocument({ mtls_endpoint_aliases: mtlsEndpointAliases() });
