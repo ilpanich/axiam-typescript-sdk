@@ -137,6 +137,33 @@ export interface OidcConfiguration {
    * by concatenation.
    */
   pushed_authorization_request_endpoint?: string;
+  /**
+   * RFC 7636 §4.3 / RFC 8414 §2 — the PKCE code-challenge methods the
+   * authorization endpoint accepts. AXIAM publishes `["S256"]` and only
+   * `["S256"]` (contract 1.42, §21.5).
+   *
+   * Informational only: this SDK implements S256 and nothing else, so it
+   * neither negotiates against this list nor falls back to `plain` — `plain`
+   * is not implemented anywhere here.
+   *
+   * **Optional even though the server's schema marks it required**, and the
+   * reason is the same one §21.5 gives: *RFC 8414 defines no default for this
+   * member, so its absence does not mean `S256`*. This struct must still parse
+   * a document from a non-AXIAM OP that omits it, exactly as it does for every
+   * other member modelled optional here.
+   */
+  code_challenge_methods_supported?: string[];
+  /**
+   * RFC 8414 §2 — the JWS algorithms the token endpoint accepts on a
+   * `private_key_jwt` client assertion. AXIAM publishes
+   * `["PS256", "ES256", "EdDSA"]` (contract 1.42, §21.5).
+   *
+   * Informational only, and optional for the same reason as
+   * {@link OidcConfiguration.code_challenge_methods_supported}: RFC 8414
+   * defines no default, so absence is not a statement about what the OP
+   * accepts.
+   */
+  token_endpoint_auth_signing_alg_values_supported?: string[];
   /** Whether the OP sends back-channel logout tokens. */
   backchannel_logout_supported?: boolean;
   /** Whether those logout tokens carry `sid`. AXIAM always sends it. */
@@ -200,6 +227,28 @@ export interface OidcParParams {
   configuration?: OidcConfiguration;
   /** Tenant UUID override for the mandatory `?tenant_id=` query parameter (§12.1 note 2). */
   tenantId?: string;
+  /**
+   * RFC 9449 §10.1 `dpop_jkt` — the base64url SHA-256 JWK thumbprint of the
+   * key the client will use for DPoP proofs on the eventual token request.
+   * Sent in the pushed form **only when set**; omitted entirely otherwise
+   * (§12.1: an absent optional field is absent, never empty).
+   *
+   * @remarks
+   * **The caller supplies this value; the SDK does not derive it.** This SDK
+   * implements the resource-server half of DPoP — §21.7.2 proof
+   * *verification* — and ships no proof generator, so it holds no DPoP key to
+   * take a thumbprint of. A client that does generate proofs computes the
+   * thumbprint from its own public JWK and passes it here;
+   * `jwkThumbprintS256` (exported from the node entry point) is there for
+   * exactly that and produces the RFC 7638 value this parameter wants.
+   *
+   * Why it is worth pushing at all: without it the authorization code is bound
+   * to a DPoP key only at the token request, so an attacker who steals the code
+   * can redeem it with a key of their own. RFC 9449 §10 binds the code to the
+   * key at authorization time instead, which is the point of pushing the
+   * request over the back channel in the first place.
+   */
+  dpopJkt?: string;
 }
 
 /**

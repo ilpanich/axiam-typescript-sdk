@@ -13,6 +13,7 @@ import {
   createClient,
   createMockState,
   createServer,
+  discoveryDocument,
   discoveryHandler,
   generateSigningKey,
   INTROSPECT_ENDPOINT,
@@ -624,5 +625,47 @@ describe('transport, caching and interceptor paths', () => {
     expect(error).toBeInstanceOf(OAuthProtocolError);
     expect((error as OAuthProtocolError).message).toBe('invalid_client: client authentication failed');
     expect(sessionRefreshCalls).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §12.1 note 2 / §12.3 rule 4 — tenant_id is SET on the advertised endpoint,
+// never appended to it.
+// ---------------------------------------------------------------------------
+
+describe('tenant_id on a discovery-advertised endpoint', () => {
+  // Contract 1.42 made this reachable: the discovery document now publishes
+  // `?tenant_id=<uuid>` inside the token / revocation / introspection / device
+  // / PAR / end-session URLs whenever the discovery request named a tenant, or
+  // the deployment sets `oauth2_default_tenant_id`. An SDK that *appends* its
+  // own copy sends `?tenant_id=A&tenant_id=B`, and which one the server reads
+  // is then a coin toss. `#endpointUrl` uses `URLSearchParams.set`, which
+  // replaces every existing occurrence of the key and leaves the others alone
+  // — this locks that in against a refactor to string concatenation.
+  it('replaces a tenant_id the OP already advertised, and keeps other query parameters', async () => {
+    const advertised = '99999999-9999-9999-9999-999999999999';
+    const seen: string[][] = [];
+    const others: (string | null)[] = [];
+    server.use(
+      http.post(TOKEN_ENDPOINT, async ({ request }) => {
+        const url = new URL(request.url);
+        seen.push(url.searchParams.getAll('tenant_id'));
+        others.push(url.searchParams.get('deployment'));
+        return HttpResponse.json(tokenResponse());
+      }),
+    );
+    const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
+
+    await oidc.loginClientCredentials({
+      configuration: discoveryDocument({
+        token_endpoint: `${TOKEN_ENDPOINT}?tenant_id=${advertised}&deployment=eu-1`,
+      }),
+    });
+
+    // Exactly one, and it is the resolved value — what the caller actually
+    // authenticated against wins over whatever the document happened to carry.
+    expect(seen[0]).toEqual([TENANT_ID]);
+    // RFC 6749 §3.2: the endpoint's own query component survives.
+    expect(others[0]).toBe('eu-1');
   });
 });

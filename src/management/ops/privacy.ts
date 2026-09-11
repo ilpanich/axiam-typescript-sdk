@@ -86,4 +86,46 @@ export class PrivacyApi {
     });
   }
 
+  /** `GET /api/v1/account/consents` */
+  async listConsents(): Promise<models.ConsentView[]> {
+    const wire = await sendManagement<models.ConsentView[]>(this.#client, {
+      operation: 'privacy.list_consents',
+      method: 'GET',
+      pathTemplate: '/api/v1/account/consents',
+      path: '/api/v1/account/consents',
+    });
+    return wire;
+  }
+
+  /**
+   * `POST /api/v1/account/consents/oidc-scopes`
+   *
+   * Not retried on failure (§27.4 rule 8): every write on this surface is
+   * issued exactly once, including the ones that look idempotent.
+   */
+  async grantScopeConsent(body: models.GrantScopeConsent): Promise<void> {
+    await sendManagement<void>(this.#client, {
+      operation: 'privacy.grant_scope_consent',
+      method: 'POST',
+      pathTemplate: '/api/v1/account/consents/oidc-scopes',
+      path: '/api/v1/account/consents/oidc-scopes',
+      body: body,
+    });
+  }
+
+  /**
+   * `DELETE /api/v1/account/consents/oidc-scopes/{client_id}`
+   *
+   * Not retried on failure (§27.4 rule 8): every write on this surface is
+   * issued exactly once, including the ones that look idempotent.
+   */
+  async withdrawScopeConsent(clientId: string): Promise<void> {
+    await sendManagement<void>(this.#client, {
+      operation: 'privacy.withdraw_scope_consent',
+      method: 'DELETE',
+      pathTemplate: '/api/v1/account/consents/oidc-scopes/{client_id}',
+      path: `/api/v1/account/consents/oidc-scopes/${encodeURIComponent(clientId)}`,
+    });
+  }
+
 }

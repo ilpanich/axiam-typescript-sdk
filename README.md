@@ -20,7 +20,7 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to **contract 1.38**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
+This SDK conforms to **contract 1.42**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
 §20, §21, §22, §23, §24, §25, §26, §27 (including §6.1 mTLS client certificates, the §10.1
 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
 `verifyWebhook` signature verifier). §12 is implemented in full at its 1.38 shape: all
@@ -32,7 +32,7 @@ browser bundle pulls in no Node-only code. §12.2 forbids splitting them across 
 the four operations contract 1.38 adds are on `OidcClient` too, with the nine that preceded
 them, even though three of them need no Node-only code at all.
 
-§27 is implemented **in full**, both halves: the 147-operation imperative surface *and*
+§27 is implemented **in full**, both halves: the 158-operation imperative surface *and*
 the §27.6 declarative manifest with its §27.7 `defineManifest` and decorator forms. The
 contract asks an SDK that ships only one half to say which; this one ships both.
 
@@ -1424,6 +1424,35 @@ by a client registered for `tls_client_auth` / `private_key_jwt` /
 `self_signed_tls_client_auth` (which is refused, not ignored), or a client
 certificate the transport did not present.
 
+### `dpop_jkt` (RFC 9449 §10.1, contract 1.42)
+
+`oidcPar` accepts an optional `dpopJkt`, pushed as `dpop_jkt` **only when you set
+it** and omitted entirely otherwise:
+
+```ts
+const pushed = await oidc.oidcPar({
+  request, redirectUri, configuration,
+  dpopJkt: jwkThumbprintS256(myDpopPublicJwk),   // exported from axiam-sdk/node
+});
+```
+
+Without it the authorization code is bound to a DPoP key only at the token
+request, so an attacker who steals the code can redeem it with a key of their
+own. RFC 9449 §10 binds the code to the key at authorization time instead —
+which is the point of pushing the request over the back channel in the first
+place.
+
+**You supply the value; the SDK does not derive it.** This SDK implements the
+resource-server half of DPoP (§21.7.2 proof *verification*) and ships no proof
+generator, so it holds no DPoP key whose thumbprint it could take.
+`jwkThumbprintS256` is exported for the client that does, and produces exactly
+the RFC 7638 value this parameter wants.
+
+**`request_uri` is not on this surface and will not be added.** RFC 9126 §2.1
+makes it the one authorization parameter a client MUST NOT push; `openapi.json`
+models it on the request schema so the *server* can refuse it. A client able to
+send one is a client able to chain one pushed request into another.
+
 ## Logout — RP-initiated and back-channel (`axiam-sdk/node`, CONTRACT.md §12.7)
 
 `logoutUrl` builds the redirect; `verifyLogoutToken` validates a token the OP **pushed** to
@@ -1678,7 +1707,7 @@ entries are keyed by subject rather than by session.
 Everything above assumes a populated tenant. `login` signs a user in,
 `checkAccess` asks about a resource, `verifyWebhook` checks a delivery signature — and
 none of them can create the user, declare the resource or register the webhook. The
-management surface is the part that can: **147 operations across 24 namespaces**,
+management surface is the part that can: **158 operations across 24 namespaces**,
 generated from `management-registry.json`, which is the whole server API minus what other
 contract sections own and minus organization creation and deletion (§27.0 keeps those out
 of reach of a client library on purpose).
@@ -1789,7 +1818,7 @@ back.
 
 ### Declarative manifests (§27.6, §27.7)
 
-Calling 147 operations one at a time is rarely what an application wants. What it does at
+Calling 158 operations one at a time is rarely what an application wants. What it does at
 start-up, in a migration, or in a test fixture is assert a shape:
 
 ```ts
@@ -1827,7 +1856,7 @@ actions that would reconcile the tenant.
   a tenant that also holds hand-made state.
 - **Applying twice converges**: the second plan is all `no-change`. That is what makes
   re-running after a failure safe.
-- **There is no transaction** across 147 independent HTTP endpoints, and `ApplyReport` does
+- **There is no transaction** across 158 independent HTTP endpoints, and `ApplyReport` does
   not pretend there is. If step 12 of 30 fails, steps 1–11 have happened; the report says
   which, execution stops rather than continuing blindly, and there is no `rollback` —
   because this SDK could not honour one.

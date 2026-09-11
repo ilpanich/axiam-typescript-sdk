@@ -162,3 +162,57 @@ describe('normalizeOrigin — the discovery cache key (§12.3 rule 6)', () => {
     expect(keys.size).toBe(4);
   });
 });
+
+// ---------------------------------------------------------------------------
+// §21.5 / RFC 8414 §2 — the two members added in contract 1.42
+// ---------------------------------------------------------------------------
+
+describe('RFC 8414 capability members (contract 1.42, §21.5)', () => {
+  const server = createServer();
+
+  beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+  afterEach(() => server.resetHandlers());
+  afterAll(() => server.close());
+
+  it('surfaces code_challenge_methods_supported and token_endpoint_auth_signing_alg_values_supported', async () => {
+    const state = createMockState();
+    server.use(
+      discoveryHandler(
+        state,
+        discoveryDocument({
+          code_challenge_methods_supported: ['S256'],
+          token_endpoint_auth_signing_alg_values_supported: ['PS256', 'ES256', 'EdDSA'],
+        }),
+      ),
+    );
+    const { oidc } = createClient();
+
+    const configuration = await oidc.oidcDiscover();
+
+    expect(configuration.code_challenge_methods_supported).toEqual(['S256']);
+    expect(configuration.token_endpoint_auth_signing_alg_values_supported).toEqual([
+      'PS256',
+      'ES256',
+      'EdDSA',
+    ]);
+  });
+
+  it('parses a document that omits both — RFC 8414 defines no default, so absence is not S256', async () => {
+    // openapi.json marks both required, but this struct must still accept a
+    // document from a non-AXIAM OP that predates them. §21.5 spells the
+    // reasoning out: absence says nothing about what the OP accepts, so
+    // rejecting here would refuse documents the SDK accepts today.
+    const state = createMockState();
+    server.use(discoveryHandler(state, discoveryDocument()));
+    const { oidc } = createClient();
+
+    const configuration = await oidc.oidcDiscover();
+
+    expect(configuration.code_challenge_methods_supported).toBeUndefined();
+    expect(configuration.token_endpoint_auth_signing_alg_values_supported).toBeUndefined();
+    // …and the rest of the document is intact, i.e. this is a parse, not a
+    // partial one.
+    expect(configuration.issuer).toBe(ISSUER);
+    expect(configuration.token_endpoint).toBe(`${BASE_URL}/oauth2/token`);
+  });
+});
