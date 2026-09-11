@@ -288,3 +288,42 @@ describe('§26.5 sensitivity', () => {
     expect(pushed.expiresIn).toBe(90);
   });
 });
+
+// ---------------------------------------------------------------------------
+// RFC 9449 §10.1 — dpop_jkt (contract 1.42)
+// ---------------------------------------------------------------------------
+
+describe('RFC 9449 §10.1 dpop_jkt', () => {
+  const JKT = '0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I';
+
+  it('pushes dpop_jkt when the caller supplies one', async () => {
+    server.use(parHandler());
+    const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
+    const configuration = discoveryDocument();
+    const request = oidc.oidcBegin({ configuration, redirectUri: REDIRECT_URI });
+    await oidc.oidcPar({ request, redirectUri: REDIRECT_URI, configuration, dpopJkt: JKT });
+
+    expect(pushes[0]!.form.get('dpop_jkt')).toBe(JKT);
+  });
+
+  it('omits dpop_jkt entirely when the caller supplies none', async () => {
+    // Not an empty string: §12.1 forbids sending an empty value for an absent
+    // optional field, and a server reading `dpop_jkt=""` would bind the code
+    // to a thumbprint no key can produce.
+    server.use(parHandler());
+    await push();
+
+    expect(pushes[0]!.form.has('dpop_jkt')).toBe(false);
+  });
+
+  it('never pushes request_uri — RFC 9126 §2.1 forbids the client sending it', async () => {
+    // The server models `request_uri` on the PAR request schema so it can
+    // REFUSE it. A client able to send one is a client able to chain a pushed
+    // request into another pushed request, so the parameter must be absent
+    // from this SDK's surface as well as from this form.
+    server.use(parHandler());
+    await push();
+
+    expect(pushes[0]!.form.has('request_uri')).toBe(false);
+  });
+});

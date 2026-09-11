@@ -1244,6 +1244,20 @@ export class OidcClient {
     form.set('nonce', request.nonce);
     form.set('code_challenge', computeCodeChallenge(exposeSecret(request.codeVerifier)));
     form.set('code_challenge_method', CODE_CHALLENGE_METHOD_S256);
+    // RFC 9449 §10.1 — bind the authorization code to the client's DPoP key at
+    // authorization time rather than only at the token request, so a stolen
+    // code cannot be redeemed with a different key. Caller-supplied: this SDK
+    // verifies proofs (§21.7.2) but generates none, so it holds no key whose
+    // thumbprint it could compute. Emitted only when set — §12.1 forbids
+    // sending an empty value for an absent optional field.
+    if (params.dpopJkt !== undefined) {
+      form.set('dpop_jkt', params.dpopJkt);
+    }
+    // NOT pushed, and never to be added: `request_uri`. RFC 9126 §2.1 makes it
+    // the one authorization parameter a client MUST NOT push, and openapi.json
+    // models it on the request schema only so the server can refuse it. A
+    // client able to send it is a client able to chain one pushed request into
+    // another, which is the attack the refusal exists to stop.
     this.#appendClientSecret(form);
 
     const url = this.#endpointUrl(endpoint, params.tenantId);
