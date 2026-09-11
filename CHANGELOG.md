@@ -9,6 +9,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **RFC 9449 §10.1 `dpop_jkt` on `oidcPar` (SDK contract 1.42).**
+  `OidcParParams` gains an optional `dpopJkt`, pushed to `POST /oauth2/par` as
+  `dpop_jkt` **only when set** and omitted entirely otherwise. Without it the
+  authorization code is bound to a DPoP key only at the token request, so a
+  stolen code can be redeemed with a different key; RFC 9449 §10 binds the code
+  to the key at authorization time instead.
+
+  **Caller-supplied.** This SDK implements the resource-server half of DPoP
+  (CONTRACT.md §21.7.2 proof verification) and ships no proof generator, so it
+  holds no DPoP key whose thumbprint it could compute. The already-exported
+  `jwkThumbprintS256` produces the RFC 7638 value this parameter wants.
+
+  `request_uri` was **not** added alongside it, and will not be: RFC 9126 §2.1
+  makes it the one authorization parameter a client MUST NOT push, and
+  `openapi.json` models it on the PAR request schema so the server can refuse
+  it. A client able to send one is a client able to chain one pushed request
+  into another.
+
+- **Two RFC 8414 §2 capability members on `OidcConfiguration` (SDK contract
+  1.42, CONTRACT.md §21.5).** `code_challenge_methods_supported` and
+  `token_endpoint_auth_signing_alg_values_supported`. AXIAM publishes
+  `["S256"]` and `["PS256", "ES256", "EdDSA"]` respectively.
+
+  Both are modelled **optional even though `openapi.json` marks them
+  required**, for the reason §21.5 states: RFC 8414 defines no default for
+  either, so absence is not a statement about what the OP accepts, and this
+  struct must keep parsing a discovery document from a non-AXIAM OP that
+  predates them. Both are informational — this SDK implements S256 and nothing
+  else and does not negotiate against either list.
+
+  `acr_values_supported`, `claims_parameter_supported` and
+  `request_parameter_supported` arrived in the same two revisions and were
+  deliberately **not** added: `OidcConfiguration` models a curated subset (it
+  does not model `dpop_signing_alg_values_supported` either), and widening it
+  further is new surface rather than a re-sync.
+
+- **Three §27 `privacy` operations, generated from the re-vendored registry:**
+  `privacy.listConsents` (`GET /api/v1/account/consents`),
+  `privacy.grantScopeConsent` (`POST /api/v1/account/consents/oidc-scopes`) and
+  `privacy.withdrawScopeConsent`
+  (`DELETE /api/v1/account/consents/oidc-scopes/{client_id}`), with the
+  `ConsentView`, `GrantScopeConsent`, `AuthnRequestParamsMode` and `OidcPolicy`
+  models they use.
+
 - **RFC 8705 §5 `mtls_endpoint_aliases` (SDK contract 1.40, CONTRACT.md §21.3
   rule 2).** `OidcConfiguration` gains an optional `mtls_endpoint_aliases`
   member (the new `MtlsEndpointAliases` type), and the §12 helpers now prefer
@@ -32,18 +76,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   §12.4 rule 3 still compares a token's `iss` against it by exact string —
   including for a token minted at an alias endpoint.
 
-### Changed
-
-- Re-vendored `CONTRACT.md`, `openapi.json` and `management-registry.json` from
-  `ilpanich/axiam` at SDK contract 1.40. The registry's 155 operations are
-  unchanged, so the generated §27 surface is unchanged; `openapi.json` gained
-  the `MtlsEndpointAliases` schema and one optional property on
-  `OidcDiscoveryDocument`.
-
   Additive and server-side: no deployment publishes `mtls_endpoint_aliases`
   until an operator sets `AXIAM__AUTH__OAUTH2_MTLS_BASE_URL`, so every existing
   client keeps working unchanged against every existing deployment. No public
   API was removed or renamed.
+
+### Changed
+
+- Re-vendored `CONTRACT.md`, `openapi.json` and `management-registry.json` from
+  `ilpanich/axiam` at **SDK contract 1.42** — two revisions, 1.40 → 1.42, not
+  one. The registry grew from 155 to **158 operations** across an unchanged 24
+  namespaces, and the generated §27 surface was regenerated accordingly.
+  `proto/` is byte-identical upstream, so no gRPC stub was regenerated.
+
+  Alongside the three `privacy` operations above, `openapi.json` gained the
+  `Address`, `AuthnRequestParamsMode`, `ConsentView`, `GrantScopeConsent`,
+  `OidcPolicy` and `UserInfoPostForm` schemas and extended twelve existing
+  ones. `Address`, `User`, `UpdateUser` and `UserInfoResponse` are not
+  reachable from any included operation, so nothing is generated from them.
+
+- **Server-side, not an SDK change: an AXIAM ID token no longer carries
+  `tenant_id`, `org_id` or `email`** (OIDC Core §5.4). This SDK's
+  `IdTokenClaims` types none of the three — they only ever arrived through the
+  §12.1-mandated open index signature — so no type, no validation rule and no
+  test changed. Code that read `idClaims.tenant_id` off an AXIAM token now
+  reads `undefined`; the tenant and organization identifiers are in the
+  **access-token** claims (`AxiamClaims.tenant_id` / `org_id`, via the §10
+  verifier) and in UserInfo, which still carries both. Tokens from a
+  non-AXIAM OP that does send them keep parsing unchanged.
+
+- **`client_secret_basic` is now advertised by the server, and this SDK still
+  does not use it** (CONTRACT.md §5 rule 3, amended in 1.41). The enum member
+  appears in the generated `ClientAuthMethod` because it is a registration
+  value a §27 management caller may legitimately set. That is not an
+  instruction to the client: `token_endpoint_auth_methods_supported` describes
+  the deployment, and the two methods carry the identical credential while the
+  `Authorization` header is the channel proxies and APM agents log by default.
+  The SDK's own token-endpoint authentication remains `client_secret_post`.
+
+- Corrected four stale counts in `README.md` (the §27 surface is 158
+  operations, not 147 — it had not been updated since before contract 1.31)
+  and the conformance line, which still read "contract 1.38".
 
 ## [1.0.0-beta12] - 2026-09-06
 
