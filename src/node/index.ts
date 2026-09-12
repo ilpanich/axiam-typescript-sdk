@@ -9,6 +9,15 @@
 
 export { createNodeClient, createNodeSession, NodeSession } from './session.js';
 export { TokenManager } from './tokenManager.js';
+// CONTRACT.md §10.4 (contract 1.44) — the optional session-revocation feed
+// poller. Off unless a caller attaches one to a guard's session.
+export {
+  DEFAULT_POLL_INTERVAL_MS,
+  MAX_ENTRIES,
+  MIN_POLL_INTERVAL_MS,
+  RevocationFeed,
+} from './revocationFeed.js';
+export type { RevocationFeedOptions } from './revocationFeed.js';
 export {
   createVerifier,
   createJwksVerifier,

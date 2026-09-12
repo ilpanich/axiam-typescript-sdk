@@ -8,6 +8,7 @@
 
 import { AuthError } from '../core/index.js';
 import { assertTenantClaim, type Verifier } from '../node/jwks.js';
+import type { RevocationFeed } from '../node/revocationFeed.js';
 
 /**
  * Minimal session shape the middleware needs: a JWKS verifier (D-11) and the
@@ -45,6 +46,18 @@ export interface VerifiableSession {
    * `"axiam:user"`. Populated from `AxiamClientOptions.expectedAudience`.
    */
   expectedAudience?: string;
+  /**
+   * CONTRACT.md §10.4 (contract 1.44) — the optional session-revocation feed.
+   *
+   * Unset by default, and with it unset this guard behaves exactly as it did
+   * before 1.44: a revoked session's access token verifies locally until it
+   * expires, which is the §10.2 posture this narrows rather than replaces.
+   *
+   * It is never a control. A feed that cannot be read denies nothing, every
+   * §10.1 rule runs first and still decides, and a token with no `sid` is
+   * never matched against it.
+   */
+  revocationFeed?: RevocationFeed;
 }
 
 /** Authenticated identity injected as req.axiamUser / request.axiamUser (§10). */
@@ -102,6 +115,19 @@ export async function authenticateRequest(
   // may implement themselves — the middleware must not delegate a
   // fail-closed control to a type it does not own.
   assertTenantClaim(claims.tenant_id, session.tenantHeaderValue);
+
+  // §10.4 rules 4 and 6. Runs LAST: every §10.1 rule has already decided, and
+  // the feed can only turn an accept into a reject. A token with no `sid`
+  // names no session and is never matched — there is no fallback to `jti`,
+  // which would match nothing while looking like it worked.
+  const sid = (claims as { sid?: unknown }).sid;
+  if (session.revocationFeed && typeof sid === 'string' && sid.length > 0) {
+    if (await session.revocationFeed.isRevoked(sid)) {
+      throw new AuthError(
+        'the session behind this access token has been revoked (CONTRACT.md §10.4)',
+      );
+    }
+  }
 
   const roles = (claims.scope ?? '').split(' ').filter(Boolean);
 

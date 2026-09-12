@@ -560,6 +560,56 @@ function mapUmaGrantError(err: unknown, url: string, fallbackMessage: string): A
  * console.log(tokens.idClaims?.sub);   // validated ID-token subject
  * ```
  */
+/**
+ * Refuse an `mtls_endpoint_aliases` entry that cannot carry a client
+ * certificate (CONTRACT.md §21.3.1 vector C, contract 1.43).
+ *
+ * Falling back to the top-level endpoint looks like the safe answer and is the
+ * dangerous one: the caller asked to authenticate with a certificate, the
+ * operator published something unusable, and sending the certificate to the
+ * front-channel host authenticates nothing while appearing to work.
+ *
+ * Two defects, each a refusal on its own:
+ *
+ *   * **Not an absolute URL.** A relative alias resolves against nothing the
+ *     client holds, and the base that might seem obvious — the issuer's host —
+ *     is precisely the host the alias exists to name a different one from.
+ *   * **A scheme weaker than the endpoint it replaces.** An alias substitutes
+ *     for exactly one top-level endpoint, so that is what it is compared
+ *     against. `https` → `http` is a downgrade; `http` → `http` is a
+ *     development deployment, which AXIAM's own `build_mtls_aliases` supports
+ *     and this suite's harness is.
+ */
+export function assertUsableMtlsAlias(alias: string, replaces: string | undefined): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(alias);
+  } catch {
+    throw new NetworkError(
+      `mtls_endpoint_aliases publishes ${JSON.stringify(alias)}, which is not an absolute URL. ` +
+        'Refusing rather than falling back to the top-level endpoint: this call presents a ' +
+        'client certificate, and sending it to the front-channel host would authenticate ' +
+        'nothing while appearing to work.',
+    );
+  }
+  let replacedIsTls = false;
+  if (replaces !== undefined) {
+    try {
+      replacedIsTls = new URL(replaces).protocol === 'https:';
+    } catch {
+      replacedIsTls = false;
+    }
+  }
+  if (replacedIsTls && parsed.protocol !== 'https:') {
+    throw new NetworkError(
+      `mtls_endpoint_aliases publishes ${JSON.stringify(alias)}, whose scheme is ` +
+        `${JSON.stringify(parsed.protocol)}, in place of an https endpoint. That is a ` +
+        'downgrade, and mutual TLS over cleartext is a contradiction; refusing rather than ' +
+        'falling back to the top-level endpoint.',
+    );
+  }
+}
+
 export class OidcClient {
   readonly #session: SharedSession;
   readonly #options: OidcClientOptions;
@@ -1927,12 +1977,27 @@ export class OidcClient {
    *   * It never touches `issuer`, which is an identifier and not an endpoint.
    *     §10.1 rule 3 still compares a token's `iss` to `configuration.issuer`
    *     by exact string, including for a token minted at an alias endpoint.
+   *
+   * An alias that IS present and cannot carry a certificate throws
+   * (§21.3.1 vector C, contract 1.43) — see {@link assertUsableMtlsAlias}.
    */
-  #aliasFor(configuration: OidcConfiguration, name: keyof MtlsEndpointAliases): string | undefined {
+  #aliasFor(
+    configuration: OidcConfiguration,
+    name: keyof MtlsEndpointAliases,
+    replaces: string | undefined,
+  ): string | undefined {
     if (!this.#session.presentsClientCertificate) {
+      // A client with no certificate does not read the member at all — not
+      // even to validate it. A deployment whose aliases are malformed must not
+      // break the clients that never use them.
       return undefined;
     }
-    return configuration.mtls_endpoint_aliases?.[name];
+    const alias = configuration.mtls_endpoint_aliases?.[name];
+    if (alias === undefined) {
+      return undefined;
+    }
+    assertUsableMtlsAlias(alias, replaces);
+    return alias;
   }
 
   /** An always-advertised endpoint, preferring its §21.3 rule 2 mTLS alias. */
@@ -1940,7 +2005,7 @@ export class OidcClient {
     configuration: OidcConfiguration,
     name: 'token_endpoint' | 'userinfo_endpoint' | 'revocation_endpoint' | 'introspection_endpoint',
   ): string {
-    return this.#aliasFor(configuration, name) ?? configuration[name];
+    return this.#aliasFor(configuration, name, configuration[name]) ?? configuration[name];
   }
 
   /**
@@ -1952,7 +2017,7 @@ export class OidcClient {
     configuration: OidcConfiguration,
     name: 'device_authorization_endpoint' | 'pushed_authorization_request_endpoint',
   ): string | undefined {
-    return this.#aliasFor(configuration, name) ?? configuration[name];
+    return this.#aliasFor(configuration, name, configuration[name]) ?? configuration[name];
   }
 
   /**

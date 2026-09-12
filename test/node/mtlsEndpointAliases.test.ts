@@ -350,3 +350,71 @@ describe('§21.3 rule 2 consequence 3 — issuer is never aliased', () => {
     expect(Object.keys(configuration.mtls_endpoint_aliases ?? {})).not.toContain('issuer');
   });
 });
+
+// ── §21.3.1 vector C — a malformed alias is REFUSED, never fallen back from ──
+//
+// Contract 1.43 publishes three vectors every SDK pins. A and B are covered
+// above (`withAliases()` is A; the "absence means no separate host" and
+// "partial object" blocks are B). C is this one, and it is where the obvious
+// implementation is the wrong one.
+//
+// Falling back to the top-level endpoint looks like the safe answer and is the
+// dangerous one: the caller asked to authenticate with a certificate, the
+// operator published something that cannot carry one, and quietly presenting
+// the certificate to the front-channel host authenticates nothing while
+// appearing to work.
+
+describe('§21.3.1 vector C — a malformed alias is refused', () => {
+  it('refuses a relative alias rather than falling back', async () => {
+    // A relative alias resolves against nothing the client holds, and the base
+    // that might seem obvious — the issuer's host — is precisely the host the
+    // alias exists to name a different one from.
+    const state = createMockState();
+    const hits = setup(state, discoveryDocument({ mtls_endpoint_aliases: { token_endpoint: '/oauth2/token' } }));
+    const { oidc } = createClient({ clientSecret: CLIENT_SECRET, mtls: true });
+
+    await expect(
+      oidc.oidcExchange({ code: CODE, codeVerifier: 'v'.repeat(43), redirectUri: REDIRECT_URI, nonce: NONCE }),
+    ).rejects.toThrow(/mtls_endpoint_aliases/);
+
+    // The proof that it refused rather than fell back: nothing was posted. A
+    // fallback would be a *successful* exchange against the conventional host,
+    // which is exactly the outcome this vector exists to prevent.
+    expect(hits).toEqual([]);
+  });
+
+  it('refuses an alias weaker than the endpoint it replaces', async () => {
+    // The comparison is against the top-level endpoint of the same name, not
+    // against `https` and not against the issuer. An alias substitutes for
+    // exactly one endpoint, so that is what it is compared with; the server
+    // itself accepts an `http` alias for a local-development deployment whose
+    // endpoints are `http` too.
+    const state = createMockState();
+    const hits = setup(
+      state,
+      discoveryDocument({
+        mtls_endpoint_aliases: { token_endpoint: 'http://mtls.axiam-oidc.test/oauth2/token' },
+      }),
+    );
+    const { oidc } = createClient({ clientSecret: CLIENT_SECRET, mtls: true });
+
+    await expect(
+      oidc.oidcExchange({ code: CODE, codeVerifier: 'v'.repeat(43), redirectUri: REDIRECT_URI, nonce: NONCE }),
+    ).rejects.toThrow(/downgrade/);
+    expect(hits).toEqual([]);
+  });
+
+  it('does not break a client with no certificate configured', async () => {
+    // The non-regression that makes vector C safe to enforce. A client that
+    // presents no certificate does not read the member at all — not even to
+    // validate it — so a deployment whose aliases are malformed cannot break
+    // the clients that never use them.
+    const state = createMockState();
+    const hits = setup(state, discoveryDocument({ mtls_endpoint_aliases: { token_endpoint: '/oauth2/token' } }));
+    const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
+
+    await oidc.oidcExchange({ code: CODE, codeVerifier: 'v'.repeat(43), redirectUri: REDIRECT_URI, nonce: NONCE });
+
+    expect(hits).toEqual([TOKEN_ENDPOINT]);
+  });
+});
