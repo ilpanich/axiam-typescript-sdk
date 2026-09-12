@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-beta13] - 2026-09-12
+
 ### Added
+
+- Prefer RFC 8705 §5 mtls_endpoint_aliases on mTLS calls
 
 - **RFC 9449 §10.1 `dpop_jkt` on `oidcPar` (SDK contract 1.42).**
   `OidcParParams` gains an optional `dpopJkt`, pushed to `POST /oauth2/par` as
@@ -83,6 +87,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Re-sync vendored contract to 1.42 (158 ops), add dpop_jkt and two RFC 8414 discovery members (#102)
+
+- Bump vitest to 5.0.0 alongside @vitest/coverage-v8
+
+- Bump @vitest/coverage-v8 to 5.0.0 alongside vitest
+
+- Bump @vitest/coverage-v8 from 4.1.11 to 5.0.0
+
+- Bump vitest from 4.1.11 to 5.0.0
+
+- Bump the minor-patch group with 3 updates
+
 - Re-vendored `CONTRACT.md`, `openapi.json` and `management-registry.json` from
   `ilpanich/axiam` at **SDK contract 1.42** — two revisions, 1.40 → 1.42, not
   one. The registry grew from 155 to **158 operations** across an unchanged 24
@@ -117,6 +133,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Corrected four stale counts in `README.md` (the §27 surface is 158
   operations, not 147 — it had not been updated since before contract 1.31)
   and the conformance line, which still read "contract 1.38".
+
+### Fixed
+
+- Fall back per endpoint when only some aliases are published
 
 ## [1.0.0-beta12] - 2026-09-06
 
