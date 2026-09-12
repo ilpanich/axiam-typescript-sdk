@@ -25,7 +25,7 @@
 <li><strong>Node:</strong> <code>&gt;=22</code> — see <a href="#supported-node-versions">Supported Node versions</a></li>
 </ul>
 <h2 id="contract-conformance" class="tsd-anchor-link">Contract conformance<a href="#contract-conformance" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
-<p>This SDK conforms to <strong>contract 1.38</strong>: <a href="http://CONTRACT.md">CONTRACT.md</a> §1–§13 and §12.7, §14, §15, §17, §19,
+<p>This SDK conforms to <strong>contract 1.42</strong>: <a href="http://CONTRACT.md">CONTRACT.md</a> §1–§13 and §12.7, §14, §15, §17, §19,
 §20, §21, §22, §23, §24, §25, §26, §27 (including §6.1 mTLS client certificates, the §10.1
 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
 <code>verifyWebhook</code> signature verifier). §12 is implemented in full at its 1.38 shape: all
@@ -35,7 +35,7 @@ permits where a packaging constraint requires one, which here is CI's proof that
 browser bundle pulls in no Node-only code. §12.2 forbids splitting them across two hosts, so
 the four operations contract 1.38 adds are on <code>OidcClient</code> too, with the nine that preceded
 them, even though three of them need no Node-only code at all.</p>
-<p>§27 is implemented <strong>in full</strong>, both halves: the 147-operation imperative surface <em>and</em>
+<p>§27 is implemented <strong>in full</strong>, both halves: the 158-operation imperative surface <em>and</em>
 the §27.6 declarative manifest with its §27.7 <code>defineManifest</code> and decorator forms. The
 contract asks an SDK that ships only one half to say which; this one ships both.</p>
 <p>§12.7, §14, §15, §22, §24, §25, §26 and §27 are named rather than folded into the range
@@ -186,6 +186,62 @@ never retained on a public property, logged, or serialized (<a href="http://CONT
 browser build validates the PEM shape then ignores <code>clientCert</code>/<code>clientKey</code> — exactly as
 it already ignores <code>customCa</code>.</li>
 </ul>
+<h4 id="rfc-8705-§5-contract-140-contractmd-§213-rule-2" class="tsd-anchor-link">RFC 8705 §5 <code>mtls_endpoint_aliases</code> (contract 1.40, <a href="http://CONTRACT.md">CONTRACT.md</a> §21.3 rule 2)<a href="#rfc-8705-§5-contract-140-contractmd-§213-rule-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4>
+<p>A TLS listener decides whether to ask for a client certificate during the handshake,
+before it has seen a byte of HTTP, so &quot;request one on <code>/oauth2/token</code> but not on
+<code>/oauth2/authorize</code>&quot; is not something a single listener can do. A deployment that wants
+both runs two — and <code>mtls_endpoint_aliases</code> in the discovery document is how the second
+one is named.</p>
+<p>Once the client above is built with a <code>clientCert</code>, every request it makes presents that
+certificate, so the §12 helpers <strong>prefer the alias</strong> over the top-level entry of the same
+name wherever the document publishes one:</p>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Endpoint aliased</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>oidcExchange</code>, <code>oidcRefresh</code>, <code>loginClientCredentials</code>, <code>tokenExchange</code>, <code>umaExchangeTicket</code></td>
+<td><code>token_endpoint</code></td>
+</tr>
+<tr>
+<td><code>introspect</code></td>
+<td><code>introspection_endpoint</code></td>
+</tr>
+<tr>
+<td><code>revoke</code></td>
+<td><code>revocation_endpoint</code></td>
+</tr>
+<tr>
+<td><code>deviceAuthorize</code></td>
+<td><code>device_authorization_endpoint</code></td>
+</tr>
+<tr>
+<td><code>oidcPar</code></td>
+<td><code>pushed_authorization_request_endpoint</code></td>
+</tr>
+</tbody>
+</table>
+<p>Three things this deliberately does <strong>not</strong> do:</p>
+<ul>
+<li><strong>An absent <code>mtls_endpoint_aliases</code> is not an error.</strong> It means &quot;this deployment
+terminates mutual TLS on the issuer's own host&quot;, so the conventional endpoints keep
+being used. A deployment running <code>client_auth = optional</code> on one listener serves both
+populations there and correctly publishes nothing.</li>
+<li><strong>No alias is ever synthesised.</strong> Only the six endpoints RFC 8705 §5 lists can be
+aliased — never <code>authorization_endpoint</code>, <code>end_session_endpoint</code> or <code>jwks_uri</code>. The
+first two are front-channel and the third is public key material; sending a browser to
+an mTLS host raises a native certificate-chooser dialog most users cannot answer.</li>
+<li><strong><code>issuer</code> does not move.</strong> It is an identifier, not an endpoint. §12.4 rule 3 still
+requires a token's <code>iss</code> to equal the document's <code>issuer</code> by exact string comparison,
+including for a token minted at an alias endpoint — the expected issuer is never derived
+from the host that was called.</li>
+</ul>
+<p>A client without a <code>clientCert</code> keeps using the top-level endpoints even when the document
+publishes aliases: the alias exists for the handshake, and there is no handshake to make.</p>
 <h2 id="usage-per-persona" class="tsd-anchor-link">Usage per persona<a href="#usage-per-persona" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <h3 id="browser-login--authz---" class="tsd-anchor-link">Browser — login + authz (<code>axiam-sdk</code> / <code>axiam-sdk/rest</code>)<a href="#browser-login--authz---" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <pre><code class="typescript"><span class="hl-7">import</span><span class="hl-1"> { </span><span class="hl-4">AxiamClient</span><span class="hl-1"> } </span><span class="hl-7">from</span><span class="hl-1"> </span><span class="hl-5">&#39;axiam-sdk&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">client</span><span class="hl-1"> = </span><span class="hl-0">new</span><span class="hl-1"> </span><span class="hl-3">AxiamClient</span><span class="hl-1">({ </span><span class="hl-4">baseUrl:</span><span class="hl-1"> </span><span class="hl-5">&#39;https://iam.example.com&#39;</span><span class="hl-1">, </span><span class="hl-4">tenantSlug:</span><span class="hl-1"> </span><span class="hl-5">&#39;acme&#39;</span><span class="hl-1">, </span><span class="hl-4">orgSlug:</span><span class="hl-1"> </span><span class="hl-5">&#39;acme&#39;</span><span class="hl-1"> });</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">result</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">login</span><span class="hl-1">(</span><span class="hl-4">email</span><span class="hl-1">, </span><span class="hl-4">password</span><span class="hl-1">);</span><br/><span class="hl-7">switch</span><span class="hl-1"> (</span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">status</span><span class="hl-1">) {</span><br/><span class="hl-1">  </span><span class="hl-7">case</span><span class="hl-1"> </span><span class="hl-5">&#39;mfa_required&#39;</span><span class="hl-1">: {</span><br/><span class="hl-1">    </span><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">code</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-3">promptForMfaCode</span><span class="hl-1">(</span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">availableMethods</span><span class="hl-1">);</span><br/><span class="hl-1">    </span><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">final</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">verifyMfa</span><span class="hl-1">(</span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">mfaToken</span><span class="hl-1">, </span><span class="hl-4">code</span><span class="hl-1">);</span><br/><span class="hl-1">    </span><span class="hl-7">if</span><span class="hl-1"> (</span><span class="hl-4">final</span><span class="hl-1">.</span><span class="hl-4">status</span><span class="hl-1"> === </span><span class="hl-5">&#39;authenticated&#39;</span><span class="hl-1">) </span><span class="hl-4">console</span><span class="hl-1">.</span><span class="hl-3">log</span><span class="hl-1">(</span><span class="hl-5">`Authenticated as </span><span class="hl-0">${</span><span class="hl-4">final</span><span class="hl-8">.</span><span class="hl-4">user</span><span class="hl-8">.</span><span class="hl-4">username</span><span class="hl-0">}</span><span class="hl-5">`</span><span class="hl-1">);</span><br/><span class="hl-1">    </span><span class="hl-7">break</span><span class="hl-1">;</span><br/><span class="hl-1">  }</span><br/><span class="hl-1">  </span><span class="hl-7">case</span><span class="hl-1"> </span><span class="hl-5">&#39;authenticated&#39;</span><span class="hl-1">: {</span><br/><span class="hl-1">    </span><span class="hl-4">console</span><span class="hl-1">.</span><span class="hl-3">log</span><span class="hl-1">(</span><span class="hl-5">`Authenticated as </span><span class="hl-0">${</span><span class="hl-4">result</span><span class="hl-8">.</span><span class="hl-4">user</span><span class="hl-8">.</span><span class="hl-4">username</span><span class="hl-0">}</span><span class="hl-5">`</span><span class="hl-1">);</span><br/><span class="hl-1">    </span><span class="hl-7">break</span><span class="hl-1">;</span><br/><span class="hl-1">  }</span><br/><span class="hl-1">}</span><br/><br/><span class="hl-6">// Single access check (REST-backed, browser-safe)</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">allowed</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">can</span><span class="hl-1">(</span><span class="hl-5">&#39;read&#39;</span><span class="hl-1">, </span><span class="hl-5">&#39;doc:1&#39;</span><span class="hl-1">);</span><br/><br/><span class="hl-6">// Batch check — results preserve input order</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">decisions</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">batchCheck</span><span class="hl-1">([</span><br/><span class="hl-1">  { </span><span class="hl-4">action:</span><span class="hl-1"> </span><span class="hl-5">&#39;read&#39;</span><span class="hl-1">, </span><span class="hl-4">resourceId:</span><span class="hl-1"> </span><span class="hl-5">&#39;doc:1&#39;</span><span class="hl-1"> },</span><br/><span class="hl-1">  { </span><span class="hl-4">action:</span><span class="hl-1"> </span><span class="hl-5">&#39;write&#39;</span><span class="hl-1">, </span><span class="hl-4">resourceId:</span><span class="hl-1"> </span><span class="hl-5">&#39;doc:1&#39;</span><span class="hl-1"> },</span><br/><span class="hl-1">]);</span>
@@ -1004,6 +1060,26 @@ a <code>5xx</code> or a transport failure: it is a POST that creates server stat
 by a client registered for <code>tls_client_auth</code> / <code>private_key_jwt</code> /
 <code>self_signed_tls_client_auth</code> (which is refused, not ignored), or a client
 certificate the transport did not present.</p>
+<h3 id="rfc-9449-§101-contract-142" class="tsd-anchor-link"><code>dpop_jkt</code> (RFC 9449 §10.1, contract 1.42)<a href="#rfc-9449-§101-contract-142" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p><code>oidcPar</code> accepts an optional <code>dpopJkt</code>, pushed as <code>dpop_jkt</code> <strong>only when you set
+it</strong> and omitted entirely otherwise:</p>
+<pre><code class="ts"><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">pushed</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">oidc</span><span class="hl-1">.</span><span class="hl-3">oidcPar</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-4">request</span><span class="hl-1">, </span><span class="hl-4">redirectUri</span><span class="hl-1">, </span><span class="hl-4">configuration</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">dpopJkt:</span><span class="hl-1"> </span><span class="hl-3">jwkThumbprintS256</span><span class="hl-1">(</span><span class="hl-4">myDpopPublicJwk</span><span class="hl-1">),   </span><span class="hl-6">// exported from axiam-sdk/node</span><br/><span class="hl-1">});</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Without it the authorization code is bound to a DPoP key only at the token
+request, so an attacker who steals the code can redeem it with a key of their
+own. RFC 9449 §10 binds the code to the key at authorization time instead —
+which is the point of pushing the request over the back channel in the first
+place.</p>
+<p><strong>You supply the value; the SDK does not derive it.</strong> This SDK implements the
+resource-server half of DPoP (§21.7.2 proof <em>verification</em>) and ships no proof
+generator, so it holds no DPoP key whose thumbprint it could take.
+<code>jwkThumbprintS256</code> is exported for the client that does, and produces exactly
+the RFC 7638 value this parameter wants.</p>
+<p><strong><code>request_uri</code> is not on this surface and will not be added.</strong> RFC 9126 §2.1
+makes it the one authorization parameter a client MUST NOT push; <code>openapi.json</code>
+models it on the request schema so the <em>server</em> can refuse it. A client able to
+send one is a client able to chain one pushed request into another.</p>
 <h2 id="logout-rp-initiated-and-back-channel--contractmd-§127" class="tsd-anchor-link">Logout — RP-initiated and back-channel (<code>axiam-sdk/node</code>, <a href="http://CONTRACT.md">CONTRACT.md</a> §12.7)<a href="#logout-rp-initiated-and-back-channel--contractmd-§127" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p><code>logoutUrl</code> builds the redirect; <code>verifyLogoutToken</code> validates a token the OP <strong>pushed</strong> to
 your back-channel endpoint.</p>
@@ -1146,7 +1222,7 @@ entries are keyed by subject rather than by session.</p>
 <p>Everything above assumes a populated tenant. <code>login</code> signs a user in,
 <code>checkAccess</code> asks about a resource, <code>verifyWebhook</code> checks a delivery signature — and
 none of them can create the user, declare the resource or register the webhook. The
-management surface is the part that can: <strong>147 operations across 24 namespaces</strong>,
+management surface is the part that can: <strong>158 operations across 24 namespaces</strong>,
 generated from <code>management-registry.json</code>, which is the whole server API minus what other
 contract sections own and minus organization creation and deletion (§27.0 keeps those out
 of reach of a client library on purpose).</p>
@@ -1228,7 +1304,7 @@ written before §27 still catches the first two.</p>
 request, on any route that needs the UUID — the SDK will not resolve a slug behind your
 back.</p>
 <h3 id="declarative-manifests-§276-§277" class="tsd-anchor-link">Declarative manifests (§27.6, §27.7)<a href="#declarative-manifests-§276-§277" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<p>Calling 147 operations one at a time is rarely what an application wants. What it does at
+<p>Calling 158 operations one at a time is rarely what an application wants. What it does at
 start-up, in a migration, or in a test fixture is assert a shape:</p>
 <pre><code class="ts"><span class="hl-7">import</span><span class="hl-1"> { </span><span class="hl-4">defineManifest</span><span class="hl-1">, </span><span class="hl-4">Sensitive</span><span class="hl-1"> } </span><span class="hl-7">from</span><span class="hl-1"> </span><span class="hl-5">&#39;axiam-sdk/rest&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-7">export</span><span class="hl-1"> </span><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">desired</span><span class="hl-1"> = </span><span class="hl-3">defineManifest</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-4">resources:</span><span class="hl-1"> [</span><br/><span class="hl-1">    { </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;docs&#39;</span><span class="hl-1">, </span><span class="hl-4">name:</span><span class="hl-1"> </span><span class="hl-5">&#39;documents&#39;</span><span class="hl-1">, </span><span class="hl-4">resourceType:</span><span class="hl-1"> </span><span class="hl-5">&#39;collection&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">scopes:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;draft&#39;</span><span class="hl-1">, </span><span class="hl-4">name:</span><span class="hl-1"> </span><span class="hl-5">&#39;draft&#39;</span><span class="hl-1">, </span><span class="hl-4">description:</span><span class="hl-1"> </span><span class="hl-5">&#39;Unpublished&#39;</span><span class="hl-1"> }] },</span><br/><span class="hl-1">  ],</span><br/><span class="hl-1">  </span><span class="hl-4">permissions:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;read&#39;</span><span class="hl-1">, </span><span class="hl-4">action:</span><span class="hl-1"> </span><span class="hl-5">&#39;document:read&#39;</span><span class="hl-1">, </span><span class="hl-4">description:</span><span class="hl-1"> </span><span class="hl-5">&#39;Read a document&#39;</span><span class="hl-1"> }],</span><br/><span class="hl-1">  </span><span class="hl-4">roles:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;editor&#39;</span><span class="hl-1">, </span><span class="hl-4">name:</span><span class="hl-1"> </span><span class="hl-5">&#39;Editor&#39;</span><span class="hl-1">, </span><span class="hl-4">description:</span><span class="hl-1"> </span><span class="hl-5">&#39;Edits documents&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">            </span><span class="hl-4">grants:</span><span class="hl-1"> [{ </span><span class="hl-4">permission:</span><span class="hl-1"> </span><span class="hl-5">&#39;read&#39;</span><span class="hl-1">, </span><span class="hl-4">scopes:</span><span class="hl-1"> [</span><span class="hl-5">&#39;draft&#39;</span><span class="hl-1">] }] }],</span><br/><span class="hl-1">  </span><span class="hl-4">groups:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;staff&#39;</span><span class="hl-1">, </span><span class="hl-4">name:</span><span class="hl-1"> </span><span class="hl-5">&#39;Staff&#39;</span><span class="hl-1">, </span><span class="hl-4">description:</span><span class="hl-1"> </span><span class="hl-5">&#39;The team&#39;</span><span class="hl-1">, </span><span class="hl-4">roles:</span><span class="hl-1"> [</span><span class="hl-5">&#39;editor&#39;</span><span class="hl-1">] }],</span><br/><span class="hl-1">  </span><span class="hl-4">users:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;alice&#39;</span><span class="hl-1">, </span><span class="hl-4">username:</span><span class="hl-1"> </span><span class="hl-5">&#39;alice&#39;</span><span class="hl-1">, </span><span class="hl-4">email:</span><span class="hl-1"> </span><span class="hl-5">&#39;alice@example.com&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">            </span><span class="hl-4">initialPassword:</span><span class="hl-1"> </span><span class="hl-0">new</span><span class="hl-1"> </span><span class="hl-3">Sensitive</span><span class="hl-1">(</span><span class="hl-4">pw</span><span class="hl-1">), </span><span class="hl-4">groups:</span><span class="hl-1"> [</span><span class="hl-5">&#39;staff&#39;</span><span class="hl-1">] }],</span><br/><span class="hl-1">});</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">plan</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-4">manifest</span><span class="hl-1">.</span><span class="hl-3">plan</span><span class="hl-1">(</span><span class="hl-4">desired</span><span class="hl-1">);   </span><span class="hl-6">// reads only — no writes</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">report</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-4">manifest</span><span class="hl-1">.</span><span class="hl-3">apply</span><span class="hl-1">(</span><span class="hl-4">desired</span><span class="hl-1">);</span>
 </code><button type="button">Copy</button></pre>
@@ -1247,7 +1323,7 @@ is no prune option, deliberately.</li>
 a tenant that also holds hand-made state.</li>
 <li><strong>Applying twice converges</strong>: the second plan is all <code>no-change</code>. That is what makes
 re-running after a failure safe.</li>
-<li><strong>There is no transaction</strong> across 147 independent HTTP endpoints, and <code>ApplyReport</code> does
+<li><strong>There is no transaction</strong> across 158 independent HTTP endpoints, and <code>ApplyReport</code> does
 not pretend there is. If step 12 of 30 fails, steps 1–11 have happened; the report says
 which, execution stops rather than continuing blindly, and there is no <code>rollback</code> —
 because this SDK could not honour one.</li>
@@ -1343,7 +1419,10 @@ the TypeDoc API reference to this repo's GitHub Pages site.</p>
 <li><a href="#construction"><span>Construction</span></a></li>
 <li>
 <ul>
-<li><a href="#mtls-client-certificates-node-only"><span>m<wbr/>TLS / client certificates (<wbr/>Node only)</span></a></li></ul></li>
+<li><a href="#mtls-client-certificates-node-only"><span>m<wbr/>TLS / client certificates (<wbr/>Node only)</span></a></li>
+<li>
+<ul>
+<li><a href="#rfc-8705-§5-contract-140-contractmd-§213-rule-2"><span>RFC 8705 §5  (contract 1.40, <wbr/>CONTRACT.md §21.3 rule 2)</span></a></li></ul></li></ul></li>
 <li><a href="#usage-per-persona"><span>Usage per persona</span></a></li>
 <li>
 <ul>
@@ -1412,6 +1491,9 @@ the TypeDoc API reference to this repo's GitHub Pages site.</p>
 <ul>
 <li><a href="#external-idp-subject-tokens-contractmd-§157"><span>External-<wbr/>Id<wbr/>P subject tokens (<wbr/>CONTRACT.md §15.7)</span></a></li></ul></li>
 <li><a href="#pushed-authorization-requests-contractmd-§26"><span>Pushed authorization requests (, <wbr/>CONTRACT.md §26)</span></a></li>
+<li>
+<ul>
+<li><a href="#rfc-9449-§101-contract-142"><span> (<wbr/>RFC 9449 §10.1, contract 1.42)</span></a></li></ul></li>
 <li><a href="#logout-rp-initiated-and-back-channel--contractmd-§127"><span>Logout — <wbr/>RP-<wbr/>initiated and back-<wbr/>channel (, <wbr/>CONTRACT.md §12.7)</span></a></li>
 <li><a href="#uma-20-protection-api-and-ticket-grant-contractmd-§20"><span>UMA 2.0 — <wbr/>Protection <wbr/>API and ticket grant (<wbr/>CONTRACT.md §20)</span></a></li>
 <li>
