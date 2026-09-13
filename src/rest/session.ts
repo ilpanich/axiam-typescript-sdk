@@ -8,7 +8,7 @@
 // independent AxiamClient/NodeSession instances never cross-wire refreshes).
 // One login() drives all transports for a given session.
 
-import axios, { type AxiosInstance } from 'axios';
+import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
 import type { AxiamClientOptions, ClientIdentity, RefreshGuard } from '../core/index.js';
 import {
   CERT_PEM_MARKER,
@@ -193,6 +193,25 @@ export class SharedSession {
       return true;
     }
   }
+
+  /**
+   * Axios config for a call that MUST NOT carry this session's own credential
+   * — no jar cookie, no `Authorization` header — even when the session is
+   * otherwise authenticated (CONTRACT.md §24.1, contract 1.45: the
+   * `setup/register/*` pair takes a setup token as its only credential, and
+   * an SDK MUST NOT attach a second one).
+   *
+   * The browser persona has no jar of its own to bypass: cookies ride solely
+   * because of `withCredentials`, so turning it off for this one request is
+   * the whole fix — the platform manages the rest, and this SDK never sets an
+   * `Authorization` header on an `AxiamClient` call in the first place.
+   * `NodeSession` overrides this: `withCredentials` has no effect on
+   * axios's Node http adapter, whose cookie behaviour comes from the agent
+   * attached to the instance, not from per-request config.
+   */
+  noCredentialsConfig(): AxiosRequestConfig {
+    return { withCredentials: false };
+  }
 }
 
 /**
@@ -224,26 +243,27 @@ export function resolveTenantHeaderValue(options: AxiamClientOptions): string {
  * exposed from its {@link ClientIdentity} `Sensitive` wrapper only here, at the
  * point of handing it to the TLS stack, and is not retained anywhere else.
  */
-function loadNodeHttps(): typeof import('node:https') {
-  // Node >= 20.16 / >= 22.3: `process.getBuiltinModule` loads a builtin
-  // SYNCHRONOUSLY with no module system involved — no `import`, no `require`,
-  // nothing for a bundler to rewrite. That is the whole point here: this file
-  // is shared with the browser-safe `.`/`/rest` entries, so it must never
-  // statically reference a Node builtin, yet the Node persona needs one
-  // synchronously (buildSession is called from a constructor).
-  //
-  // The previous `require('node:https')` satisfied the first constraint but
-  // not the second: tsup rewrites a bare `require` in ESM output into a shim
-  // that throws `Dynamic require of "https" is not supported`, so under
-  // genuine Node ESM — which is what `axiam-sdk/node`'s `import` condition
-  // resolves to — EVERY call needing customCa or a client certificate failed
-  // before the TLS handshake. It is reached off `process`, which the caller
-  // has already capability-guarded, so a browser bundle never evaluates it.
+/**
+ * Load a Node builtin without ever statically referencing it — this file is
+ * shared with the browser-safe `.`/`/rest` entries, so it must not import
+ * `node:https`/`node:http` at the top level, yet the Node persona needs one
+ * synchronously (session construction, and {@link SharedSession.noCredentialsConfig}).
+ *
+ * `process.getBuiltinModule` (Node >= 20.16 / >= 22.3) loads a builtin with no
+ * module system involved — no `import`, no `require`, nothing for a bundler to
+ * rewrite. A bare `require('node:...')` satisfies the "no static import"
+ * constraint but not the synchronous-under-ESM one: tsup rewrites it into a
+ * shim that throws `Dynamic require of "..." is not supported`, so under
+ * genuine Node ESM (`axiam-sdk/node`'s `import` condition) it would fail
+ * before the module ever loaded. Reached off `process`, which every caller has
+ * already capability-guarded, so a browser bundle never evaluates this.
+ */
+function loadNodeBuiltin<T>(id: 'node:https' | 'node:http'): T {
   const getBuiltinModule = (
-    process as unknown as { getBuiltinModule?: (id: string) => unknown }
+    process as unknown as { getBuiltinModule?: (moduleId: string) => unknown }
   ).getBuiltinModule;
   if (typeof getBuiltinModule === 'function') {
-    return getBuiltinModule.call(process, 'node:https') as typeof import('node:https');
+    return getBuiltinModule.call(process, id) as T;
   }
   // Older Node (the package still declares engines.node >= 18). `require` is
   // real in the CJS build, so this keeps working there; in the ESM build it is
@@ -251,14 +271,31 @@ function loadNodeHttps(): typeof import('node:https') {
   // to actually do instead of leaking a bundler implementation detail.
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require('node:https') as typeof import('node:https');
+    return require(id) as T;
   } catch {
     throw new Error(
-      `customCa and clientCert require Node's https module, which this ESM build cannot load on Node ${process.version}: ` +
+      `this call requires Node's ${id} module, which this ESM build cannot load on Node ${process.version}: ` +
         'process.getBuiltinModule is unavailable (added in Node 20.16 / 22.3) and `require` does not exist in an ES module. ' +
         'Upgrade Node to >= 20.16, or load the CommonJS build (CONTRACT.md §6 / §6.1).',
     );
   }
+}
+
+/**
+ * Build the Node-only `https.Agent` carrying the customCa server-trust PEM
+ * (§6) and/or the mTLS client identity (§6.1). Guarded by
+ * `typeof process !== 'undefined'` as a CAPABILITY guard (Node has node:https
+ * available), NOT a persona-sniffing branch — browsers ignore both customCa
+ * and the client certificate entirely since the platform manages TLS itself.
+ *
+ * The client cert/key (§6.1) is an ADDITIVE client credential: it is passed
+ * as `{ cert, key }` alongside `{ ca }` and NEVER touches `rejectUnauthorized`
+ * — strict server verification stays at its secure default. The private key is
+ * exposed from its {@link ClientIdentity} `Sensitive` wrapper only here, at the
+ * point of handing it to the TLS stack, and is not retained anywhere else.
+ */
+function loadNodeHttps(): typeof import('node:https') {
+  return loadNodeBuiltin<typeof import('node:https')>('node:https');
 }
 
 export interface NodeTlsOptions {
@@ -318,6 +355,33 @@ function tlsOptionsFrom(
  */
 export function resolveNodeTlsOptions(options: AxiamClientOptions): NodeTlsOptions | undefined {
   return tlsOptionsFrom(options.customCa, resolveClientIdentity(options));
+}
+
+/**
+ * A pair of plain (non-jar) Node agents, TLS-configured from the same
+ * material {@link resolveNodeTlsOptions} produces, for `NodeSession`'s
+ * {@link SharedSession.noCredentialsConfig}. Deliberately **not** the
+ * jar-wrapped `HttpCookieAgent`/`HttpsCookieAgent` `wrapAxios` builds
+ * (`src/node/cookieJar.ts`): that agent injects this session's cookies into
+ * every request it carries regardless of axios per-request config (it acts at
+ * the raw `http.ClientRequest` layer — see `create_cookie_agent.js`'s
+ * `addRequest` override), so a call that must not carry them needs a
+ * different agent object entirely, not a config flag.
+ *
+ * Built once, lazily, and cached by the caller — `https.Agent`/`http.Agent`
+ * pool connections, and there is no reason for the one call a client makes
+ * with no session to open a fresh socket every time.
+ */
+export function buildPlainNodeAgents(tls: NodeTlsOptions | undefined): {
+  httpAgent: unknown;
+  httpsAgent: unknown;
+} {
+  const http = loadNodeBuiltin<typeof import('node:http')>('node:http');
+  const https = loadNodeHttps();
+  return {
+    httpAgent: new http.Agent(),
+    httpsAgent: new https.Agent(tls ?? {}),
+  };
 }
 
 function maybeBuildHttpsAgent(

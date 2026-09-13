@@ -3156,6 +3156,30 @@ export interface SignAuditBatchRequest {
 }
 
 /**
+ * Body of `POST /api/v1/certificates/sign-csr`.
+ *
+ * No `subject` and no `key_algorithm`: both are read out of the CSR, which
+ * is the only place they can be stated without the row and the certificate
+ * being able to disagree. No key is returned, so there is no key field
+ * anywhere on this exchange.
+ */
+export interface SignCertificateCsrRequest {
+  /** `cert_type`. */
+  cert_type: CertificateType;
+  /**
+   * PEM-encoded PKCS#10 request — a `BEGIN CERTIFICATE REQUEST` block. The
+   * legacy OpenSSL `BEGIN NEW CERTIFICATE REQUEST` header is not accepted.
+   */
+  csr_pem: string;
+  /** `issuer_ca_id`. */
+  issuer_ca_id: string;
+  /** `metadata`. */
+  metadata?: unknown;
+  /** Validity duration in days. */
+  validity_days: number;
+}
+
+/**
  * Body of `POST .../tenants/{tenant_id}/signing-cas/sign-csr`.
  *
  * Deliberately carries no key algorithm: it is the CSR's, read out of the

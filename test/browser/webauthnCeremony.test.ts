@@ -17,6 +17,7 @@ import {
   isWebauthnSupported,
   webauthnErrorMessage,
   webauthnRegister,
+  webauthnSetupRegister,
   webauthnDiscoverableLogin,
   webauthnLogin,
 } from '../../src/browser/index.js';
@@ -116,6 +117,16 @@ function stubClient(overrides: Partial<Record<string, unknown>> = {}): AxiamClie
       name: 'n',
       credentialType: 'passkey',
       createdAt: '2026-08-22T10:00:00Z',
+    })),
+    webauthnSetupRegisterStart: vi.fn(async () => ({
+      challenge: CREATION_CHALLENGE,
+      stateToken: new Sensitive(STATE_TOKEN),
+    })),
+    webauthnSetupRegisterFinish: vi.fn(async () => ({
+      status: 'authenticated',
+      user: { id: 'u1', username: 'alice', email: 'alice@example.com', organizationLevel: false },
+      sessionId: 's',
+      expiresIn: 900,
     })),
     webauthnAuthenticateStart: vi.fn(async () => ({
       challenge: REQUEST_CHALLENGE,
@@ -225,6 +236,15 @@ describe('feature detection', () => {
     const client = stubClient();
     await expect(webauthnRegister(client, 'key')).rejects.toThrow(/no WebAuthn authenticator/);
     expect(client.webauthnRegisterStart).not.toHaveBeenCalled();
+  });
+
+  it('refuses webauthnSetupRegister on an unsupported runtime, without calling the server', async () => {
+    removeAuthenticator();
+    const client = stubClient();
+    await expect(webauthnSetupRegister(client, 'setup-token', 'key')).rejects.toThrow(
+      /no WebAuthn authenticator/,
+    );
+    expect(client.webauthnSetupRegisterStart).not.toHaveBeenCalled();
   });
 });
 
@@ -391,5 +411,34 @@ describe('composed helpers', () => {
     const client = stubClient();
     await expect(webauthnDiscoverableLogin(client)).rejects.toThrow();
     expect(client.webauthnDiscoverableFinish).not.toHaveBeenCalled();
+  });
+
+  // §24.6b — the setup-token twin of `webauthnRegister` (contract 1.45): same
+  // composition, same authenticator-side machinery, a different (session-less)
+  // pair underneath and a LoginResult back rather than a bare credential.
+  it('runs setup/register/start → ceremony → setup/register/finish, passing the setup token to both', async () => {
+    const client = stubClient();
+    const result = await webauthnSetupRegister(client, 'setup-token-value', 'Alice’s security key');
+
+    expect(client.webauthnSetupRegisterStart).toHaveBeenCalledWith('setup-token-value');
+    const [setupToken, , name, response] = (
+      client.webauthnSetupRegisterFinish as ReturnType<typeof vi.fn>
+    ).mock.calls[0]!;
+    expect(setupToken).toBe('setup-token-value');
+    expect(name).toBe('Alice’s security key');
+    expect(response.response.clientDataJSON).toBe('eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIn0');
+    expect(response.response.attestationObject).toBe('o2NmbXRkbm9uZQ');
+    expect(result.status).toBe('authenticated');
+  });
+
+  it('lets a ceremony error reach the caller unchanged, without calling setup/register/finish', async () => {
+    installAuthenticator({
+      createThrows: Object.assign(new Error('excluded'), { name: 'InvalidStateError' }),
+    });
+    const client = stubClient();
+    await expect(webauthnSetupRegister(client, 'setup-token', 'key')).rejects.toMatchObject({
+      name: 'InvalidStateError',
+    });
+    expect(client.webauthnSetupRegisterFinish).not.toHaveBeenCalled();
   });
 });

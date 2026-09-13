@@ -13,9 +13,16 @@
 // instance gets its own independent guard — refreshes never cross-wire
 // between sessions.
 
+import type { AxiosRequestConfig } from 'axios';
 import type { CookieJar } from 'tough-cookie';
 import type { AxiamClientOptions } from '../core/index.js';
-import { createSession, resolveNodeTlsOptions, SharedSession } from '../rest/session.js';
+import {
+  buildPlainNodeAgents,
+  createSession,
+  resolveNodeTlsOptions,
+  SharedSession,
+  type NodeTlsOptions,
+} from '../rest/session.js';
 import { AxiamClient } from '../rest/client.js';
 import { CSRF_COOKIE, createJar, extractCookieValue, wrapAxios } from './cookieJar.js';
 import { TokenManager } from './tokenManager.js';
@@ -28,6 +35,8 @@ export class NodeSession extends SharedSession {
   /** Local JWKS verifier for validating access tokens without a server round-trip. */
   readonly jwksVerifier: Verifier;
   readonly #jar: CookieJar;
+  readonly #tlsOptions: NodeTlsOptions | undefined;
+  #plainAgents: { httpAgent: unknown; httpsAgent: unknown } | undefined;
 
   constructor(
     options: AxiamClientOptions,
@@ -35,11 +44,31 @@ export class NodeSession extends SharedSession {
     tokenManager: TokenManager,
     jwksVerifier: Verifier,
     jar: CookieJar,
+    tlsOptions?: NodeTlsOptions,
   ) {
     super(options, base.axios, base.tenantHeaderValue);
     this.tokenManager = tokenManager;
     this.jwksVerifier = jwksVerifier;
     this.#jar = jar;
+    this.#tlsOptions = tlsOptions;
+  }
+
+  /**
+   * Overrides {@link SharedSession.noCredentialsConfig}: `withCredentials` is
+   * a browser-XHR concept axios's Node http adapter ignores outright, so the
+   * only way to keep this jar's cookies off one particular request is to
+   * issue it through a different agent — one `wrapAxios` never touched.
+   *
+   * The pair is built once and reused (see {@link buildPlainNodeAgents}); a
+   * fresh `https.Agent` per call would open a fresh TLS socket per call.
+   */
+  noCredentialsConfig(): AxiosRequestConfig {
+    this.#plainAgents ??= buildPlainNodeAgents(this.#tlsOptions);
+    return {
+      httpAgent: this.#plainAgents.httpAgent,
+      httpsAgent: this.#plainAgents.httpsAgent,
+      withCredentials: false,
+    };
   }
 
   /**
@@ -105,16 +134,17 @@ export class NodeSession extends SharedSession {
 export function createNodeSession(options: AxiamClientOptions): NodeSession {
   const base = createSession(options);
   const jar = createJar();
+  const tlsOptions = resolveNodeTlsOptions(options);
   // Hand the §6/§6.1 TLS material to the jar-aware agent. createSession's own
   // `https.Agent` is unusable here — a cookie agent must own the socket — so
   // this is the ONLY place a customCa or client certificate reaches the wire
   // under the Node persona. See wrapAxios' doc comment.
-  wrapAxios(base.axios, jar, resolveNodeTlsOptions(options));
+  wrapAxios(base.axios, jar, tlsOptions);
 
   const tokenManager = new TokenManager(jar, options.baseUrl, base.tenantHeaderValue);
   const jwksVerifier = createVerifier(options.baseUrl);
 
-  return new NodeSession(options, base, tokenManager, jwksVerifier, jar);
+  return new NodeSession(options, base, tokenManager, jwksVerifier, jar, tlsOptions);
 }
 
 /**

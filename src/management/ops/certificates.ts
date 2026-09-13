@@ -80,6 +80,23 @@ export class CertificatesApi {
     return models.generatedCertificateFromWire(wire);
   }
 
+  /**
+   * `POST /api/v1/certificates/sign-csr`
+   *
+   * Not retried on failure (§27.4 rule 8): every write on this surface is
+   * issued exactly once, including the ones that look idempotent.
+   */
+  async signCsr(body: models.SignCertificateCsrRequest): Promise<models.Certificate> {
+    const wire = await sendManagement<models.Certificate>(this.#client, {
+      operation: 'certificates.sign_csr',
+      method: 'POST',
+      pathTemplate: '/api/v1/certificates/sign-csr',
+      path: '/api/v1/certificates/sign-csr',
+      body: body,
+    });
+    return wire;
+  }
+
   /** `GET /api/v1/certificates/{id}` */
   async get(id: string): Promise<models.Certificate> {
     const wire = await sendManagement<models.Certificate>(this.#client, {

@@ -43,9 +43,9 @@ export type {
   LoginResult,
 } from './types.js';
 
-// §24 WebAuthn / passkeys — the relying-party layer. Isomorphic: these six run
-// in Node too, where the SDK is the relying party for a ceremony that happened
-// on a handset. The ceremony itself is `axiam-sdk/browser` (§24.6).
+// §24 WebAuthn / passkeys — the relying-party layer. Isomorphic: these eight
+// run in Node too, where the SDK is the relying party for a ceremony that
+// happened on a handset. The ceremony itself is `axiam-sdk/browser` (§24.6).
 export { webauthnRequestJson } from './webauthn.js';
 // §24.6b rule 5 — isomorphic, so an Android or server-side caller classifying a
 // ceremony error it was handed gets the same five outcomes a browser does.

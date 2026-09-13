@@ -28,6 +28,13 @@ import {
 
 const BASE_URL = 'https://axiam.test';
 const W = '/api/v1/auth/webauthn';
+const SETUP_TOKEN = 'setup-token-fixture-value-do-not-log';
+
+const LOGIN_SUCCESS_WIRE = {
+  user: { id: 'u1', username: 'alice', email: 'alice@example.com' },
+  session_id: 's1',
+  expires_in: 900,
+};
 
 /** Bodies the handlers captured, so a test can assert on what actually went out. */
 let sent: Array<{ path: string; body: unknown }> = [];
@@ -40,6 +47,9 @@ function record(path: string) {
 
 /** Registration-start behaviour, swapped per test. */
 let registerStart: () => Response = () =>
+  HttpResponse.json({ challenge: CREATION_CHALLENGE, state_token: STATE_TOKEN });
+/** Setup-register-start behaviour, swapped per test. */
+let setupRegisterStart: () => Response = () =>
   HttpResponse.json({ challenge: CREATION_CHALLENGE, state_token: STATE_TOKEN });
 
 const server = setupServer(
@@ -72,6 +82,16 @@ const server = setupServer(
     sent.push({ path: 'discoverable/finish', body: await request.json() });
     return HttpResponse.json(LOGIN_WIRE);
   }),
+  http.post(`${BASE_URL}${W}/setup/register/start`, async ({ request }) => {
+    record('setup/register/start');
+    sent.push({ path: 'setup/register/start', body: await request.json() });
+    return setupRegisterStart();
+  }),
+  http.post(`${BASE_URL}${W}/setup/register/finish`, async ({ request }) => {
+    record('setup/register/finish');
+    sent.push({ path: 'setup/register/finish', body: await request.json() });
+    return HttpResponse.json(LOGIN_SUCCESS_WIRE);
+  }),
   http.post(`${BASE_URL}/api/v1/authz/check`, () =>
     HttpResponse.json({ allowed: true, reason_code: 'allow' }),
   ),
@@ -84,6 +104,8 @@ beforeEach(() => {
   sent = [];
   hits = {};
   registerStart = () =>
+    HttpResponse.json({ challenge: CREATION_CHALLENGE, state_token: STATE_TOKEN });
+  setupRegisterStart = () =>
     HttpResponse.json({ challenge: CREATION_CHALLENGE, state_token: STATE_TOKEN });
 });
 
@@ -407,5 +429,150 @@ describe('§24.6a JSON bridge', () => {
       anonymousClient().webauthnAuthenticateFinish(STATE_TOKEN, '{not json'),
     ).rejects.toBeInstanceOf(TypeError);
     expect(hits['authenticate/finish']).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §24.1/§24.8 (contract 1.45) — setup/register/*, the WebAuthn twin of
+// mfa_setup_enroll/mfa_setup_confirm. No session is required OR permitted:
+// see test/node/webauthnSetupRegister.test.ts for the "carries no session
+// credential" and CSRF-adoption assertions, which need a real jar/server.
+// ---------------------------------------------------------------------------
+
+describe('§24.1 setup/register/* — no session required', () => {
+  it('starts with an anonymous client — no session needed, unlike register/start', async () => {
+    const { challenge, stateToken } = await anonymousClient().webauthnSetupRegisterStart(
+      SETUP_TOKEN,
+    );
+    expect(challenge).toEqual(CREATION_CHALLENGE);
+    expect(stateToken).toBeInstanceOf(Sensitive);
+    expect(bodyOf('setup/register/start')).toEqual({ setup_token: SETUP_TOKEN });
+  });
+
+  it('finishes with an anonymous client and leaves it authenticated (§24.3 rule 1, mirrored)', async () => {
+    const client = anonymousClient();
+    expect(client.session.authenticated).toBe(false);
+
+    const result = await client.webauthnSetupRegisterFinish(
+      SETUP_TOKEN,
+      STATE_TOKEN,
+      'Alice’s security key',
+      REGISTRATION_RESPONSE,
+    );
+
+    expect(client.session.authenticated).toBe(true);
+    expect(result.status).toBe('authenticated');
+    if (result.status === 'authenticated') {
+      expect(result.sessionId).toBe(LOGIN_SUCCESS_WIRE.session_id);
+      expect(result.expiresIn).toBe(LOGIN_SUCCESS_WIRE.expires_in);
+    }
+  });
+
+  it('sends the setup token, state token, credential name and response verbatim', async () => {
+    await anonymousClient().webauthnSetupRegisterFinish(
+      SETUP_TOKEN,
+      STATE_TOKEN,
+      'Alice’s security key',
+      REGISTRATION_RESPONSE,
+    );
+    const body = bodyOf('setup/register/finish');
+    expect(body).toMatchObject({
+      setup_token: SETUP_TOKEN,
+      state_token: STATE_TOKEN,
+      credential_name: 'Alice’s security key',
+    });
+    expect(body.response).toEqual(REGISTRATION_RESPONSE);
+  });
+
+  it('accepts a platform response JSON string, unaltered (§24.6a)', async () => {
+    await anonymousClient().webauthnSetupRegisterFinish(
+      SETUP_TOKEN,
+      STATE_TOKEN,
+      'key',
+      JSON.stringify(REGISTRATION_RESPONSE),
+    );
+    expect(bodyOf('setup/register/finish').response).toEqual(REGISTRATION_RESPONSE);
+  });
+
+  it('clears the decision memo — this completes a login, like mfaSetupConfirm', async () => {
+    const client = new AxiamClient({
+      baseUrl: BASE_URL,
+      tenantSlug: 'acme',
+      orgSlug: 'globex',
+      decisionMemoTtlMs: 60_000,
+    });
+    await client.checkAccess({ action: 'read', resourceId: 'doc:1' });
+    expect(client.decisionMemo.size).toBeGreaterThan(0);
+
+    await client.webauthnSetupRegisterFinish(SETUP_TOKEN, STATE_TOKEN, 'key', REGISTRATION_RESPONSE);
+    expect(client.decisionMemo.size).toBe(0);
+  });
+
+  it('never parses the setup token or the state token', async () => {
+    const notAJwt = 'this-is-not-a-jwt-and-never-will-be';
+    await anonymousClient().webauthnSetupRegisterFinish(
+      notAJwt,
+      notAJwt,
+      'key',
+      REGISTRATION_RESPONSE,
+    );
+    const body = bodyOf('setup/register/finish');
+    expect(body.setup_token).toBe(notAJwt);
+    expect(body.state_token).toBe(notAJwt);
+  });
+
+  it('wraps the setup token and the returned state token so neither can be logged by accident', async () => {
+    const { stateToken } = await anonymousClient().webauthnSetupRegisterStart(
+      new Sensitive(SETUP_TOKEN),
+    );
+    expect(stateToken).toBeInstanceOf(Sensitive);
+    expect(String(stateToken)).not.toContain(STATE_TOKEN);
+    expect(JSON.stringify({ stateToken })).not.toContain(STATE_TOKEN);
+  });
+
+  it('does NOT retry the 503 from setup/register/start (§24.4 rule 2)', async () => {
+    setupRegisterStart = () =>
+      HttpResponse.json({ message: 'FIDO metadata unavailable' }, { status: 503 });
+
+    await expect(anonymousClient().webauthnSetupRegisterStart(SETUP_TOKEN)).rejects.toThrow();
+    expect(hits['setup/register/start']).toBe(1);
+  });
+
+  it('maps a 401 (invalid/expired/wrong-purpose setup token) to the authentication branch', async () => {
+    server.use(
+      http.post(`${BASE_URL}${W}/setup/register/start`, () =>
+        HttpResponse.json({ message: 'invalid or expired setup token' }, { status: 401 }),
+      ),
+    );
+    await expect(
+      anonymousClient().webauthnSetupRegisterStart(SETUP_TOKEN),
+    ).rejects.toBeInstanceOf(AuthError);
+  });
+
+  it('surfaces a 400 (account already has a factor) — the same answer mfa_setup_enroll gives', async () => {
+    const message = 'this account already has a second factor configured';
+    server.use(
+      http.post(`${BASE_URL}${W}/setup/register/start`, () =>
+        HttpResponse.json({ message }, { status: 400 }),
+      ),
+    );
+    await expect(
+      anonymousClient().webauthnSetupRegisterStart(SETUP_TOKEN),
+    ).rejects.toMatchObject({ message });
+  });
+
+  it('surfaces a 403 (attestation policy) message verbatim on finish', async () => {
+    const message = 'this security key is not FIDO certified and the tenant policy requires certification';
+    server.use(
+      http.post(`${BASE_URL}${W}/setup/register/finish`, () =>
+        HttpResponse.json({ message }, { status: 403 }),
+      ),
+    );
+    await expect(
+      anonymousClient().webauthnSetupRegisterFinish(SETUP_TOKEN, STATE_TOKEN, 'key', REGISTRATION_RESPONSE),
+    ).rejects.toMatchObject({ message });
+    await expect(
+      anonymousClient().webauthnSetupRegisterFinish(SETUP_TOKEN, STATE_TOKEN, 'key', REGISTRATION_RESPONSE),
+    ).rejects.toBeInstanceOf(AuthzError);
   });
 });
