@@ -12,6 +12,7 @@ export {
   classifyWebauthnError,
   webauthnErrorMessage,
   webauthnRegister,
+  webauthnSetupRegister,
   webauthnLogin,
   webauthnDiscoverableLogin,
 } from './webauthn.js';

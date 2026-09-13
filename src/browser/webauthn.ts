@@ -26,6 +26,8 @@
 
 import type {
   AxiamClient,
+  LoginResult,
+  Sensitive,
   WebauthnAuthenticationResponse,
   WebauthnCreationChallenge,
   WebauthnCreationOptionsJson,
@@ -139,6 +141,38 @@ export async function webauthnRegister(
   const { challenge, stateToken } = await client.webauthnRegisterStart();
   const credential = await createCredential(challenge, kind, options?.signal);
   return client.webauthnRegisterFinish(stateToken, credentialName, credential);
+}
+
+/**
+ * Enrol a passkey or security key as the account's **first** factor, during
+ * forced login setup (§24.6, contract 1.45) — the setup-token twin of
+ * {@link webauthnRegister}, reached where `mfaSetupEnroll`/`mfaSetupConfirm`'s
+ * TOTP path is reached: `login()` answered `mfa_setup_required` because the
+ * tenant requires MFA and this account has none.
+ *
+ * Runs the full ceremony: `setup/register/start`, the authenticator, then
+ * `setup/register/finish` — which, unlike `webauthnRegisterFinish`,
+ * adopts credentials and completes the interrupted login (§25.2 rule 2,
+ * mirrored). The pair stays individually callable on `AxiamClient` for the
+ * same reason {@link webauthnRegister} is additive rather than the only way
+ * in (§24.6 rule 1).
+ *
+ * @param setupToken the token from `login()`'s `mfa_setup_required` outcome.
+ * @param kind optional `authenticatorAttachment` hint. Omitted entirely when
+ *   not passed — the SDK never infers it and never defaults it.
+ */
+export async function webauthnSetupRegister(
+  client: AxiamClient,
+  setupToken: Sensitive<string> | string,
+  credentialName: string,
+  kind?: AuthenticatorKind,
+  options?: WebauthnCeremonyOptions,
+): Promise<LoginResult> {
+  requireSupport('webauthnSetupRegister');
+
+  const { challenge, stateToken } = await client.webauthnSetupRegisterStart(setupToken);
+  const credential = await createCredential(challenge, kind, options?.signal);
+  return client.webauthnSetupRegisterFinish(setupToken, stateToken, credentialName, credential);
 }
 
 /**

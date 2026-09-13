@@ -41,6 +41,8 @@ describe('barrel entry points', () => {
       'webauthnAuthenticateFinish',
       'webauthnDiscoverableStart',
       'webauthnDiscoverableFinish',
+      'webauthnSetupRegisterStart',
+      'webauthnSetupRegisterFinish',
     ]) {
       expect(typeof mod.AxiamClient.prototype[operation as never], operation).toBe('function');
     }
@@ -73,6 +75,7 @@ describe('barrel entry points', () => {
     const mod = await import('../src/browser/index.js');
     for (const helper of [
       'webauthnRegister',
+      'webauthnSetupRegister',
       'webauthnLogin',
       'webauthnDiscoverableLogin',
       'isWebauthnSupported',

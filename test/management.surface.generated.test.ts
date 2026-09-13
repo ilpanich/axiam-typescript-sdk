@@ -518,6 +518,12 @@ describe('certificates namespace', () => {
       await client.certificates.generate({ cert_type: "User", issuer_ca_id: '11111111-1111-4111-8111-111111111111', key_algorithm: "Rsa4096", subject: 'example', validity_days: 1 });
     });
   });
+  it('certificates.sign_csr', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'POST', `/api/v1/certificates/sign-csr`, 201, {"cert_type":"User","created_at":"2026-08-26T00:00:00Z","fingerprint":"example","id":"11111111-1111-4111-8111-111111111111","issuer_ca_id":"11111111-1111-4111-8111-111111111111","key_algorithm":"Rsa4096","metadata":{},"not_after":"2026-08-26T00:00:00Z","not_before":"2026-08-26T00:00:00Z","public_cert_pem":"example","status":"Active","subject":"example","tenant_id":"11111111-1111-4111-8111-111111111111"});
+      await client.certificates.signCsr({ cert_type: "User", csr_pem: 'example', issuer_ca_id: '11111111-1111-4111-8111-111111111111', validity_days: 1 });
+    });
+  });
   it('certificates.get', async () => {
     await withServer(async (server, client) => {
       mountJson(server, 'GET', `/api/v1/certificates/${EXAMPLE_ID}`, 200, {"cert_type":"User","created_at":"2026-08-26T00:00:00Z","fingerprint":"example","id":"11111111-1111-4111-8111-111111111111","issuer_ca_id":"11111111-1111-4111-8111-111111111111","key_algorithm":"Rsa4096","metadata":{},"not_after":"2026-08-26T00:00:00Z","not_before":"2026-08-26T00:00:00Z","public_cert_pem":"example","status":"Active","subject":"example","tenant_id":"11111111-1111-4111-8111-111111111111"});
@@ -1084,6 +1090,7 @@ describe('generated surface', () => {
           "certificates.get",
           "certificates.list",
           "certificates.revoke",
+          "certificates.sign_csr",
           "email_config.delete_org",
           "email_config.delete_tenant",
           "email_config.get_org",

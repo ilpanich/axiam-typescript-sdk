@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`certificates.signCsr` — issue an end-entity certificate from a caller-supplied
+  CSR (CONTRACT.md §27.5, contract 1.45).** `POST /api/v1/certificates/sign-csr`,
+  reached as `client.certificates.signCsr({ issuer_ca_id, csr_pem, cert_type,
+  validity_days, metadata })`. The management surface moves from 159 to 160
+  operations across 24 namespaces; `management-registry.json` and the generated
+  `test/management.surface.generated.test.ts` are re-vendored and regenerated
+  accordingly.
+
+  The response is the existing `Certificate` model, **not** `GeneratedCertificate`
+  — there is no private key to return (the caller already holds it, since it
+  never left their machine to make the CSR), and no field anywhere on this
+  exchange to leave empty. A model round-trip test in
+  `test/management/semantics.test.ts` asserts this at both the type level (a
+  `@ts-expect-error` read of `private_key_pem` on the returned value) and at
+  runtime, against the same fixture shape every other `certificates.*` operation
+  in this suite serves.
+
+- **`webauthnSetupRegisterStart`/`webauthnSetupRegisterFinish` — a passkey or
+  security key as an account's first factor, during forced login setup
+  (CONTRACT.md §24.1/§24.3/§25.2, contract 1.45).** The WebAuthn twin of
+  `mfaSetupEnroll`/`mfaSetupConfirm`: reached from the same `login()`
+  `mfa_setup_required` outcome, for a user who would rather enrol a passkey than
+  scan a TOTP QR code.
+
+  ```ts
+  case 'mfa_setup_required': {
+    const { challenge, stateToken } = await client.webauthnSetupRegisterStart(result.setupToken);
+    const credential = await runTheCeremony(challenge);
+    await client.webauthnSetupRegisterFinish(result.setupToken, stateToken, name, credential);
+    break; // completes the login, exactly as mfaSetupConfirm does
+  }
+  ```
+
+  `axiam-sdk/browser` gains the matching composed helper, `webauthnSetupRegister`,
+  running all three steps the same way `webauthnRegister` does for an
+  already-signed-in enrolment.
+
+  **They take no session, on either end.** The setup token in the request body
+  is the only credential either endpoint accepts: unlike `webauthnRegisterStart`/
+  `webauthnRegisterFinish`, which enrol a passkey for an *already signed-in*
+  user and require a session, these two neither require one nor attach one —
+  even when the calling `AxiamClient` happens to be authenticated for something
+  else. Under the Node persona this is enforced by routing the call through a
+  fresh, non-jar-backed agent rather than the session's own cookie-jar-wrapped
+  one, proved against a real HTTP server in
+  `test/node/webauthnSetupRegister.test.ts` (MSW's mocked transport cannot
+  observe this layer either way, so it cannot tell a real fix from no fix).
+
+  `webauthnSetupRegisterFinish` adopts the resulting session **exactly as
+  `mfaSetupConfirm` does** — including, for this cookie-jar SDK, capturing the
+  CSRF token so the very next state-changing call carries it. The two
+  completions of a forced enrolment leave the client in the same state, so a
+  caller's next request does not depend on which first factor the user
+  happened to choose.
+
+  Both `setup_token` and the returned `state_token` are `Sensitive<string>`.
+  Statuses: `401` for an invalid, expired, or wrong-purpose token (a session
+  bearer presented as a setup token included); `400` when the account already
+  has a factor — the same answer `mfaSetupEnroll` gives; `403` surfaces the
+  tenant's attestation policy message verbatim; a `503` from
+  `webauthnSetupRegisterStart` is **not** retried, matching
+  `webauthnRegisterStart`.
+
 ## [1.0.0-beta14] - 2026-09-13
 
 ### Added

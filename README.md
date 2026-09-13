@@ -32,7 +32,7 @@ browser bundle pulls in no Node-only code. §12.2 forbids splitting them across 
 the four operations contract 1.38 adds are on `OidcClient` too, with the nine that preceded
 them, even though three of them need no Node-only code at all.
 
-§27 is implemented **in full**, both halves: the 158-operation imperative surface *and*
+§27 is implemented **in full**, both halves: the 160-operation imperative surface *and*
 the §27.6 declarative manifest with its §27.7 `defineManifest` and decorator forms. The
 contract asks an SDK that ships only one half to say which; this one ships both.
 
@@ -120,7 +120,7 @@ never contains `@grpc/grpc-js` or `amqplib`):
 | Entry point            | Persona                    | Contents                                                                 |
 |-------------------------|-----------------------------|---------------------------------------------------------------------------|
 | `axiam-sdk` / `axiam-sdk/rest` | Browser + Node, REST-only  | `AxiamClient`: `login`/`verifyMfa`/`refresh`/`logout`, `can`/`batchCheck` over the FND-04 REST authz endpoint |
-| `axiam-sdk/browser`     | Browser only                | The WebAuthn **platform ceremony** — `webauthnRegister`/`webauthnLogin`/`webauthnDiscoverableLogin` over `navigator.credentials` (CONTRACT.md §24.6b). The relying-party operations themselves are on `AxiamClient` in `/rest` and work in Node too. |
+| `axiam-sdk/browser`     | Browser only                | The WebAuthn **platform ceremony** — `webauthnRegister`/`webauthnSetupRegister`/`webauthnLogin`/`webauthnDiscoverableLogin` over `navigator.credentials` (CONTRACT.md §24.6b). The relying-party operations themselves are on `AxiamClient` in `/rest` and work in Node too. |
 | `axiam-sdk/grpc`        | Node only                   | Everything in `/rest` plus `AuthzGrpcClient.checkAccess`/`batchCheck` and `UserInfoGrpcClient.getUserInfo` over gRPC, the Node persona (`createNodeSession`), and the local-JWKS verifier |
 | `axiam-sdk/amqp`        | Node only                   | `consume()` — HMAC-verified AMQP audit/authz event consumer (CONTRACT.md §8) |
 | `axiam-sdk/node`        | Node only                   | The Node persona (`createNodeSession`/`createNodeClient`, cookie jar + local-JWKS verifier) plus the **OIDC/SSO relying-party helpers** — `OidcClient`, `MemoryOidcStateStore`, PKCE primitives (CONTRACT.md §12) |
@@ -1046,8 +1046,15 @@ you which half you get.
 
 | | Where | Runs in |
 |---|---|---|
-| The six relying-party operations | `AxiamClient`, from `axiam-sdk` / `axiam-sdk/rest` | **Browser and Node** |
+| The eight relying-party operations | `AxiamClient`, from `axiam-sdk` / `axiam-sdk/rest` | **Browser and Node** |
 | The ceremony (`navigator.credentials`) | `axiam-sdk/browser` | Browser only |
+
+Six of the eight enrol or authenticate an existing account and are covered
+below. The other two, `webauthnSetupRegisterStart`/`webauthnSetupRegisterFinish`
+(contract 1.45), enrol a passkey as an account's **first** factor during forced
+login setup and take no session at all — see
+["A passkey or security key as the first factor"](#a-passkey-or-security-key-as-the-first-factor-contract-145)
+in the account-lifecycle section, next to their TOTP twin.
 
 The Node half is not a consolation prize. A service completing a ceremony that
 ran on a handset — an Android app, an iOS app, a hardware client — is the
@@ -1225,6 +1232,39 @@ switch (result.status) {
 If you match `LoginResult` exhaustively, this is the edit you need. A genuine
 authorization refusal is still an `AuthzError`: the SDK matches on the body's own
 discriminant, not on the `403` alone.
+
+### A passkey or security key as the first factor (contract 1.45)
+
+`mfaSetupEnroll`/`mfaSetupConfirm` above are the TOTP path through
+`mfa_setup_required`. `webauthnSetupRegisterStart`/`webauthnSetupRegisterFinish`
+are the WebAuthn twin, for a user who would rather enrol a passkey or security
+key as their first factor:
+
+```ts
+case 'mfa_setup_required': {
+  const { challenge, stateToken } = await client.webauthnSetupRegisterStart(result.setupToken);
+  const credential = await createTheAuthenticatorResponse(challenge); // e.g. axiam-sdk/browser
+  await client.webauthnSetupRegisterFinish(
+    result.setupToken,
+    stateToken,
+    'Alice’s security key',
+    credential,
+  );
+  break; // this completes the login, exactly as mfaSetupConfirm does
+}
+```
+
+In the browser, `webauthnSetupRegister(client, result.setupToken, name)` from
+`axiam-sdk/browser` (§24.6b) runs all three steps, mirroring `webauthnRegister`.
+
+**They take no session, and never will.** The setup token in the body is the
+only credential either endpoint accepts — unlike `webauthnRegisterStart`/
+`webauthnRegisterFinish`, which enrol a passkey for an *already signed-in*
+user and require one. Calling them on a client that happens to be
+authenticated elsewhere does not attach that session: a setup token adds an
+account's first factor, never a second, and the SDK never lets the two
+credentials mix. `webauthnSetupRegisterFinish` adopts the resulting session
+exactly as `mfaSetupConfirm` does, because it *is* the same completed login.
 
 ### Email verification and password reset
 
@@ -1762,7 +1802,7 @@ entries are keyed by subject rather than by session.
 Everything above assumes a populated tenant. `login` signs a user in,
 `checkAccess` asks about a resource, `verifyWebhook` checks a delivery signature — and
 none of them can create the user, declare the resource or register the webhook. The
-management surface is the part that can: **158 operations across 24 namespaces**,
+management surface is the part that can: **160 operations across 24 namespaces**,
 generated from `management-registry.json`, which is the whole server API minus what other
 contract sections own and minus organization creation and deletion (§27.0 keeps those out
 of reach of a client library on purpose).
@@ -1873,7 +1913,7 @@ back.
 
 ### Declarative manifests (§27.6, §27.7)
 
-Calling 158 operations one at a time is rarely what an application wants. What it does at
+Calling 160 operations one at a time is rarely what an application wants. What it does at
 start-up, in a migration, or in a test fixture is assert a shape:
 
 ```ts
@@ -1911,7 +1951,7 @@ actions that would reconcile the tenant.
   a tenant that also holds hand-made state.
 - **Applying twice converges**: the second plan is all `no-change`. That is what makes
   re-running after a failure safe.
-- **There is no transaction** across 158 independent HTTP endpoints, and `ApplyReport` does
+- **There is no transaction** across 160 independent HTTP endpoints, and `ApplyReport` does
   not pretend there is. If step 12 of 30 fails, steps 1–11 have happened; the report says
   which, execution stops rather than continuing blindly, and there is no `rollback` —
   because this SDK could not honour one.

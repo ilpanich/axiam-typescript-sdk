@@ -557,6 +557,53 @@ describe('§27.5 — secrets', () => {
     // present on the socket.
     expect(sent['password']).toBe(password);
   });
+
+  // C-1 (contract 1.45, §27.5's new sentence): `certificates.sign_csr`
+  // answers with the existing `Certificate`, not `GeneratedCertificate` — a
+  // CSR-signed certificate has no private key to return, and there is no
+  // field anywhere on this exchange to leave empty. `Certificate` carries no
+  // `private_key_pem` at the type level (the assignment below is a
+  // compile-time check: it would not typecheck if the model ever grew one)
+  // and this proves it at runtime too, against the same fixture body every
+  // other certificates.* operation in this suite serves.
+  it('sign_csr returns a Certificate with no private-key field at all', async () => {
+    const certificateBody = {
+      id: EXAMPLE_ID,
+      tenant_id: TENANT_ID,
+      issuer_ca_id: EXAMPLE_ID,
+      cert_type: 'User',
+      key_algorithm: 'Ed25519',
+      subject: 'CN=device-1',
+      fingerprint: 'aa:bb:cc',
+      public_cert_pem: '-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----',
+      status: 'Active',
+      not_before: '2026-08-26T00:00:00Z',
+      not_after: '2027-08-26T00:00:00Z',
+      metadata: {},
+    };
+    mountJson(mockServer(), 'POST', '/api/v1/certificates/sign-csr', 201, certificateBody);
+
+    const certificate = await managementClient().certificates.signCsr({
+      issuer_ca_id: EXAMPLE_ID,
+      csr_pem: '-----BEGIN CERTIFICATE REQUEST-----\nMIIB...\n-----END CERTIFICATE REQUEST-----',
+      cert_type: 'User',
+      validity_days: 90,
+    });
+
+    // Compile-time: `Certificate` has no `private_key_pem` — this line does
+    // not typecheck otherwise, unlike the equivalent assignment from
+    // `GeneratedCertificate` (models.ts:1597), which is `Sensitive<string>`
+    // and REQUIRED.
+    // @ts-expect-error -- Certificate has no private_key_pem field to read.
+    void certificate.private_key_pem;
+
+    // Runtime: the field is absent from the object the SDK hands back, not
+    // merely untyped — `certificates.generate`'s GeneratedCertificate would
+    // fail this same assertion.
+    expect(certificate).not.toHaveProperty('private_key_pem');
+    expect(Object.keys(certificate).sort()).toEqual(Object.keys(certificateBody).sort());
+    expect(certificate.subject).toBe('CN=device-1');
+  });
 });
 
 describe('§27.2 — handle rules', () => {

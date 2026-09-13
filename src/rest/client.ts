@@ -340,6 +340,38 @@ export class AxiamClient {
     return webauthnMethods.webauthnDiscoverableFinish(this, stateToken, response);
   }
 
+  /**
+   * `POST /api/v1/auth/webauthn/setup/register/start` (§24.1, contract 1.45)
+   * — the WebAuthn twin of `mfaSetupEnroll`. Takes no session; the setup
+   * token from `login()`'s `mfa_setup_required` outcome is the only credential.
+   */
+  webauthnSetupRegisterStart(
+    setupToken: Sensitive<string> | string,
+  ): Promise<webauthnMethods.WebauthnRegistrationChallenge> {
+    return webauthnMethods.webauthnSetupRegisterStart(this, setupToken);
+  }
+
+  /**
+   * `POST /api/v1/auth/webauthn/setup/register/finish` (§24.1, contract 1.45)
+   * — the WebAuthn twin of `mfaSetupConfirm`. Adopts credentials exactly as
+   * `mfaSetupConfirm` does (§25.2 rule 2): it completes the login `login()`
+   * left interrupted.
+   */
+  webauthnSetupRegisterFinish(
+    setupToken: Sensitive<string> | string,
+    stateToken: Sensitive<string> | string,
+    credentialName: string,
+    response: WebauthnRegistrationResponse | string,
+  ): Promise<LoginResult> {
+    return webauthnMethods.webauthnSetupRegisterFinish(
+      this,
+      setupToken,
+      stateToken,
+      credentialName,
+      response,
+    );
+  }
+
   // -------------------------------------------------------------------------
   // §25 Account lifecycle and MFA enrolment
   // -------------------------------------------------------------------------

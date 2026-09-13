@@ -1,18 +1,21 @@
 // WebAuthn / passkeys — the relying-party layer (CONTRACT.md §24.1–§24.5).
 //
-// Six wire operations. None of them touches an authenticator: that is §24.6,
-// which lives in `axiam-sdk/browser` because it needs a DOM. These six are the
-// half of a ceremony that talks to AXIAM, and they work identically in Node —
-// a service completing a ceremony its native client ran is the relying party
-// here, exactly as a browser is.
+// Eight wire operations. None of them touches an authenticator: that is §24.6,
+// which lives in `axiam-sdk/browser` because it needs a DOM. These eight are
+// the half of a ceremony that talks to AXIAM, and they work identically in
+// Node — a service completing a ceremony its native client ran is the relying
+// party here, exactly as a browser is.
 //
 // The rule everything below obeys is §24.0: the server chooses every option
 // and verifies every response, so this module carries both through untouched.
 // It does not default a field, does not normalize one, and does not re-encode
 // a buffer.
 
+import type { AxiosRequestConfig } from 'axios';
 import { mapHttpStatusToError, NetworkError, Sensitive, sanitizeAxiosError } from '../core/index.js';
 import type { AxiamClient } from './client.js';
+import { userInfoFromWire } from './auth.js';
+import type { LoginResult, LoginSuccessResponseWire } from './types.js';
 import type {
   WebauthnAuthenticationResponse,
   WebauthnCreationChallenge,
@@ -28,6 +31,8 @@ const AUTH_START = '/api/v1/auth/webauthn/authenticate/start';
 const AUTH_FINISH = '/api/v1/auth/webauthn/authenticate/finish';
 const DISCOVERABLE_START = '/api/v1/auth/webauthn/authenticate/discoverable/start';
 const DISCOVERABLE_FINISH = '/api/v1/auth/webauthn/authenticate/discoverable/finish';
+const SETUP_REGISTER_START = '/api/v1/auth/webauthn/setup/register/start';
+const SETUP_REGISTER_FINISH = '/api/v1/auth/webauthn/setup/register/finish';
 
 // ---------------------------------------------------------------------------
 // Public result types
@@ -167,6 +172,104 @@ export async function webauthnRegisterFinish(
     credentialType: wire.credential_type,
     createdAt: wire.created_at,
     ...(wire.last_used_at ? { lastUsedAt: wire.last_used_at } : {}),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Enrolling a passkey or security key as the FIRST factor, during forced
+// setup (§24.1, contract 1.45) — the WebAuthn twin of `mfaSetupEnroll` /
+// `mfaSetupConfirm` (accountLifecycle.ts, §25.1).
+// ---------------------------------------------------------------------------
+
+/**
+ * `POST /api/v1/auth/webauthn/setup/register/start` (§24.1, contract 1.45).
+ *
+ * Reached exactly where `mfaSetupEnroll` is: `login()` answered
+ * `mfa_setup_required` because the tenant requires MFA and this account has
+ * none, and the caller chose a passkey or security key instead of TOTP.
+ * There is no session yet — the setup token *is* the credential, in the
+ * request body, and this call takes no other. Unlike {@link webauthnRegisterStart}
+ * it is never gated on a session, and — per §24.1 — it MUST NOT and does not
+ * attach this client's own session credential even when one happens to be
+ * configured: a setup token adds the account's first factor, never a second,
+ * and the two credentials must never be confused with each other.
+ *
+ * The server refuses an account that already has a factor with the same
+ * `400` `mfa_setup_enroll` gives (§24.1), and a `503` here — the tenant's
+ * attestation policy demanding attestation with no usable FIDO metadata
+ * snapshot — is, as on {@link webauthnRegisterStart}, deliberately **not**
+ * retried (§24.4 rule 2).
+ */
+export async function webauthnSetupRegisterStart(
+  client: AxiamClient,
+  setupToken: Sensitive<string> | string,
+): Promise<WebauthnRegistrationChallenge> {
+  client.ensureOpen();
+
+  const wire = await post<StartRegistrationWire>(
+    client,
+    SETUP_REGISTER_START,
+    { setup_token: expose(setupToken) },
+    'webauthnSetupRegisterStart',
+    client.session.noCredentialsConfig(),
+  );
+  return { challenge: wire.challenge, stateToken: new Sensitive(wire.state_token) };
+}
+
+/**
+ * `POST /api/v1/auth/webauthn/setup/register/finish` (§24.1, contract 1.45).
+ *
+ * Adopts credentials **exactly as `mfaSetupConfirm` does** (§25.2 rule 2) —
+ * mirrored from it rather than from {@link webauthnRegisterFinish}, which
+ * adopts nothing because its caller was already signed in. This one *is* the
+ * completion of the login `login()` left interrupted, just enrolling a
+ * different first factor than TOTP, and the two completions of a forced
+ * enrolment MUST leave the client in the same state or a caller's next
+ * request succeeds or fails depending on which factor the user happened to
+ * choose.
+ *
+ * `response` goes to the server exactly as the authenticator produced it
+ * (§24.0 rule 3). A `403` is the tenant's attestation policy refusing this
+ * authenticator, surfaced verbatim as on {@link webauthnRegisterFinish}
+ * (§24.4 rule 1); a `401` is the setup token itself — expired, already spent,
+ * or the wrong purpose entirely (a session bearer presented as one).
+ */
+export async function webauthnSetupRegisterFinish(
+  client: AxiamClient,
+  setupToken: Sensitive<string> | string,
+  stateToken: Sensitive<string> | string,
+  credentialName: string,
+  response: WebauthnRegistrationResponse | string,
+): Promise<LoginResult> {
+  client.ensureOpen();
+  // §17.1 rule 9 / §24.3 rule 4: the subject changes here, exactly as it does
+  // on `mfaSetupConfirm` — this completes a login, not a profile action.
+  client.decisionMemo.clear();
+
+  const wire = await post<LoginSuccessResponseWire>(
+    client,
+    SETUP_REGISTER_FINISH,
+    {
+      setup_token: expose(setupToken),
+      state_token: expose(stateToken),
+      credential_name: credentialName,
+      response: asResponse(response, 'webauthnSetupRegisterFinish'),
+    },
+    'webauthnSetupRegisterFinish',
+    client.session.noCredentialsConfig(),
+  );
+
+  client.session.authenticated = true;
+  // Mirrors mfaSetupConfirm/finishSignIn: syncs the Node persona's csrfToken
+  // (and cached access token) out of the jar, so the first state-changing
+  // call after this completion carries a valid X-CSRF-Token.
+  await client.session.onAuthenticated?.();
+
+  return {
+    status: 'authenticated',
+    user: userInfoFromWire(wire.user),
+    sessionId: wire.session_id,
+    expiresIn: wire.expires_in,
   };
 }
 
@@ -420,18 +523,25 @@ export function webauthnRequestJson(
  * POST a JSON body and map failures through the §2 taxonomy.
  *
  * Not routed through §16's retry helper, and that is deliberate for the whole
- * section: five of the six operations are ceremony steps that consume
- * server-side state, and the sixth (`register/start`) has the `503` §24.4
- * rule 2 forbids retrying. There is nothing here a bounded retry could help.
+ * section: seven of the eight operations are ceremony steps that consume
+ * server-side state, and the other two (`register/start`,
+ * `setup/register/start`) have the `503` §24.4 rule 2 forbids retrying. There
+ * is nothing here a bounded retry could help.
+ *
+ * `config` is how {@link webauthnSetupRegisterStart}/`*Finish` ride with
+ * `session.noCredentialsConfig()` instead of this session's own credential —
+ * every other caller omits it and gets the session's ordinary request
+ * behaviour.
  */
 async function post<T>(
   client: AxiamClient,
   path: string,
   body: unknown,
   operation: string,
+  config?: AxiosRequestConfig,
 ): Promise<T> {
   try {
-    const response = await client.session.axios.post<T>(path, body);
+    const response = await client.session.axios.post<T>(path, body, config);
     return response.data;
   } catch (err) {
     const status = axiosStatus(err);
