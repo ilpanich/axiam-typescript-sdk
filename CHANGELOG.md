@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-beta14] - 2026-09-13
+
 ### Added
+
+- The revocation feed, vector C refusal, and the 503 retry pin (contract 1.44)
 
 - **CONTRACT.md §10.4 — an optional session-revocation feed poller (contract
   1.44).** `RevocationFeed` from `@axiam/sdk/node`, set as
@@ -35,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exercises that way is the failure §16.7 exists for.
 
 ### Changed
+
+- Re-vendor the final CONTRACT.md (1.44) from the axiam branch
 
 - **A malformed `mtls_endpoint_aliases` entry now throws instead of falling
   back to the top-level endpoint** (CONTRACT.md §21.3.1 vector C, contract
@@ -64,6 +70,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `management-registry.json` from `axiam`, and regenerated the §27 management
   surface. The surface gains `SessionResponse`, whose T-254 replay fields were
   published server-side at 1.0.0-beta13.
+
+### Fixed
+
+- Reattach OidcClient's doc block, and reach §10.4 from middleware
 
 ## [1.0.0-beta13] - 2026-09-12
 
