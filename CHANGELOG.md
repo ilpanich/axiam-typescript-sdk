@@ -49,6 +49,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   endpoint the alias replaces — comparing like with like, so an `http` alias
   for an `http` endpoint (a development deployment) is still accepted.
 
+  The refusal is an `AuthError`, not a `NetworkError`: nothing failed in
+  transport — the server published a document this client cannot use, the same
+  taxonomy as a document advertising no endpoint at all. It also matters
+  operationally, because §16.3 retries `NetworkError` and only `NetworkError`:
+  the other choice would have attempted a permanent, deterministic
+  misconfiguration three times and reported it as a transient one.
+
   A client with no certificate configured never reads the member at all, so a
   deployment whose aliases are malformed cannot break the clients that never
   use them.

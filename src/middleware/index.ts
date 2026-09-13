@@ -79,6 +79,17 @@ export {
   OidcClient,
   type OidcClientOptions,
 } from '../node/oidc.js';
+// §10.4's poller (contract 1.44). `AuthzVerifiableSession.revocationFeed` names
+// this type, so it must be reachable from this entry point for the same reason
+// as the §12 types above: typedoc reports a dangling cross-module reference
+// otherwise, and CI treats that as an error.
+export {
+  DEFAULT_POLL_INTERVAL_MS,
+  MAX_ENTRIES,
+  MIN_POLL_INTERVAL_MS,
+  RevocationFeed,
+} from '../node/revocationFeed.js';
+export type { RevocationFeedOptions } from '../node/revocationFeed.js';
 export type {
   AuthorizationRequest,
   IntrospectParams,

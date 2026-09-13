@@ -376,6 +376,12 @@ describe('§21.3.1 vector C — a malformed alias is refused', () => {
     await expect(
       oidc.oidcExchange({ code: CODE, codeVerifier: 'v'.repeat(43), redirectUri: REDIRECT_URI, nonce: NONCE }),
     ).rejects.toThrow(/mtls_endpoint_aliases/);
+    // AuthError, not NetworkError: §16.3 retries NetworkError and only
+    // NetworkError, so the other choice would have attempted a permanent,
+    // deterministic misconfiguration three times and reported it as transient.
+    await expect(
+      oidc.oidcExchange({ code: CODE, codeVerifier: 'v'.repeat(43), redirectUri: REDIRECT_URI, nonce: NONCE }),
+    ).rejects.toBeInstanceOf(AuthError);
 
     // The proof that it refused rather than fell back: nothing was posted. A
     // fallback would be a *successful* exchange against the conventional host,
@@ -401,6 +407,9 @@ describe('§21.3.1 vector C — a malformed alias is refused', () => {
     await expect(
       oidc.oidcExchange({ code: CODE, codeVerifier: 'v'.repeat(43), redirectUri: REDIRECT_URI, nonce: NONCE }),
     ).rejects.toThrow(/downgrade/);
+    await expect(
+      oidc.oidcExchange({ code: CODE, codeVerifier: 'v'.repeat(43), redirectUri: REDIRECT_URI, nonce: NONCE }),
+    ).rejects.toBeInstanceOf(AuthError);
     expect(hits).toEqual([]);
   });
 

@@ -528,6 +528,64 @@ function mapUmaGrantError(err: unknown, url: string, fallbackMessage: string): A
 }
 
 /**
+ * Refuse an `mtls_endpoint_aliases` entry that cannot carry a client
+ * certificate (CONTRACT.md §21.3.1 vector C, contract 1.43).
+ *
+ * Falling back to the top-level endpoint looks like the safe answer and is the
+ * dangerous one: the caller asked to authenticate with a certificate, the
+ * operator published something unusable, and sending the certificate to the
+ * front-channel host authenticates nothing while appearing to work.
+ *
+ * Two defects, each a refusal on its own:
+ *
+ *   * **Not an absolute URL.** A relative alias resolves against nothing the
+ *     client holds, and the base that might seem obvious — the issuer's host —
+ *     is precisely the host the alias exists to name a different one from.
+ *   * **A scheme weaker than the endpoint it replaces.** An alias substitutes
+ *     for exactly one top-level endpoint, so that is what it is compared
+ *     against. `https` → `http` is a downgrade; `http` → `http` is a
+ *     development deployment, which AXIAM's own `build_mtls_aliases` supports
+ *     and this suite's harness is.
+ *
+ * @throws AuthError — not `NetworkError`, and the difference is not cosmetic.
+ * Nothing failed in transport: the server published a document this client
+ * cannot use, which is the same taxonomy as a document advertising no endpoint
+ * at all (see `oidcDeviceAuthorize`). It also matters operationally, because
+ * §16.3 retries `NetworkError` and only `NetworkError` — the other choice would
+ * have attempted a permanent, deterministic misconfiguration three times and
+ * reported it as a transient one.
+ */
+export function assertUsableMtlsAlias(alias: string, replaces: string | undefined): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(alias);
+  } catch {
+    throw new AuthError(
+      `mtls_endpoint_aliases publishes ${JSON.stringify(alias)}, which is not an absolute URL. ` +
+        'Refusing rather than falling back to the top-level endpoint: this call presents a ' +
+        'client certificate, and sending it to the front-channel host would authenticate ' +
+        'nothing while appearing to work.',
+    );
+  }
+  let replacedIsTls = false;
+  if (replaces !== undefined) {
+    try {
+      replacedIsTls = new URL(replaces).protocol === 'https:';
+    } catch {
+      replacedIsTls = false;
+    }
+  }
+  if (replacedIsTls && parsed.protocol !== 'https:') {
+    throw new AuthError(
+      `mtls_endpoint_aliases publishes ${JSON.stringify(alias)}, whose scheme is ` +
+        `${JSON.stringify(parsed.protocol)}, in place of an https endpoint. That is a ` +
+        'downgrade, and mutual TLS over cleartext is a contradiction; refusing rather than ' +
+        'falling back to the top-level endpoint.',
+    );
+  }
+}
+
+/**
  * The OIDC / SSO relying-party client (CONTRACT.md §12).
  *
  * @remarks
@@ -560,56 +618,6 @@ function mapUmaGrantError(err: unknown, url: string, fallbackMessage: string): A
  * console.log(tokens.idClaims?.sub);   // validated ID-token subject
  * ```
  */
-/**
- * Refuse an `mtls_endpoint_aliases` entry that cannot carry a client
- * certificate (CONTRACT.md §21.3.1 vector C, contract 1.43).
- *
- * Falling back to the top-level endpoint looks like the safe answer and is the
- * dangerous one: the caller asked to authenticate with a certificate, the
- * operator published something unusable, and sending the certificate to the
- * front-channel host authenticates nothing while appearing to work.
- *
- * Two defects, each a refusal on its own:
- *
- *   * **Not an absolute URL.** A relative alias resolves against nothing the
- *     client holds, and the base that might seem obvious — the issuer's host —
- *     is precisely the host the alias exists to name a different one from.
- *   * **A scheme weaker than the endpoint it replaces.** An alias substitutes
- *     for exactly one top-level endpoint, so that is what it is compared
- *     against. `https` → `http` is a downgrade; `http` → `http` is a
- *     development deployment, which AXIAM's own `build_mtls_aliases` supports
- *     and this suite's harness is.
- */
-export function assertUsableMtlsAlias(alias: string, replaces: string | undefined): void {
-  let parsed: URL;
-  try {
-    parsed = new URL(alias);
-  } catch {
-    throw new NetworkError(
-      `mtls_endpoint_aliases publishes ${JSON.stringify(alias)}, which is not an absolute URL. ` +
-        'Refusing rather than falling back to the top-level endpoint: this call presents a ' +
-        'client certificate, and sending it to the front-channel host would authenticate ' +
-        'nothing while appearing to work.',
-    );
-  }
-  let replacedIsTls = false;
-  if (replaces !== undefined) {
-    try {
-      replacedIsTls = new URL(replaces).protocol === 'https:';
-    } catch {
-      replacedIsTls = false;
-    }
-  }
-  if (replacedIsTls && parsed.protocol !== 'https:') {
-    throw new NetworkError(
-      `mtls_endpoint_aliases publishes ${JSON.stringify(alias)}, whose scheme is ` +
-        `${JSON.stringify(parsed.protocol)}, in place of an https endpoint. That is a ` +
-        'downgrade, and mutual TLS over cleartext is a contradiction; refusing rather than ' +
-        'falling back to the top-level endpoint.',
-    );
-  }
-}
-
 export class OidcClient {
   readonly #session: SharedSession;
   readonly #options: OidcClientOptions;
