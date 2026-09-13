@@ -3010,6 +3010,50 @@ export interface ServiceAccountResponse {
   updated_at: string;
 }
 
+/** One of a user's sessions, as an administrator sees it. */
+export interface SessionResponse {
+  /** RFC 8176 method references for that authentication. */
+  amr: string[];
+  /**
+   * X7.2 — when the end user actually authenticated, which is not `created_at`
+   * on a session produced by refresh rotation.
+   */
+  authenticated_at: string;
+  /** `created_at`. */
+  created_at: string;
+  /** `expires_at`. */
+  expires_at: string;
+  /** `id`. */
+  id: string;
+  /** `ip_address`. */
+  ip_address?: string | null;
+  /**
+   * T-254 — when a refresh token of this session was last presented after it
+   * had already been rotated. `None` if that has never happened.
+   */
+  refresh_replay_at?: string | null;
+  /**
+   * T-254 — replays accepted under the FAPI 2.0 §5.3.2.1-9 grace window. Only
+   * ever non-zero for a client registered `profile: fapi2`.
+   */
+  refresh_replay_grace_accepted: number;
+  /**
+   * T-254 — replays refused because there was no window to accept them in.
+   * Nothing a conformant client does.
+   */
+  refresh_replay_refused: number;
+  /**
+   * T-254 — the badge: `none`, `fapi_grace_retry` or `refused`.
+   *
+   * Derived from the two counters below rather than stored, so it cannot
+   * disagree with them. A refusal outranks an accepted grace retry however the
+   * counts compare.
+   */
+  refresh_replay_verdict: string;
+  /** `user_agent`. */
+  user_agent?: string | null;
+}
+
 /** Body for `PUT .../ca-certificates/{id}/mtls-trust-anchor`. */
 export interface SetMtlsTrustAnchor {
   /** Whether this CA should be trusted for client-certificate authentication. */

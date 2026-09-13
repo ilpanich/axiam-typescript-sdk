@@ -186,4 +186,15 @@ export class UsersApi {
     return wire;
   }
 
+  /** `GET /api/v1/users/{user_id}/sessions` */
+  async listSessions(userId: string): Promise<models.SessionResponse[]> {
+    const wire = await sendManagement<models.SessionResponse[]>(this.#client, {
+      operation: 'users.list_sessions',
+      method: 'GET',
+      pathTemplate: '/api/v1/users/{user_id}/sessions',
+      path: `/api/v1/users/${encodeURIComponent(userId)}/sessions`,
+    });
+    return wire;
+  }
+
 }

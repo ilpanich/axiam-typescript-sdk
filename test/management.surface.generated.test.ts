@@ -141,6 +141,12 @@ describe('users namespace', () => {
       await client.users.listRoles(EXAMPLE_ID);
     });
   });
+  it('users.list_sessions', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/users/${EXAMPLE_ID}/sessions`, 200, [{"amr":[],"authenticated_at":"example","created_at":"example","expires_at":"example","id":"11111111-1111-4111-8111-111111111111","refresh_replay_grace_accepted":1,"refresh_replay_refused":1,"refresh_replay_verdict":"example"}]);
+      await client.users.listSessions(EXAMPLE_ID);
+    });
+  });
 });
 
 describe('groups namespace', () => {
@@ -1209,6 +1215,7 @@ describe('generated surface', () => {
           "users.list",
           "users.list_mfa_methods",
           "users.list_roles",
+          "users.list_sessions",
           "users.reset_mfa",
           "users.unlock",
           "users.update",

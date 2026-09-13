@@ -139,6 +139,55 @@ describe('§16 through the public checkAccess surface', () => {
 
     expect(calls()).toBe(1);
   });
+
+  // AXIAM T-262: since 2026-09-12 a write that loses an optimistic-concurrency
+  // race in the datastore answers `503 write_contention` with `Retry-After: 1`
+  // rather than `500`. Nothing here changes — §16.3 already retries `5xx` on
+  // an eligible operation and §16.1 already honours the header as a floor —
+  // and that is precisely why it is pinned. A retry policy nobody exercises
+  // through the public surface is the failure §16.7 was written about: two
+  // SDKs shipped a tested helper no production path called, with green suites.
+  it("retries the server's contended-write answer and succeeds", async () => {
+    vi.useFakeTimers();
+    let n = 0;
+    const { calls } = mountCheck(() => {
+      n += 1;
+      return n === 1
+        ? HttpResponse.json(
+            { error: 'write_contention', message: 'the datastore is busy; retry this request' },
+            { status: 503, headers: { 'Retry-After': '1' } },
+          )
+        : (ok() as Response);
+    });
+    const c = client();
+
+    const promise = c.checkAccess({ action: 'read', resourceId: RESOURCE });
+    await vi.runAllTimersAsync();
+
+    await expect(promise).resolves.toMatchObject({ allowed: true });
+    expect(calls()).toBe(2);
+  });
+
+  it('makes exactly one attempt at a non-idempotent call against the same 503', async () => {
+    // The half that catches a retry wired at the transport layer instead of
+    // the operation layer (§16.7). `login` changes state and consumes a
+    // credential, so a silent retry would replay a spent one and turn a
+    // recoverable blip into a hard failure the caller cannot interpret.
+    let calls = 0;
+    server.use(
+      http.post(`${BASE_URL}/api/v1/auth/login`, () => {
+        calls += 1;
+        return HttpResponse.json(
+          { error: 'write_contention', message: 'the datastore is busy; retry this request' },
+          { status: 503, headers: { 'Retry-After': '1' } },
+        );
+      }),
+    );
+
+    await expect(client().login('someone@example.test', 'password')).rejects.toThrow();
+
+    expect(calls).toBe(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
