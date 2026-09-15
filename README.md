@@ -1,8 +1,13 @@
 # axiam-sdk (TypeScript/JavaScript)
 
+<!-- Track the CURRENT channel's dist-tag, not `latest`: releases are prereleases and
+     the publish job keeps those off `latest` (see "Release / versioning"), so a plain
+     `npm/v/axiam-sdk` badge reports whatever was last published to `latest` — today
+     1.0.0-alpha28, dozens of releases stale. Move `beta` below to `rc`, then drop it
+     entirely, as the channel advances. -->
 [![CI](https://github.com/ilpanich/axiam-typescript-sdk/actions/workflows/sdk-ci-typescript.yml/badge.svg?branch=main)](https://github.com/ilpanich/axiam-typescript-sdk/actions/workflows/sdk-ci-typescript.yml)
 [![Coverage Status](https://coveralls.io/repos/github/ilpanich/axiam-typescript-sdk/badge.svg?branch=main)](https://coveralls.io/github/ilpanich/axiam-typescript-sdk?branch=main)
-[![npm](https://img.shields.io/npm/v/axiam-sdk.svg)](https://www.npmjs.com/package/axiam-sdk)
+[![npm](https://img.shields.io/npm/v/axiam-sdk/beta?label=npm%20beta)](https://www.npmjs.com/package/axiam-sdk)
 [![Docs](https://img.shields.io/badge/docs-TypeDoc-blue.svg)](https://ilpanich.github.io/axiam-typescript-sdk/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
@@ -13,7 +18,7 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 ## Package identity
 
 - **npm package:** `axiam-sdk`
-- **Registry:** [npmjs.com/package/axiam-sdk](https://www.npmjs.com/package/axiam-sdk) _(reserved, not yet published)_
+- **Registry:** [npmjs.com/package/axiam-sdk](https://www.npmjs.com/package/axiam-sdk) — published as prereleases, under the `alpha`/`beta` dist-tags
 - **Source:** [github.com/ilpanich/axiam-typescript-sdk](https://github.com/ilpanich/axiam-typescript-sdk)
 - **License:** Apache-2.0
 - **Node:** `>=22` — see [Supported Node versions](#supported-node-versions)
@@ -74,8 +79,13 @@ See [`CONTRACT.md`](./CONTRACT.md) for the full cross-language behavioral contra
 ## Install
 
 ```bash
-npm install axiam-sdk
+npm install axiam-sdk@beta
 ```
+
+Every release so far is a prerelease, and the publish job files each one under its
+channel's dist-tag (`beta` today) rather than `latest` — so name the channel, or pin an
+exact version. A bare `npm install axiam-sdk` resolves `latest`, which no prerelease
+moves.
 
 ## Supported Node versions
 

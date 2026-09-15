@@ -76,7 +76,7 @@ jobs:
         run: npm test -- --run
 
       # Docs gate: every export reachable from src/index.ts must carry a
-      # TSDoc comment. typedoc.json wires excludeInternal (so @internal
+      # TSDoc comment. typedoc.config.mjs wires excludeInternal (so @internal
       # cross-transport wiring like SharedSession.refreshGuard is exempt)
       # plus validation.notDocumented + treatValidationWarningsAsErrors, so
       # `npm run docs` itself already fails on regression — this step just

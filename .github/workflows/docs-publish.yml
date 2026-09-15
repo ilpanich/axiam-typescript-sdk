@@ -54,6 +54,22 @@ jobs:
         with:
           node-version: '22'
 
+      # The site header now names the release it documents (typedoc.config.mjs
+      # `includeVersion` reads package.json), so a package.json that lags the
+      # tag would publish a site labelled with the wrong version. Same gate as
+      # the npm publish job in sdk-ci-typescript.yml, asserted before the build
+      # rather than discovered on the live site.
+      - name: Verify tag matches package.json version
+        run: |
+          set -euo pipefail
+          tag_version="${GITHUB_REF_NAME#v}"
+          pkg_version="$(node -p "require('./package.json').version")"
+          if [ "${tag_version}" != "${pkg_version}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} implies version ${tag_version}, but package.json says ${pkg_version} — refusing to publish docs labelled with the wrong release."
+            exit 1
+          fi
+          echo "OK: docs will be labelled v${pkg_version}."
+
       # buf generate needs the buf CLI: the gRPC surface is generated from
       # proto/ at build time, so TypeDoc cannot resolve those types without it.
       - name: Install buf
