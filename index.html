@@ -35,7 +35,7 @@ permits where a packaging constraint requires one, which here is CI's proof that
 browser bundle pulls in no Node-only code. §12.2 forbids splitting them across two hosts, so
 the four operations contract 1.38 adds are on <code>OidcClient</code> too, with the nine that preceded
 them, even though three of them need no Node-only code at all.</p>
-<p>§27 is implemented <strong>in full</strong>, both halves: the 158-operation imperative surface <em>and</em>
+<p>§27 is implemented <strong>in full</strong>, both halves: the 160-operation imperative surface <em>and</em>
 the §27.6 declarative manifest with its §27.7 <code>defineManifest</code> and decorator forms. The
 contract asks an SDK that ships only one half to say which; this one ships both.</p>
 <p>§12.7, §14, §15, §22, §24, §25, §26 and §27 are named rather than folded into the range
@@ -130,7 +130,7 @@ never contains <code>@grpc/grpc-js</code> or <code>amqplib</code>):</p>
 <tr>
 <td><code>axiam-sdk/browser</code></td>
 <td>Browser only</td>
-<td>The WebAuthn <strong>platform ceremony</strong> — <code>webauthnRegister</code>/<code>webauthnLogin</code>/<code>webauthnDiscoverableLogin</code> over <code>navigator.credentials</code> (<a href="http://CONTRACT.md">CONTRACT.md</a> §24.6b). The relying-party operations themselves are on <code>AxiamClient</code> in <code>/rest</code> and work in Node too.</td>
+<td>The WebAuthn <strong>platform ceremony</strong> — <code>webauthnRegister</code>/<code>webauthnSetupRegister</code>/<code>webauthnLogin</code>/<code>webauthnDiscoverableLogin</code> over <code>navigator.credentials</code> (<a href="http://CONTRACT.md">CONTRACT.md</a> §24.6b). The relying-party operations themselves are on <code>AxiamClient</code> in <code>/rest</code> and work in Node too.</td>
 </tr>
 <tr>
 <td><code>axiam-sdk/grpc</code></td>
@@ -828,7 +828,7 @@ you which half you get.</p>
 </thead>
 <tbody>
 <tr>
-<td>The six relying-party operations</td>
+<td>The eight relying-party operations</td>
 <td><code>AxiamClient</code>, from <code>axiam-sdk</code> / <code>axiam-sdk/rest</code></td>
 <td><strong>Browser and Node</strong></td>
 </tr>
@@ -839,6 +839,12 @@ you which half you get.</p>
 </tr>
 </tbody>
 </table>
+<p>Six of the eight enrol or authenticate an existing account and are covered
+below. The other two, <code>webauthnSetupRegisterStart</code>/<code>webauthnSetupRegisterFinish</code>
+(contract 1.45), enrol a passkey as an account's <strong>first</strong> factor during forced
+login setup and take no session at all — see
+<a href="#a-passkey-or-security-key-as-the-first-factor-contract-145">&quot;A passkey or security key as the first factor&quot;</a>
+in the account-lifecycle section, next to their TOTP twin.</p>
 <p>The Node half is not a consolation prize. A service completing a ceremony that
 ran on a handset — an Android app, an iOS app, a hardware client — is the
 relying party, exactly as a browser is, and it never touches
@@ -934,6 +940,24 @@ means to recover.</p>
 <p>If you match <code>LoginResult</code> exhaustively, this is the edit you need. A genuine
 authorization refusal is still an <code>AuthzError</code>: the SDK matches on the body's own
 discriminant, not on the <code>403</code> alone.</p>
+<h3 id="a-passkey-or-security-key-as-the-first-factor-contract-145" class="tsd-anchor-link">A passkey or security key as the first factor (contract 1.45)<a href="#a-passkey-or-security-key-as-the-first-factor-contract-145" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p><code>mfaSetupEnroll</code>/<code>mfaSetupConfirm</code> above are the TOTP path through
+<code>mfa_setup_required</code>. <code>webauthnSetupRegisterStart</code>/<code>webauthnSetupRegisterFinish</code>
+are the WebAuthn twin, for a user who would rather enrol a passkey or security
+key as their first factor:</p>
+<pre><code class="ts"><span class="hl-7">case</span><span class="hl-1"> </span><span class="hl-5">&#39;mfa_setup_required&#39;</span><span class="hl-1">: {</span><br/><span class="hl-1">  const { </span><span class="hl-4">challenge</span><span class="hl-1">, </span><span class="hl-4">stateToken</span><span class="hl-1"> } = await client.webauthnSetupRegisterStart(result.setupToken);</span><br/><span class="hl-1">  const </span><span class="hl-4">credential</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-3">createTheAuthenticatorResponse</span><span class="hl-1">(</span><span class="hl-4">challenge</span><span class="hl-1">); </span><span class="hl-6">// e.g. axiam-sdk/browser</span><br/><span class="hl-1">  await client.webauthnSetupRegisterFinish(</span><br/><span class="hl-1">    result.</span><span class="hl-4">setupToken</span><span class="hl-1">,</span><br/><span class="hl-1">    </span><span class="hl-4">stateToken</span><span class="hl-1">,</span><br/><span class="hl-1">    </span><span class="hl-5">&#39;Alice’s security key&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">    </span><span class="hl-4">credential</span><span class="hl-1">,</span><br/><span class="hl-1">  );</span><br/><span class="hl-1">  break; </span><span class="hl-6">// this completes the login, exactly as mfaSetupConfirm does</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<p>In the browser, <code>webauthnSetupRegister(client, result.setupToken, name)</code> from
+<code>axiam-sdk/browser</code> (§24.6b) runs all three steps, mirroring <code>webauthnRegister</code>.</p>
+<p><strong>They take no session, and never will.</strong> The setup token in the body is the
+only credential either endpoint accepts — unlike <code>webauthnRegisterStart</code>/
+<code>webauthnRegisterFinish</code>, which enrol a passkey for an <em>already signed-in</em>
+user and require one. Calling them on a client that happens to be
+authenticated elsewhere does not attach that session: a setup token adds an
+account's first factor, never a second, and the SDK never lets the two
+credentials mix. <code>webauthnSetupRegisterFinish</code> adopts the resulting session
+exactly as <code>mfaSetupConfirm</code> does, because it <em>is</em> the same completed login.</p>
 <h3 id="email-verification-and-password-reset" class="tsd-anchor-link">Email verification and password reset<a href="#email-verification-and-password-reset" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <pre><code class="ts"><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">verifyEmail</span><span class="hl-1">(</span><span class="hl-4">tokenFromLink</span><span class="hl-1">, </span><span class="hl-4">tenantId</span><span class="hl-1">);</span><br/><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">resendVerification</span><span class="hl-1">(</span><span class="hl-4">email</span><span class="hl-1">, </span><span class="hl-4">tenantId</span><span class="hl-1">);   </span><span class="hl-6">// anonymous caller</span><br/><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">resendOwnVerification</span><span class="hl-1">();               </span><span class="hl-6">// signed-in caller</span><br/><br/><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-3">requestPasswordReset</span><span class="hl-1">({ </span><span class="hl-4">email</span><span class="hl-1"> });</span>
 </code><button type="button">Copy</button></pre>
@@ -1260,7 +1284,7 @@ entries are keyed by subject rather than by session.</p>
 <p>Everything above assumes a populated tenant. <code>login</code> signs a user in,
 <code>checkAccess</code> asks about a resource, <code>verifyWebhook</code> checks a delivery signature — and
 none of them can create the user, declare the resource or register the webhook. The
-management surface is the part that can: <strong>158 operations across 24 namespaces</strong>,
+management surface is the part that can: <strong>160 operations across 24 namespaces</strong>,
 generated from <code>management-registry.json</code>, which is the whole server API minus what other
 contract sections own and minus organization creation and deletion (§27.0 keeps those out
 of reach of a client library on purpose).</p>
@@ -1342,7 +1366,7 @@ written before §27 still catches the first two.</p>
 request, on any route that needs the UUID — the SDK will not resolve a slug behind your
 back.</p>
 <h3 id="declarative-manifests-§276-§277" class="tsd-anchor-link">Declarative manifests (§27.6, §27.7)<a href="#declarative-manifests-§276-§277" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<p>Calling 158 operations one at a time is rarely what an application wants. What it does at
+<p>Calling 160 operations one at a time is rarely what an application wants. What it does at
 start-up, in a migration, or in a test fixture is assert a shape:</p>
 <pre><code class="ts"><span class="hl-7">import</span><span class="hl-1"> { </span><span class="hl-4">defineManifest</span><span class="hl-1">, </span><span class="hl-4">Sensitive</span><span class="hl-1"> } </span><span class="hl-7">from</span><span class="hl-1"> </span><span class="hl-5">&#39;axiam-sdk/rest&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-7">export</span><span class="hl-1"> </span><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">desired</span><span class="hl-1"> = </span><span class="hl-3">defineManifest</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-4">resources:</span><span class="hl-1"> [</span><br/><span class="hl-1">    { </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;docs&#39;</span><span class="hl-1">, </span><span class="hl-4">name:</span><span class="hl-1"> </span><span class="hl-5">&#39;documents&#39;</span><span class="hl-1">, </span><span class="hl-4">resourceType:</span><span class="hl-1"> </span><span class="hl-5">&#39;collection&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">scopes:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;draft&#39;</span><span class="hl-1">, </span><span class="hl-4">name:</span><span class="hl-1"> </span><span class="hl-5">&#39;draft&#39;</span><span class="hl-1">, </span><span class="hl-4">description:</span><span class="hl-1"> </span><span class="hl-5">&#39;Unpublished&#39;</span><span class="hl-1"> }] },</span><br/><span class="hl-1">  ],</span><br/><span class="hl-1">  </span><span class="hl-4">permissions:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;read&#39;</span><span class="hl-1">, </span><span class="hl-4">action:</span><span class="hl-1"> </span><span class="hl-5">&#39;document:read&#39;</span><span class="hl-1">, </span><span class="hl-4">description:</span><span class="hl-1"> </span><span class="hl-5">&#39;Read a document&#39;</span><span class="hl-1"> }],</span><br/><span class="hl-1">  </span><span class="hl-4">roles:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;editor&#39;</span><span class="hl-1">, </span><span class="hl-4">name:</span><span class="hl-1"> </span><span class="hl-5">&#39;Editor&#39;</span><span class="hl-1">, </span><span class="hl-4">description:</span><span class="hl-1"> </span><span class="hl-5">&#39;Edits documents&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">            </span><span class="hl-4">grants:</span><span class="hl-1"> [{ </span><span class="hl-4">permission:</span><span class="hl-1"> </span><span class="hl-5">&#39;read&#39;</span><span class="hl-1">, </span><span class="hl-4">scopes:</span><span class="hl-1"> [</span><span class="hl-5">&#39;draft&#39;</span><span class="hl-1">] }] }],</span><br/><span class="hl-1">  </span><span class="hl-4">groups:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;staff&#39;</span><span class="hl-1">, </span><span class="hl-4">name:</span><span class="hl-1"> </span><span class="hl-5">&#39;Staff&#39;</span><span class="hl-1">, </span><span class="hl-4">description:</span><span class="hl-1"> </span><span class="hl-5">&#39;The team&#39;</span><span class="hl-1">, </span><span class="hl-4">roles:</span><span class="hl-1"> [</span><span class="hl-5">&#39;editor&#39;</span><span class="hl-1">] }],</span><br/><span class="hl-1">  </span><span class="hl-4">users:</span><span class="hl-1"> [{ </span><span class="hl-4">key:</span><span class="hl-1"> </span><span class="hl-5">&#39;alice&#39;</span><span class="hl-1">, </span><span class="hl-4">username:</span><span class="hl-1"> </span><span class="hl-5">&#39;alice&#39;</span><span class="hl-1">, </span><span class="hl-4">email:</span><span class="hl-1"> </span><span class="hl-5">&#39;alice@example.com&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">            </span><span class="hl-4">initialPassword:</span><span class="hl-1"> </span><span class="hl-0">new</span><span class="hl-1"> </span><span class="hl-3">Sensitive</span><span class="hl-1">(</span><span class="hl-4">pw</span><span class="hl-1">), </span><span class="hl-4">groups:</span><span class="hl-1"> [</span><span class="hl-5">&#39;staff&#39;</span><span class="hl-1">] }],</span><br/><span class="hl-1">});</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">plan</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-4">manifest</span><span class="hl-1">.</span><span class="hl-3">plan</span><span class="hl-1">(</span><span class="hl-4">desired</span><span class="hl-1">);   </span><span class="hl-6">// reads only — no writes</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">report</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">client</span><span class="hl-1">.</span><span class="hl-4">manifest</span><span class="hl-1">.</span><span class="hl-3">apply</span><span class="hl-1">(</span><span class="hl-4">desired</span><span class="hl-1">);</span>
 </code><button type="button">Copy</button></pre>
@@ -1361,7 +1385,7 @@ is no prune option, deliberately.</li>
 a tenant that also holds hand-made state.</li>
 <li><strong>Applying twice converges</strong>: the second plan is all <code>no-change</code>. That is what makes
 re-running after a failure safe.</li>
-<li><strong>There is no transaction</strong> across 158 independent HTTP endpoints, and <code>ApplyReport</code> does
+<li><strong>There is no transaction</strong> across 160 independent HTTP endpoints, and <code>ApplyReport</code> does
 not pretend there is. If step 12 of 30 fails, steps 1–11 have happened; the report says
 which, execution stops rather than continuing blindly, and there is no <code>rollback</code> —
 because this SDK could not honour one.</li>
@@ -1520,6 +1544,7 @@ the TypeDoc API reference to this repo's GitHub Pages site.</p>
 <li>
 <ul>
 <li><a href="#has-a-third-outcome"><span> has a third outcome</span></a></li>
+<li><a href="#a-passkey-or-security-key-as-the-first-factor-contract-145"><span>A passkey or security key as the first factor (contract 1.45)</span></a></li>
 <li><a href="#email-verification-and-password-reset"><span>Email verification and password reset</span></a></li>
 <li><a href="#organization-level-principals-§52"><span>Organization-<wbr/>level principals (§5.2)</span></a></li>
 <li>
