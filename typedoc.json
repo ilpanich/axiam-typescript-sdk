@@ -8,6 +8,10 @@
   ],
   "out": "_docs",
   "name": "AXIAM TypeScript SDK",
+  // The site is published per release tag, so the header must say WHICH
+  // release it documents: this appends " - v<package.json version>" to the
+  // title, and docs-publish.yml gates that the version equals the tag.
+  "includeVersion": true,
   "excludeInternal": true,
   "highlightLanguages": ["typescript", "javascript", "json", "tsx", "jsx", "bash", "console", "http", "text"],
   "externalSymbolLinkMappings": {
