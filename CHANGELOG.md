@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-beta15] - 2026-09-15
+
 ### Added
+
+- Certificate CSR signing and passkey-first-login setup (contract 1.45) (#104)
 
 - **`certificates.signCsr` — issue an end-entity certificate from a caller-supplied
   CSR (CONTRACT.md §27.5, contract 1.45).** `POST /api/v1/certificates/sign-csr`,
@@ -71,6 +75,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tenant's attestation policy message verbatim; a `503` from
   `webauthnSetupRegisterStart` is **not** retried, matching
   `webauthnRegisterStart`.
+
+### Changed
+
+- Bump codeql-action/init alongside analyze to v4.38.0
+
+- Bump codeql-action/analyze alongside init to v4.38.0
+
+- Bump github/codeql-action/init from 4.37.9 to 4.38.0
+
+- Bump github/codeql-action/analyze from 4.37.9 to 4.38.0
+
+- Bump the minor-patch group with 4 updates
+
+- Re-vendor CONTRACT.md at 1.46
 
 ## [1.0.0-beta14] - 2026-09-13
 
