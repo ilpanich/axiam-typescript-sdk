@@ -54,7 +54,7 @@ jobs:
         with:
           node-version: '22'
 
-      # The site header now names the release it documents (typedoc.json
+      # The site header now names the release it documents (typedoc.config.mjs
       # `includeVersion` reads package.json), so a package.json that lags the
       # tag would publish a site labelled with the wrong version. Same gate as
       # the npm publish job in sdk-ci-typescript.yml, asserted before the build

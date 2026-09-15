@@ -17,7 +17,7 @@ export type { RetryOptions } from './retry.js';
 
 // §17 decision memo and §19 telemetry hooks (D5). Re-exported here — not just
 // from `core` — because typedoc resolves references from the entry points
-// listed in typedoc.json, and `AxiamClient.decisionMemo`/`.telemetry` and
+// listed in typedoc.config.mjs, and `AxiamClient.decisionMemo`/`.telemetry` and
 // `AxiamClientOptions.telemetryHook` reference these types. Leaving them out
 // makes `npm run docs` exit non-zero on dangling references, which is a CI
 // gate here.
