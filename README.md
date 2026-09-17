@@ -25,9 +25,9 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to **contract 1.42**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
-§20, §21, §22, §23, §24, §25, §26, §27 (including §6.1 mTLS client certificates, the §10.1
-minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
+This SDK conforms to **contract 1.48**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
+§20, §21, §22, §23, §24, §25, §26, §27, §28 (including §6.1 mTLS client certificates, the
+§10.1 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
 `verifyWebhook` signature verifier). §12 is implemented in full at its 1.38 shape: all
 **thirteen** operations, including the four public "Sign in with X" entry points.
 
@@ -41,10 +41,15 @@ them, even though three of them need no Node-only code at all.
 the §27.6 declarative manifest with its §27.7 `defineManifest` and decorator forms. The
 contract asks an SDK that ships only one half to say which; this one ships both.
 
-§12.7, §14, §15, §22, §24, §25, §26 and §27 are named rather than folded into the range
-because they landed after this SDK already claimed §1–§13: widening the range silently
-would turn a statement that was true when written into a different claim without anyone
-editing it.
+§28 (MCP resource-server helpers) is implemented on **both** framework surfaces — the
+Express middleware and the Fastify plugin — with all three operations, the
+`resourceMetadataUrl` guard option and §28.9's five required tests. This SDK is §28.10's
+reference implementation: it lands first and the ten ports are read against it.
+
+§12.7, §14, §15, §22, §24, §25, §26, §27 and §28 are named rather than folded into the
+range because they landed after this SDK already claimed §1–§13: widening the range
+silently would turn a statement that was true when written into a different claim without
+anyone editing it.
 
 ### §10.1 minimum local-verification set
 
@@ -1714,6 +1719,211 @@ The freshness window defaults to 300 s and is two-sided — a future-dated `t=` 
 like a stale one — and accepts a `tolerance` override plus a `now` injection seam for tests. A
 failure always raises the typed `WebhookVerifyError` (never a generic exception whose message
 could leak the expected signature).
+
+## MCP resource-server helpers (`axiam-sdk/middleware`, CONTRACT.md §28)
+
+The resource-server half of the Model Context Protocol authorization handshake: publish the
+RFC 9728 document that tells an MCP client which authorization server guards this resource,
+and put the RFC 6750 `WWW-Authenticate` challenge on the 401 that starts its discovery.
+
+**AXIAM is the authorization server and implements none of this.** Your MCP server is the
+resource server, and this is its side. Nothing here talks to AXIAM, performs any network I/O
+or touches the SDK client's own session — all three operations are pure local computation,
+like `oidcBegin` and `umaParseChallenge`. The *client* half — parsing a challenge, fetching
+a document, deciding whether to trust the authorization server it names — is deliberately
+not in the SDK: a helper that read a 401 and acted on it would send a credential to whatever
+host the 401 asked it to.
+
+**It is opt-in and off by default.** With `resourceMetadataUrl` unset, every guard behaves
+byte-for-byte as it did before §28 existed: no header on any response, no status changed, no
+body changed.
+
+### The whole integration
+
+```ts
+import express from 'express';
+import { createVerifier } from 'axiam-sdk/node';
+import {
+  axiamMiddleware,
+  protectedResourceMetadata,
+  serveProtectedResourceMetadata,
+} from 'axiam-sdk/middleware';
+
+// 1. Describe the resource server. Validated here, at construction — before any
+//    route exists and before any request is served.
+const metadata = protectedResourceMetadata({
+  resource: 'https://mcp.example.com/mcp',
+  authorizationServers: ['https://axiam.example.com'],
+  scopesSupported: ['mcp:read', 'mcp:tools'],
+});
+
+// 2. Configure the guard FROM that value rather than by retyping the strings —
+//    retyping is how the guard and the document come to disagree. The session
+//    is the same plain `VerifiableSession` literal §10.4's feed is attached to.
+const session = {
+  jwksVerifier: createVerifier('https://axiam.example.com'),
+  tenantHeaderValue: TENANT_UUID,
+  expectedAudience: metadata.document.resource, // https://mcp.example.com/mcp
+  resourceMetadataUrl: metadata.metadataUrl,    // https://mcp.example.com/.well-known/…/mcp
+};
+
+const app = express();
+app.use(axiamMiddleware(session));
+
+// 3. Publish the document. Passing `session` is what lets the SDK check that
+//    the three strings agree; it throws at startup if they do not.
+serveProtectedResourceMetadata(app, metadata, session);
+
+app.post('/mcp', handler);
+```
+
+Fastify is the same three calls — `axiamPlugin(session)` instead of `axiamMiddleware`, and
+the Fastify instance instead of the Express app. `serveProtectedResourceMetadata` takes
+either.
+
+A request with no credential now gets what it needs to go and get one:
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp"
+Content-Type: application/json
+
+{"error":"authentication_failed","message":"..."}
+```
+
+and the document it points at answers without a credential:
+
+```json
+{
+  "resource": "https://mcp.example.com/mcp",
+  "authorization_servers": ["https://axiam.example.com"],
+  "scopes_supported": ["mcp:read", "mcp:tools"],
+  "bearer_methods_supported": ["header"]
+}
+```
+
+**The path is derived from the resource, not chosen.** RFC 9728 §3.1 inserts
+`/.well-known/oauth-protected-resource` between the authority and the path, so
+`https://mcp.example.com/mcp` publishes at `/.well-known/oauth-protected-resource/mcp` and
+`https://mcp.example.com` at the bare well-known path. A trailing slash is carried through
+rather than trimmed — it is part of the identifier the client compares, and two resources
+that differ only by it are two resources. Exactly one route is registered; a deployment
+fronting several resources calls the helper once per resource.
+
+**You do not have to order the routes.** Where the guard is mounted globally it exempts the
+document's path itself, from the `resourceMetadataUrl` it was configured with — which is the
+only thing that works on Fastify, where a `preHandler` hook applies to every route in its
+context no matter when it was registered.
+
+### Announcing yourself obliges you to check
+
+**`expectedAudience` is mandatory once `resourceMetadataUrl` is set**, and every guard
+factory refuses the configuration at construction, naming both options. A resource server
+that publishes *"tokens for me carry this `aud`"* and then does not check `aud` has published
+a claim it does not honour — and a token minted for a **different** MCP server opens it. That
+is the confusion RFC 8707 exists to prevent, so it is impossible to configure rather than
+merely discouraged:
+
+```ts
+axiamMiddleware({ jwksVerifier, tenantHeaderValue, resourceMetadataUrl: metadata.metadataUrl });
+// ValidationError: resourceMetadataUrl: requires expectedAudience to be set on the
+// same session (CONTRACT.md §28.5 rule 2) — …
+```
+
+With both set, a token carrying `aud: "axiam:user"` — a perfectly valid AXIAM token that
+simply was not minted for this resource — is a 401, exactly like a token minted for
+`https://other.example.com/mcp`.
+
+### The 403 that asks for a scope
+
+One class of 403 carries a challenge, and only one: a `requireAccess`/`requireAccessHook`
+that **named a scope** whose decision came back `allowed: false` with `reasonCode:
+"no_grant"`.
+
+```ts
+app.post('/mcp/tools', requireAccess(session, 'mcp:invoke', 'tools', { scope: 'mcp:tools' }), handler);
+```
+
+```http
+HTTP/1.1 403 Forbidden
+WWW-Authenticate: Bearer error="insufficient_scope", scope="mcp:tools", resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp"
+Content-Type: application/json
+
+{"error":"authorization_denied","message":"..."}
+```
+
+`insufficient_scope` is in the header and `authorization_denied` is in the body, and they are
+not two spellings of one thing: the body is the §11 error taxonomy, unchanged, and the header
+is the RFC 6750 hint. The scope named is the one the route asked for, **verbatim** — never
+synthesised, never derived from `action`/`resource`, never substituted from the document's
+`scopes_supported`, because where a deployment's AXIAM resource-scope names and its OAuth
+scope names differ, that mapping is the operator's decision and the SDK cannot see it.
+
+Every other 403 carries no header at all: a `requireAccess` with no `scope` argument, a
+`requireRole` failure, a CSRF refusal, and — the one that matters — a decision whose
+`reasonCode` is `denied_by_rule`. `no_grant` means *ask for more*, which is what a challenge
+invites a client to do; `denied_by_rule` means *an administrator has already decided*, and
+challenging on it would send an MCP client all the way around the authorization loop to
+arrive at the identical 403. An absent or unrecognised `reasonCode` is not eligible either.
+
+Where a route also carries a `umaChallenge` (§20.3), the UMA challenge wins: it is per-route
+opt-in and carries a live ticket for the exact authority just refused, where this one is the
+generic hint. Only one `WWW-Authenticate` value is ever emitted.
+
+### The challenge says only what RFC 6750 can say
+
+Expired, not yet valid, wrong tenant, wrong audience, bad signature, `alg` confusion, a `cnf`
+the guard could not satisfy, a `sid` in the §10.4 revocation feed — all of them are
+`invalid_token`, indistinguishably. The SDK's own guard never emits an `error_description`,
+and adds nothing to the response that tells them apart. It is a 401 to an unauthenticated
+stranger: every distinction it draws is an oracle.
+
+`bearerChallenge` exists for the challenge you build yourself, for your own 400, and it takes
+`errorDescription` for that reason alone. It **refuses rather than escapes**: RFC 6750
+restricts every parameter to a character set that cannot contain `"` or `\`, so a value
+needing an escape is a value that does not belong in a challenge.
+
+```ts
+bearerChallenge({
+  resourceMetadataUrl: metadata.metadataUrl,
+  error: 'invalid_request',
+  errorDescription: 'The access token is malformed',
+  scope: 'mcp:read mcp:tools',
+});
+// Bearer error="invalid_request", error_description="The access token is malformed",
+//   scope="mcp:read mcp:tools", resource_metadata="https://mcp.example.com/.well-known/…/mcp"
+
+bearerChallenge({ resourceMetadataUrl: metadata.metadataUrl, errorDescription: 'he said "no"' });
+// ValidationError — never a challenge containing \"
+```
+
+### Validation refuses; it never repairs
+
+Every §28.2 rule is checked by `protectedResourceMetadata` itself, and a violation throws
+`ValidationError` (§2's taxonomy, unchanged — §28 adds no error type). Nothing is normalised,
+trimmed, lowercased or re-encoded to make it pass: that would publish a document describing a
+resource server that does not exist. The rules, in one list:
+
+| Member | Rule |
+|---|---|
+| `resource` | absolute URI with a scheme and an authority, **no query and no fragment**; a trailing slash is significant |
+| any URL | `https`, except on `127.0.0.1`, `[::1]` or `localhost` — there is no flag, env var or debug build that widens this |
+| `authorizationServers` | at least one entry, each an issuer **verbatim** (no `?tenant_id=`), no query, no fragment, no duplicates |
+| `scopesSupported` | RFC 6749 `NQCHAR` tokens, order preserved, no duplicates; an empty list **omits the member** |
+| `bearerMethodsSupported` | exactly `["header"]` — this SDK's guard reads a bearer credential from the `Authorization` header alone |
+| `resourceDocumentation` | an absolute URL, query and fragment permitted; omitted when absent, never `null` |
+
+**Nothing in the document may come from a request.** `resource` and `authorizationServers`
+are configuration, and this SDK offers no option to build either from the `Host` header, the
+`Forwarded`/`X-Forwarded-*` family or the request URL. A document assembled from the request
+is a document an attacker can point at an authorization server of their choosing — the whole
+handshake redirected with one header.
+
+Nothing in §28 is wrapped in `Sensitive<T>`, and that is a rule rather than an omission: the
+document is published unauthenticated to the world and the challenge goes to a caller who has
+just failed to authenticate, so both must stay readable. The corollary is the one that
+matters — **no part of the presented credential reaches either of them**, in any parameter,
+any header, any body or any log line the guard writes on the 401 path.
 
 ## Client quality-of-life (CONTRACT.md §16–§19)
 

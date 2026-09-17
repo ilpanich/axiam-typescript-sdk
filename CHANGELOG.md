@@ -7,6 +7,120 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- MCP resource-server helpers — RFC 9728 protected-resource metadata and the RFC 6750
+  bearer challenge (CONTRACT.md §28, contract 1.48)
+
+- **The resource-server half of the Model Context Protocol authorization handshake,
+  on both framework surfaces.** Three operations on `axiam-sdk/middleware` —
+  `protectedResourceMetadata`, `serveProtectedResourceMetadata`, `bearerChallenge` —
+  plus one middleware option, `VerifiableSession.resourceMetadataUrl`. AXIAM is the
+  authorization server and implements none of this; your MCP server is the resource
+  server, and this is its side.
+
+  ```ts
+  const metadata = protectedResourceMetadata({
+    resource: 'https://mcp.example.com/mcp',
+    authorizationServers: ['https://axiam.example.com'],
+    scopesSupported: ['mcp:read', 'mcp:tools'],
+  });
+  const session = {
+    jwksVerifier: createVerifier(baseUrl),
+    tenantHeaderValue: tenantId,
+    expectedAudience: metadata.document.resource,
+    resourceMetadataUrl: metadata.metadataUrl,
+  };
+  app.use(axiamMiddleware(session));
+  serveProtectedResourceMetadata(app, metadata, session);
+  ```
+
+  Fastify is the same three calls with `axiamPlugin` and the Fastify instance;
+  `serveProtectedResourceMetadata` takes either app object.
+
+  **No operation performs network I/O**, so §16's retry policy and §9's single-flight
+  refresh do not apply and nothing here touches the SDK client's own session — all
+  three are pure local computation, like `oidcBegin` and `umaParseChallenge`. The
+  *client* half of the handshake is deliberately not shipped: a helper that read a 401
+  and acted on it would send a credential to whatever host the 401 asked it to.
+
+- **Opt-in and off by default, and the regression proves it.** With
+  `resourceMetadataUrl` unset every guard behaves byte-for-byte as it did before: no
+  `WWW-Authenticate` on any response, no status changed, no body changed, and no path
+  exempted. The two framework test files assert the header's *absence* explicitly
+  rather than asserting the status, because a 401 that grew a header is still a 401 —
+  an implementation that emitted a bare challenge unconditionally would pass every
+  other test in the suite.
+
+- **`expectedAudience` is now mandatory when `resourceMetadataUrl` is set**, and every
+  guard factory — `axiamMiddleware`, `requireAuth`, `requireAccess`, `requireRole` and
+  their four Fastify counterparts — refuses the configuration at construction, naming
+  both options. A resource server that publishes "tokens for me carry this `aud`" and
+  then does not check `aud` has published a claim it does not honour, and a token
+  minted for a *different* MCP server opens it. That is the confusion RFC 8707 exists
+  to prevent, so it is impossible to configure rather than merely discouraged.
+
+  This changes nothing for an existing deployment: `resourceMetadataUrl` is new, so
+  there is no configuration that was valid before and is refused now.
+
+- **The document's path is derived from the resource, not chosen**, and exactly one
+  route is registered — RFC 9728 §3.1's insertion between the authority and the path,
+  with a trailing slash carried through rather than trimmed. It is served `200
+  application/json` with `Cache-Control: public, max-age=3600` and
+  `Access-Control-Allow-Origin: *` (never `Access-Control-Allow-Credentials`), and
+  **without authentication**: where the guard is mounted globally it exempts that one
+  path itself, from the `resourceMetadataUrl` it was configured with. That is the only
+  thing that works on Fastify, where a `preHandler` hook applies to every route in its
+  context regardless of registration order.
+
+- **One class of 403 gains a header, and only one.** A
+  `requireAccess`/`requireAccessHook` that named a `scope` whose decision came back
+  `allowed: false` with `reasonCode: "no_grant"` now carries `error="insufficient_scope",
+  scope="…"`. The JSON body does not change — it is still `authorization_denied`, and
+  `insufficient_scope` appears only in the header. A `denied_by_rule` decision, an
+  absent or unrecognised `reasonCode`, a denial with no `scope` argument, a
+  `requireRole` failure and a CSRF refusal all carry no header: `no_grant` means *ask
+  for more*, which is what a challenge invites a client to do, and `denied_by_rule`
+  means *an administrator has already decided*. Where a route also carries a §20.3
+  `umaChallenge`, the UMA challenge wins and exactly one value is emitted.
+
+  `CheckOutcome`'s `denied` arm gains a `reasonCode` field, surfaced verbatim from the
+  decision. Additive: nothing reads it but the new rule.
+
+- **The challenge never says why.** Expired, not yet valid, wrong tenant, wrong
+  audience, bad signature, `alg` confusion, an unsatisfiable `cnf`, a revoked `sid` —
+  all of them are `invalid_token`, indistinguishably, and the guard adds no
+  `error_description`, no header and no body field that tells them apart. A request
+  that carried *no* credential gets a challenge with no `error` parameter at all, which
+  is a different answer and deliberately so. `bearerChallenge` **refuses rather than
+  escapes** any value outside RFC 6750's character sets, raising `ValidationError`
+  rather than emitting `\"`.
+
+- **Validation refuses; it never repairs.** `protectedResourceMetadata` applies every
+  §28.2 rule at construction — absolute URI with no query and no fragment, `https`
+  except on `127.0.0.1`/`[::1]`/`localhost`, at least one issuer with no duplicates and
+  no query, `NQCHAR` scope tokens in the caller's order, `bearer_methods_supported`
+  exactly `["header"]` — and raises `ValidationError` (§2's taxonomy, unchanged; §28
+  adds no error type) rather than normalising, trimming, lowercasing or re-encoding
+  anything to make it pass. An empty `scopesSupported` and an absent
+  `resourceDocumentation` omit their members rather than emitting `null`. Nothing in
+  the document may come from a request, and there is no option that would let it.
+
+- **Tests**: §28.9's five required tests, on the fixture §28.9 names, across three
+  files — `test/middleware/mcp.contract.test.ts` for the two framework-independent
+  ones (document shape and validation negatives; challenge quoting and its refusals)
+  and `test/middleware/mcp.{express,fastify}.test.ts` for the three that need a server
+  (401 with the challenge; 403 `insufficient_scope`; a token whose `aud` is not the
+  resource), plus the off-by-default regression on each surface. The Express suite runs
+  against a real application on a real socket and the Fastify suite through
+  `app.inject`, so what is asserted is what a client receives rather than what the SDK
+  asked for.
+
+- **Contract**: the vendored `CONTRACT.md` is re-synced to **1.48** (§28, and 1.47's
+  two additions). `openapi.json`'s own 1.48 half — T21.3's RFC 8707 `resource`
+  parameter — is a separate re-sync and is not in this change; no SDK operation
+  changes signature or behaviour either way.
+
 ## [1.0.0-beta15] - 2026-09-15
 
 ### Added

@@ -20,6 +20,12 @@ import {
 } from './authzCore.js';
 import { CSRF_HEADER_NAME, extractCredential, isCsrfValid, isSafeMethod } from './cookieHeader.js';
 import {
+  challengeFor401,
+  challengeFor403,
+  isMetadataDocumentRequest,
+  mcpGuardChallenges,
+} from './mcpCore.js';
+import {
   beginOidcLogin,
   completeOidcLogin,
   type OidcLoginOptions,
@@ -78,10 +84,24 @@ function csrfDeniedBody(): ErrorBody {
  * mirrors, locally, the same double-submit check the AXIAM server performs
  * on its own endpoints (§3).
  */
-function buildAuthHook(session: VerifiableSession): PreHandlerHook {
+function buildAuthHook(session: VerifiableSession, operation: string): PreHandlerHook {
+  // §28.5: validated and precomputed at construction, `undefined` when
+  // `resourceMetadataUrl` is unset — which is what keeps a guard without §28
+  // byte-for-byte identical to one from before §28 existed.
+  const challenges = mcpGuardChallenges(session, operation);
+
   return async (request: FastifyRequest, reply: FastifyReply) => {
+    // §28.3 rule 2: the metadata document MUST answer without a credential.
+    // A Fastify `preHandler` hook applies to every route in its context
+    // regardless of registration order, so there is no ordering trick that
+    // would exempt the path — the exemption has to be here, and explicit.
+    if (isMetadataDocumentRequest(challenges, request.method, request.url)) return;
+
     const credential = extractCredential(request.headers.cookie, request.headers.authorization);
     if (!credential) {
+      // §28.4: no credential is not a bad credential, so the challenge names
+      // no error code (RFC 6750 §3).
+      if (challenges) void reply.header('WWW-Authenticate', challenges.noCredential);
       await reply.code(401).send(missingCredentialsBody());
       return;
     }
@@ -100,9 +120,17 @@ function buildAuthHook(session: VerifiableSession): PreHandlerHook {
       (request as AxiamFastifyRequest).axiamUser = identity;
     } catch (err) {
       if (err instanceof AuthzError) {
+        // §28.5 rule 5: this 403 is not a `no_grant` scope denial, so it gains
+        // no header.
         await reply.code(403).send(authzDeniedBody(err.message));
         return;
       }
+      // §28.4: a credential was presented and rejected. Expired, not yet
+      // valid, wrong tenant, wrong audience, bad signature, an unsatisfiable
+      // `cnf`, a revoked `sid` — all of them are `invalid_token`,
+      // indistinguishably. Every distinction a 401 draws for an
+      // unauthenticated stranger is an oracle.
+      if (challenges) void reply.header('WWW-Authenticate', challenges.invalidToken);
       if (err instanceof AuthError) {
         await reply.code(401).send(invalidTokenBody(err.message));
         return;
@@ -122,8 +150,12 @@ function buildAuthHook(session: VerifiableSession): PreHandlerHook {
  * `fastify-plugin` as a dependency for a one-line escape hatch.
  */
 export const axiamPlugin: (session: VerifiableSession) => FastifyPluginAsync = (session) => {
+  // Built here rather than inside the plugin body so §28.5's configuration
+  // refusal happens when `axiamPlugin(session)` is called — construction time,
+  // before `register` and before the server is listening.
+  const hook = buildAuthHook(session, 'axiamPlugin');
   const plugin: FastifyPluginAsync = async (fastify) => {
-    fastify.addHook('preHandler', buildAuthHook(session));
+    fastify.addHook('preHandler', hook);
   };
   (plugin as unknown as Record<symbol, unknown>)[Symbol.for('skip-override')] = true;
   (plugin as unknown as Record<symbol, unknown>)[Symbol.for('fastify.display-name')] =
@@ -141,7 +173,7 @@ export const axiamPlugin: (session: VerifiableSession) => FastifyPluginAsync = (
  * auth `preHandler` hook (also used by `axiamPlugin`) already does.
  */
 export function requireAuthHook(session: VerifiableSession): PreHandlerHook {
-  return buildAuthHook(session);
+  return buildAuthHook(session, 'requireAuthHook');
 }
 
 /**
@@ -159,10 +191,20 @@ export function requireAccessHook(
   opts?: RequireAccessOptions,
 ): PreHandlerHook {
   const checker = assertAuthzClient(session);
+  // §28.5 rule 5's challenge is built here, from this route's own `scope`
+  // argument, so a scope outside RFC 6750's syntax fails at route setup rather
+  // than on the first denial.
+  const challenges = mcpGuardChallenges(session, 'requireAccessHook', opts?.scope);
 
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const axiamUser = (request as AxiamFastifyRequest).axiamUser;
     if (!axiamUser) {
+      if (challenges) {
+        void reply.header(
+          'WWW-Authenticate',
+          challengeFor401(challenges, request.headers.cookie, request.headers.authorization),
+        );
+      }
       await reply.code(401).send(missingAuthBody());
       return;
     }
@@ -190,9 +232,14 @@ export function requireAccessHook(
     );
     if (outcome.kind === 'denied') {
       opts?.logger?.debug('axiam_sdk.authz', 'access denied', { action, resourceId });
-      if (outcome.challenge) {
-        // §20.3, additive: the body keeps the unchanged §11.2.5 shape.
-        void reply.header('WWW-Authenticate', outcome.challenge);
+      // §20.3's UMA challenge wins where both apply — see `requireAccess` for
+      // why. Only one `WWW-Authenticate` value is emitted either way.
+      const challenge = outcome.challenge ?? challengeFor403(challenges, outcome.reasonCode);
+      if (challenge) {
+        // §20.3 / §28.5 rule 5, additive: the body keeps the unchanged §11.2.5
+        // shape, so `insufficient_scope` appears only in the header and the
+        // body is still `authorization_denied`.
+        void reply.header('WWW-Authenticate', challenge);
       }
       await reply.code(403).send(authzDeniedBodyShared(outcome.message));
       return;
@@ -209,18 +256,29 @@ export function requireAccessHook(
  * `requireRoleHook(session, ...roles)` (CONTRACT.md §11.1, MAY) — the
  * Fastify `preHandler` counterpart to `requireRole`; see that function's
  * doc for the full semantics (local-only check, no server round-trip).
- * `session` is accepted only for signature parity with
- * `requireAuthHook`/`requireAccessHook` — this check never dereferences it.
+ * `session` is taken first for signature parity with
+ * `requireAuthHook`/`requireAccessHook`; the role check reads nothing from it,
+ * and §28.5 is the only thing that does.
  */
 export function requireRoleHook(session: VerifiableSession, ...roles: string[]): PreHandlerHook {
-  void session;
+  // The one thing this guard does read off the session: §28.5 rule 4 puts the
+  // challenge on every 401 the guard emits, and this guard emits one.
+  const challenges = mcpGuardChallenges(session, 'requireRoleHook');
+
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const axiamUser = (request as AxiamFastifyRequest).axiamUser;
     if (!axiamUser) {
+      if (challenges) {
+        void reply.header(
+          'WWW-Authenticate',
+          challengeFor401(challenges, request.headers.cookie, request.headers.authorization),
+        );
+      }
       await reply.code(401).send(missingAuthBody());
       return;
     }
     if (!hasAnyRole(axiamUser.roles, roles)) {
+      // §28.5 rule 5: a role failure is not a scope failure — no header.
       await reply.code(403).send(authzDeniedBodyShared('missing required role'));
       return;
     }
