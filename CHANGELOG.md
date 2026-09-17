@@ -119,7 +119,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Contract**: the vendored `CONTRACT.md` is re-synced to **1.48** (§28, and 1.47's
   two additions). `openapi.json`'s own 1.48 half — T21.3's RFC 8707 `resource`
   parameter — is a separate re-sync and is not in this change; no SDK operation
-  changes signature or behaviour either way.
+  changes signature or behaviour either way. **That separate re-sync now has a name
+  and a schedule: F-28-01 below.**
+
+### Changed
+
+- **§28.3 rule 1's `Content-Type` erratum is accepted into the contract** (contract
+  1.49, CONTRACT.md §28.11 row R-4, T21.9 T9d). This port reported that Fastify
+  appends `; charset=utf-8` to any `*json*` content type and offers no supported way
+  to suppress it, so 1.48's verbatim `Content-Type: application/json` could be
+  satisfied on that surface only by writing to `reply.raw` and losing every `onSend`
+  hook. The cross-SDK review confirmed it and adopted this port's suggested wording:
+  §28.3 rule 1 now binds the **media type**, permits a framework-appended `charset`,
+  and requires a test to compare with parameters dropped — which is what this
+  repository's two suites already do. No code change here; the contract moved to
+  match the behaviour. Two other ports (C#, PHP) had independently asserted the media
+  type defensively for the same reason.
+
+### Deferred
+
+- **F-28-01 — the vendored `openapi.json` and `CONTRACT.md` re-sync.** This
+  repository deferred the `openapi.json` re-sync, and the T21.9 T9d cross-SDK review
+  found that **correct and now normative**: seven of the eleven SDKs re-synced it from
+  `ilpanich/axiam`'s `claude/t21-2a-public-clients` phase branch, that branch kept
+  moving, and those seven were stale against it within hours. None of the eleven
+  matches `ilpanich/axiam`'s current tree. Between them the eleven held five distinct
+  byte-states of `CONTRACT.md` — this repository's is the oldest snapshot of the five,
+  predating T21.6's unnumbered entry — and two of `openapi.json`, all calling
+  themselves contract 1.48 (CONTRACT.md §28.11 row R-1). Contract **1.49** states the
+  rule that was missing: a vendored artefact is re-synced from a **merged** `main`,
+  never a phase branch. Both artefacts are therefore re-synced here **once**, as
+  F-28-01, after AXIAM Phase 21 lands on `main`, together with a regeneration of the
+  §27 management surface in the same commit. F-28-01 is recorded identically in all
+  eleven SDK repositories so that it cannot be lost.
 
 ## [1.0.0-beta15] - 2026-09-15
 
