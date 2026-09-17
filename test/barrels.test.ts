@@ -219,6 +219,28 @@ describe('barrel entry points', () => {
     expect(typeof mod.ResourceResolutionError).toBe('function');
   });
 
+  it('/middleware exposes the §28 MCP resource-server helpers', async () => {
+    const mod = await import('../src/middleware/index.js');
+    // The three §28.1 operations, under §28.7's TypeScript names.
+    expect(typeof mod.protectedResourceMetadata).toBe('function');
+    expect(typeof mod.serveProtectedResourceMetadata).toBe('function');
+    expect(typeof mod.bearerChallenge).toBe('function');
+    expect(mod.PROTECTED_RESOURCE_METADATA_PREFIX).toBe('/.well-known/oauth-protected-resource');
+    // §28.6: the refusals are §2's taxonomy, unchanged — no new error type.
+    expect(typeof mod.ValidationError).toBe('function');
+    // The fourth piece of the set is a middleware option rather than an
+    // operation, so it has no runtime export — `resourceMetadataUrl` on
+    // `VerifiableSession`. Nothing in §28 performs I/O, so all three are
+    // synchronous and none of them returns a promise.
+    expect(
+      mod.bearerChallenge({
+        resourceMetadataUrl: 'https://mcp.example.com/.well-known/oauth-protected-resource/mcp',
+      }),
+    ).toBe(
+      'Bearer resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp"',
+    );
+  });
+
   it('/middleware exposes the §12 "Login with AXIAM" glue for both frameworks', async () => {
     const mod = await import('../src/middleware/index.js');
     expect(typeof mod.oidcLoginHandlers).toBe('function');

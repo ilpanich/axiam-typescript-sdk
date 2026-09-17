@@ -22,6 +22,12 @@ import {
 } from './authzCore.js';
 import { CSRF_HEADER_NAME, extractCredential, isCsrfValid, isSafeMethod } from './cookieHeader.js';
 import {
+  challengeFor401,
+  challengeFor403,
+  isMetadataDocumentRequest,
+  mcpGuardChallenges,
+} from './mcpCore.js';
+import {
   beginOidcLogin,
   completeOidcLogin,
   type OidcLoginOptions,
@@ -77,9 +83,25 @@ function csrfDeniedBody(): ErrorBody {
  * double-submit check the AXIAM server performs on its own endpoints (§3).
  */
 export function axiamMiddleware(session: VerifiableSession): RequestHandler {
+  // §28.5: validated and precomputed at construction, `undefined` when
+  // `resourceMetadataUrl` is unset — which is what keeps a guard without §28
+  // byte-for-byte identical to one from before §28 existed.
+  const challenges = mcpGuardChallenges(session, 'axiamMiddleware');
+
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    // §28.3 rule 2: the metadata document MUST answer without a credential,
+    // and this guard is normally mounted globally — so the exemption is here,
+    // explicit, and derived from the one path `resourceMetadataUrl` names.
+    if (isMetadataDocumentRequest(challenges, req.method, req.originalUrl ?? req.url)) {
+      next();
+      return;
+    }
+
     const credential = extractCredential(req.headers.cookie, req.headers.authorization);
     if (!credential) {
+      // §28.4: no credential is not a bad credential, so the challenge names
+      // no error code (RFC 6750 §3).
+      if (challenges) res.setHeader('WWW-Authenticate', challenges.noCredential);
       res.status(401).json(missingCredentialsBody());
       return;
     }
@@ -99,9 +121,17 @@ export function axiamMiddleware(session: VerifiableSession): RequestHandler {
       next();
     } catch (err) {
       if (err instanceof AuthzError) {
+        // §28.5 rule 5: this 403 is not a `no_grant` scope denial, so it gains
+        // no header.
         res.status(403).json(authzDeniedBody(err.message));
         return;
       }
+      // §28.4: a credential was presented and rejected. Expired, not yet
+      // valid, wrong tenant, wrong audience, bad signature, an unsatisfiable
+      // `cnf`, a revoked `sid` — all of them are `invalid_token`,
+      // indistinguishably. Every distinction a 401 draws for an
+      // unauthenticated stranger is an oracle.
+      if (challenges) res.setHeader('WWW-Authenticate', challenges.invalidToken);
       if (err instanceof AuthError) {
         res.status(401).json(invalidTokenBody(err.message));
         return;
@@ -147,10 +177,20 @@ export function requireAccess(
   opts?: RequireAccessOptions,
 ): RequestHandler {
   const checker = assertAuthzClient(session);
+  // §28.5 rule 5's challenge is built here, from this route's own `scope`
+  // argument, so a scope outside RFC 6750's syntax fails at route setup rather
+  // than on the first denial.
+  const challenges = mcpGuardChallenges(session, 'requireAccess', opts?.scope);
 
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const axiamUser = (req as AxiamRequest).axiamUser;
     if (!axiamUser) {
+      if (challenges) {
+        res.setHeader(
+          'WWW-Authenticate',
+          challengeFor401(challenges, req.headers.cookie, req.headers.authorization),
+        );
+      }
       res.status(401).json(missingAuthBody());
       return;
     }
@@ -174,11 +214,18 @@ export function requireAccess(
     );
     if (outcome.kind === 'denied') {
       opts?.logger?.debug('axiam_sdk.authz', 'access denied', { action, resourceId });
-      if (outcome.challenge) {
-        // §20.3: tell the caller where to obtain authority. Additive — the body
-        // is the unchanged §11.2.5 shape, so a client that does not speak UMA
-        // sees exactly the 403 it saw before.
-        res.setHeader('WWW-Authenticate', outcome.challenge);
+      // §20.3's UMA challenge wins where both apply: it is per-route opt-in and
+      // carries a live ticket for the exact authority just refused, where
+      // §28.5 rule 5's is the generic "ask for this scope" hint. Only one
+      // `WWW-Authenticate` value is emitted either way.
+      const challenge = outcome.challenge ?? challengeFor403(challenges, outcome.reasonCode);
+      if (challenge) {
+        // §20.3 / §28.5 rule 5: tell the caller where to obtain authority.
+        // Additive — the body is the unchanged §11.2.5 shape, so a client that
+        // speaks neither sees exactly the 403 it saw before. In particular
+        // `insufficient_scope` appears only in the header: the body is still
+        // `authorization_denied`.
+        res.setHeader('WWW-Authenticate', challenge);
       }
       res.status(403).json(authzDeniedBodyShared(outcome.message));
       return;
@@ -196,20 +243,33 @@ export function requireAccess(
  * `requireRole(session, ...roles)` (CONTRACT.md §11.1, MAY) — a local
  * (no server round-trip) check that the authenticated identity's `roles`
  * (from `req.axiamUser`, itself derived from the verified token's `scope`
- * claim) contain at least one of `roles`. `session` is accepted only for
- * signature parity with `requireAuth`/`requireAccess` (every §11 helper
- * takes the session first) — this check never dereferences it. Cheaper but
- * coarser than `requireAccess`; NOT a substitute for a resource-level check.
+ * claim) contain at least one of `roles`. Cheaper but coarser than
+ * `requireAccess`; NOT a substitute for a resource-level check.
+ *
+ * `session` is taken first for signature parity with
+ * `requireAuth`/`requireAccess` (every §11 helper does). The role check itself
+ * reads nothing from it; §28.5 is the only thing that does, so that this
+ * guard's own 401 carries the same challenge every other 401 does.
  */
 export function requireRole(session: VerifiableSession, ...roles: string[]): RequestHandler {
-  void session;
+  // The one thing this guard does read off the session: §28.5 rule 4 puts the
+  // challenge on every 401 the guard emits, and this guard emits one.
+  const challenges = mcpGuardChallenges(session, 'requireRole');
+
   return (req: Request, res: Response, next: NextFunction): void => {
     const axiamUser = (req as AxiamRequest).axiamUser;
     if (!axiamUser) {
+      if (challenges) {
+        res.setHeader(
+          'WWW-Authenticate',
+          challengeFor401(challenges, req.headers.cookie, req.headers.authorization),
+        );
+      }
       res.status(401).json(missingAuthBody());
       return;
     }
     if (!hasAnyRole(axiamUser.roles, roles)) {
+      // §28.5 rule 5: a role failure is not a scope failure — no header.
       res.status(403).json(authzDeniedBodyShared('missing required role'));
       return;
     }

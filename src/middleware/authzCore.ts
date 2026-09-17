@@ -236,6 +236,16 @@ export type CheckOutcome =
        * when minting failed — the denial stands either way.
        */
       challenge?: string;
+      /**
+       * The decision's `reason_code` (§11 rule 9), surfaced verbatim so the
+       * caller can apply §28.5 rule 5 — `no_grant` is the one denial a bearer
+       * challenge may invite a client to retry, and `denied_by_rule` is not.
+       *
+       * Absent when the decision carried none, and absent on the `AuthzError`
+       * arm: a server 403 names no reason code, and §11 rule 9 requires an
+       * absent one to leave the outcome alone.
+       */
+      reasonCode?: string;
     }
   | {
       /** The authz transport failed — fail-closed → HTTP 503, never an allow. */
@@ -266,7 +276,13 @@ export async function evaluateAccess(
   try {
     const decision = await checker.checkAccess({ action, resourceId, scope, subjectId });
     if (!decision.allowed) {
-      return deny(decision.reason ?? 'access denied', action, resourceId, challenger);
+      return deny(
+        decision.reason ?? 'access denied',
+        action,
+        resourceId,
+        challenger,
+        decision.reasonCode,
+      );
     }
     return { kind: 'allowed' };
   } catch (err) {
@@ -294,8 +310,9 @@ async function deny(
   action: string,
   resourceId: string,
   challenger?: UmaChallenger,
+  reasonCode?: string,
 ): Promise<CheckOutcome> {
-  if (!challenger) return { kind: 'denied', message };
+  if (!challenger) return { kind: 'denied', message, reasonCode };
   try {
     // §20.2: the UMA scope is the AXIAM *action*, which is what makes the ticket
     // ask for exactly the authority this check just refused — and what keeps a
@@ -304,13 +321,14 @@ async function deny(
     return {
       kind: 'denied',
       message,
+      reasonCode,
       challenge: umaChallengeHeaderValue(challenger.realm, challenger.asUri, ticket.expose()),
     };
   } catch {
     // Deliberately swallowed; see UmaChallenger's "failure is not escalation".
     // Not logged either: the §11.2.8 logger never receives credentials, and the
     // failure reason from a Protection API call can contain a token echo.
-    return { kind: 'denied', message };
+    return { kind: 'denied', message, reasonCode };
   }
 }
 

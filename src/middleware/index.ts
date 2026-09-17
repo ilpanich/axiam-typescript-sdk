@@ -34,6 +34,30 @@ export {
 export { authenticateRequest, type AxiamIdentity, type VerifiableSession } from './verifyCore.js';
 // §20.3 challenge emission, wired into the §11 guards via RequireAccessOptions.umaChallenge.
 export type { UmaChallenger, UmaTicketMinter } from './authzCore.js';
+// CONTRACT.md §28 (contract 1.48) — the MCP resource-server helpers: the RFC
+// 9728 protected-resource metadata document, the route it is served at, and
+// the RFC 6750 bearer challenge. The fourth piece of the set is not an
+// operation but a middleware option, `VerifiableSession.resourceMetadataUrl`.
+export {
+  bearerChallenge,
+  protectedResourceMetadata,
+  serveProtectedResourceMetadata,
+  PROTECTED_RESOURCE_METADATA_PREFIX,
+  type BearerChallengeError,
+  type BearerChallengeOptions,
+  type McpGuardConfig,
+  type McpMetadataApp,
+  type ProtectedResourceMetadata,
+  type ProtectedResourceMetadataDocument,
+  type ProtectedResourceMetadataOptions,
+} from './mcpCore.js';
+// §28's refusals are §2's taxonomy, unchanged: `ValidationError`, no new type.
+// Re-exported here for the same reason as the §12 types below — it is named by
+// this entry point's own signatures, so it must be reachable from it or
+// typedoc reports a dangling cross-module reference (and CI treats that as an
+// error). Single source of truth stays `src/management/errors.ts`, where §27.4
+// rule 7 introduced it.
+export { ValidationError, type FieldError } from '../management/errors.js';
 // Re-exported so the middleware entry point's own generated docs can resolve
 // `VerifiableSession.jwksVerifier`'s `Verifier` type (and the `AxiamClaims` it
 // returns) without a dangling cross-module link (`node/jwks.ts` is not itself

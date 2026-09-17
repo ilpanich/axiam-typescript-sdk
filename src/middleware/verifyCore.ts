@@ -47,6 +47,33 @@ export interface VerifiableSession {
    */
   expectedAudience?: string;
   /**
+   * CONTRACT.md §28.5 (contract 1.48) — the URL of this resource server's RFC
+   * 9728 protected-resource metadata document.
+   *
+   * Unset by default, and **setting it is what turns §28 on**. With it unset
+   * every guard built from this session behaves byte-for-byte as it did before
+   * §28 existed: no `WWW-Authenticate` header on any response, no status
+   * changed, no body changed.
+   *
+   * With it set, the guard's 401s carry §28.4's challenge, a
+   * `require_access`/`requireAccessHook` denial that named a scope and came
+   * back `no_grant` carries `insufficient_scope`, and the path this URL names
+   * is served without authentication so the document can start the handshake
+   * it exists to start.
+   *
+   * **{@link VerifiableSession.expectedAudience} becomes mandatory.** Every
+   * guard factory refuses the configuration at construction — before the first
+   * request — when this is set and that is not, and the refusal names both. A
+   * resource server that publishes "tokens for me carry this `aud`" and then
+   * does not check `aud` is opened by a token minted for a different resource
+   * server, which is the confusion RFC 8707 exists to prevent.
+   *
+   * Feed it from `protectedResourceMetadata(...).metadataUrl` rather than by
+   * retyping the string — retyping is how the guard and the document come to
+   * disagree.
+   */
+  resourceMetadataUrl?: string;
+  /**
    * CONTRACT.md §10.4 (contract 1.44) — the optional session-revocation feed.
    *
    * Unset by default, and with it unset this guard behaves exactly as it did
