@@ -1145,10 +1145,36 @@ export interface CreateRegistrationTokenResponse {
   /**
    * The plaintext handle, shown exactly once. Presented by the registering
    * client as `Authorization: Bearer <this>`.
+   *
+   * **Secret.** Redacted from every string, log and JSON rendering; call
+   * `.expose()` to read it.
    */
-  initial_access_token: string;
+  initial_access_token: Sensitive<string>;
   /** The token's metadata. */
   token: RegistrationTokenResponse;
+}
+
+/**
+ * Wire twin of {@link CreateRegistrationTokenResponse} — plain strings,
+ * never logged.
+ *
+ * @internal — it exists because `Sensitive` cannot be serialized, not
+ * because a consumer should read it.
+ */
+export interface CreateRegistrationTokenResponseWire {
+  initial_access_token: string;
+  token: RegistrationTokenResponse;
+}
+
+/**
+ * Wrap the secret fields a `CreateRegistrationTokenResponse` response
+ * carries (§27.5).
+ */
+export function createRegistrationTokenResponseFromWire(w: CreateRegistrationTokenResponseWire): CreateRegistrationTokenResponse {
+  return {
+    ...w,
+    initial_access_token: new Sensitive(w.initial_access_token),
+  };
 }
 
 /** `CreateResourceRequest` (generated from openapi.json). */

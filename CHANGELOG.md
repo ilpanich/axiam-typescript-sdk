@@ -124,6 +124,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking — `CreateRegistrationTokenResponse.initial_access_token` is now
+  `Sensitive<string>` (contract 1.50, CONTRACT.md §27.5).** The field was a plain
+  `string`; it is the one-time RFC 7591 §1.2 initial access token, so it belonged in
+  the §27.5 sensitive table from the day `oauth2_clients.create_registration_token`
+  shipped and was omitted. As a bare string it appeared in every `JSON.stringify`,
+  `console.log` and error rendering of the response — the leak §7 rule 1 and §27.5
+  exist to prevent. The §27.5 table now lists **fifteen** operations, not fourteen.
+
+  **Migration.** Reading the token now takes the explicit reveal, as it already does
+  for the other fourteen fields:
+
+  ```diff
+  - const token = created.initial_access_token;
+  + const token = created.initial_access_token.expose();
+  ```
+
+  There is deliberately **no** plain-string accessor kept alongside it: the plain
+  accessor is precisely the leak. The wire shape is unchanged — `openapi.json` and
+  `proto/` do not move, only this SDK's type does.
+
+  The vendored artefacts are re-synced from **`ilpanich/axiam` `main` @ `da94e1d04`**:
+
+  | Artefact | Blob |
+  |---|---|
+  | `CONTRACT.md` (1.50) | `28c163e32d25` |
+  | `openapi.json` | `b75e30eaa359` (unchanged) |
+  | `management-registry.json` | `aab87fd79910` |
+
+  `proto/` already matched and is unchanged. The §27 surface is regenerated in the
+  same commit (`node scripts/gen-management.mjs`); the operation count stays at
+  **162** across 24 namespaces and the only generated movement is this one field's
+  type, its `CreateRegistrationTokenResponseWire` twin and the `fromWire` wrapper.
+  The README's conformance statement now names contract 1.50. Upstream: ilpanich/axiam#480.
+
 - **§28.3 rule 1's `Content-Type` erratum is accepted into the contract** (contract
   1.49, CONTRACT.md §28.11 row R-4, T21.9 T9d). This port reported that Fastify
   appends `; charset=utf-8` to any `*json*` content type and offers no supported way
