@@ -491,14 +491,145 @@ export type CertificationLevel =
   | (string & {});
 
 /**
+ * Whether, and on what terms, a `client_id` that is a URL is resolved by
+ * fetching the document it names (T21.5,
+ * `draft-ietf-oauth-client-id-metadata-document`).
+ *
+ * # Why this is one nested policy rather than nine fields
+ *
+ * Every field here is a term of a single decision — *do we fetch a
+ * stranger's URL and make a client out of what comes back* — and none of
+ * them means anything without [`Self::enabled`]. A tenant that states a CIMD
+ * posture states all of it; a tenant that states none inherits its
+ * organization's whole posture rather than half of one, which is the only
+ * merge that cannot produce a combination neither party wrote.
+ *
+ * # The two fields that can widen, and the seven that cannot
+ *
+ * [`Self::enabled`] and [`Self::allow_http`] are **ordered**: a tenant may
+ * turn either off but never on, exactly as `dynamic_registration` may only
+ * move down its ladder. Everything else names *this tenant's* domains or
+ * *this tenant's* bounds, and there is no sense in which one tenant's list
+ * of trusted publishers is stricter than another's — the same argument
+ * [`OidcPolicy`] already makes for `dcr_allowed_redirect_hosts`.
+ *
+ * # Every bound here is a security control
+ *
+ * [`Self::max_metadata_bytes`], [`Self::min_cache_secs`] and
+ * [`Self::max_cache_secs`] are not tuning knobs. They are, respectively, the
+ * ceiling on a read from an attacker-chosen URL, the floor under how often
+ * that read may be repeated, and the ceiling on how long its result may be
+ * trusted. Each is clamped again in code against the three constants above,
+ * so a settings row written by hand cannot lift them.
+ *
+ * Every field is optional, so this is a **sparse** body: what you leave out
+ * is left unchanged, and is omitted from the wire request entirely rather
+ * than sent as `null` (§27.4 rule 5).
+ */
+export interface CimdPolicy {
+  /**
+   * Permit an `http://` `client_id` and an `http://` fetch.
+   *
+   * **Development only, and it does more than its name says.** AXIAM's shared
+   * SSRF guard couples the scheme rule to the address rule — the same seam
+   * that lets an integration test point a fetch at a loopback mock server — so
+   * a tenant that allows `http` also allows the first hop to resolve to a
+   * private address. Redirect hops are validated strictly whatever this says,
+   * and a public deployment that sets it has removed the control that makes
+   * `169.254.169.254` unreachable.
+   */
+  allow_http?: boolean;
+  /**
+   * Refuse a document whose `token_endpoint_auth_method` is `none`.
+   *
+   * Off by default, because `none` is what every MCP desktop client is. A
+   * tenant that turns it on accepts only `private_key_jwt` documents, which is
+   * the posture for a deployment whose CIMD clients are servers rather than
+   * desktops.
+   */
+  confidential_only?: boolean;
+  /**
+   * **Off unless somebody turns it on** (I1). With this `false`, a URL-shaped
+   * `client_id` is exactly today's unknown client: nothing is fetched, nothing
+   * is materialised, and the ordinary repository lookup answers as it always
+   * has.
+   */
+  enabled?: boolean;
+  /**
+   * The ceiling on a document's cache lifetime, in seconds. Clamped to
+   * [`CIMD_MAX_CACHE_CEILING_SECS`].
+   */
+  max_cache_secs?: number;
+  /**
+   * The hard cap on how many bytes of a document are read, before it is
+   * parsed. Clamped to [`CIMD_MAX_METADATA_BYTES_CEILING`].
+   */
+  max_metadata_bytes?: number;
+  /**
+   * The floor under a document's cache lifetime, in seconds. Clamped to
+   * [`CIMD_MIN_CACHE_FLOOR_SECS`].
+   */
+  min_cache_secs?: number;
+  /**
+   * Require every `redirect_uris` host in the document to equal the host of
+   * the `client_id` URL itself.
+   *
+   * **On by default**, because the document says who the client is and a
+   * redirect to somewhere else is the one thing a stolen or mirrored document
+   * would want to change. It is turned **off** for the desktop MCP clients,
+   * whose callbacks are on loopback and therefore can never share a host with
+   * a `https://` `client_id`; `docs/admin/client-id-metadata-documents.md`
+   * says so and says why.
+   */
+  restrict_same_domain?: boolean;
+  /**
+   * The hosts whose documents this tenant will fetch at all, as globs
+   * (`mcp.example.com`, or `*.example.com` for every host under one domain).
+   *
+   * **An empty list resolves nothing**, and enabling CIMD while it is empty is
+   * refused — see [`validate_cimd_policy`]. That is a deliberate departure
+   * from "a URL is a client identifier, so any URL will do": the fetch is
+   * triggered by an unauthenticated request naming the URL, so an unrestricted
+   * list is a request-forgery primitive offered to strangers, bounded only by
+   * the SSRF guard's address rules. Naming the publishers a tenant actually
+   * fronts costs one settings field and removes the class.
+   *
+   * **`*` is refused here, and so is a wildcard over a whole top-level
+   * domain** (`*.com`): both are the posture the empty list is refused for,
+   * spelled differently, and a control with no second control behind it cannot
+   * have a one-character bypass and still be the control. It is a floor and
+   * not a public-suffix check — `*.github.io` passes, and trusting shared
+   * hosting stays the operator's decision, bounded by the per-tenant quota
+   * rather than by this field. `*` remains valid in
+   * [`CimdPolicy::trusted_redirect_domains`], whose entries are not fetch
+   * targets.
+   */
+  trusted_client_id_domains?: string[];
+  /**
+   * The hosts a document's `redirect_uris` may point at, as globs.
+   *
+   * The loopback hosts (`127.0.0.1`, `[::1]`, `localhost`) are always allowed,
+   * because RFC 8252 §7.3 is how every desktop MCP client receives its
+   * callback — so an empty list is not a refusal of everything, it is
+   * "loopback only", which is exactly the Claude Code and VS Code profile.
+   */
+  trusted_redirect_domains?: string[];
+}
+
+/**
  * How a client proves its identity at the token endpoint (RFC 8705 §2, OIDC
  * Core §9 naming).
  *
- * Only the methods AXIAM actually implements are representable. There is
- * deliberately no `none` variant: every AXIAM client is confidential today
- * (see `handle_authorization_code`), and adding a public-client value here
- * before the rest of the server understands one would let an operator
- * register a client whose authentication is silently skipped.
+ * Only the methods AXIAM actually implements are representable. `None` — the
+ * public-client value — was deliberately absent until T21.2: adding it
+ * before the rest of the server understood one would have let an operator
+ * register a client whose authentication is silently skipped. The server
+ * understands one now (`token.rs`'s `authenticate_client_credential` has an
+ * arm that accepts *no* credential and refuses a presented one, the
+ * authorization endpoint derives its PKCE requirement from this enum, and
+ * the admin API refuses the method alongside any grant or binding that
+ * contradicts it), so the variant exists — and only that arm may ever treat
+ * a missing credential as success.
  *
  * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
  * copy of the spec does not list, so the next one the server adds reaches a
@@ -514,6 +645,7 @@ export type ClientAuthMethod =
   | "tls_client_auth"
   | "self_signed_tls_client_auth"
   | "private_key_jwt"
+  | "none"
   // eslint-disable-next-line @typescript-eslint/ban-types
   | (string & {});
 
@@ -812,6 +944,22 @@ export interface CreateNotificationRuleRequest {
 /** `CreateOAuth2ClientRequest` (generated from openapi.json). */
 export interface CreateOAuth2ClientRequest {
   /**
+   * T21.3 / RFC 8707 — the target services this client may name in a
+   * `resource` parameter, at `/oauth2/authorize`, `/oauth2/par`,
+   * `/oauth2/device_authorization` and `/oauth2/token`.
+   *
+   * Each entry must be an absolute URI without a fragment (RFC 8707 §2).
+   * Entries are stored in their RFC 3986 §6.2.2 normalised form, which is what
+   * the read-back shows and what every comparison uses; matching is by
+   * equivalence and **never by prefix**.
+   *
+   * Empty (the default) means the client may name no resource, so every token
+   * it obtains carries `axiam:user` or `axiam:m2m` exactly as before RFC 8707
+   * support existed. This is also the list the RFC 8693 token exchange
+   * consults for its `audience`/`resource` target.
+   */
+  allowed_resources?: string[];
+  /**
    * X7.1 — whether this client's authorization requests may carry the OpenID
    * Connect authentication-request parameters (`prompt`, `max_age`,
    * `acr_values`, `claims`, `id_token_hint`, `login_hint`, `display`,
@@ -892,10 +1040,14 @@ export interface CreateOAuth2ClientRequest {
    */
   profile?: ClientProfile;
   /**
-   * Allowed redirect URIs (must be HTTPS, except localhost for dev). SEC-089:
-   * this list doubles as the token-exchange audience allow-list — adding a URI
-   * here also authorises it as a token audience for this client, so review
-   * additions on exchange-capable clients with that in mind (see
+   * Allowed redirect URIs (must be HTTPS, except localhost for dev).
+   *
+   * SEC-089 / T21.3: this list **also** authorises token-exchange audiences,
+   * and that coupling is now deprecated — `allowed_resources` is the field
+   * that means "audiences this client may address". The redirect-URI branch
+   * survives one release so that no deployment's working exchange breaks on
+   * upgrade, and it logs a deprecation warning when it is the branch that
+   * matched. Register exchange targets in `allowed_resources` (see
    * `docs/api/token-exchange.md#audience`).
    */
   redirect_uris: string[];
@@ -972,6 +1124,31 @@ export interface CreateReactorRequest {
   priority?: number;
   /** Omit to take the 500 ms default. Capped at 5 000 ms. */
   timeout_ms?: number | null;
+}
+
+/** Request body for [`create_registration_token`]. */
+export interface CreateRegistrationTokenRequest {
+  /**
+   * Lifetime in hours. Defaults to 24 and is refused above 168 (a week) — see
+   * `axiam_core::models::oauth2_registration_token`.
+   */
+  expires_in_hours?: number | null;
+  /**
+   * Operator-facing label, e.g. `"mcp-inspector-demo"`, so a tenant with
+   * several outstanding tokens can tell them apart.
+   */
+  name: string;
+}
+
+/** The one response that carries the handle. */
+export interface CreateRegistrationTokenResponse {
+  /**
+   * The plaintext handle, shown exactly once. Presented by the registering
+   * client as `Authorization: Bearer <this>`.
+   */
+  initial_access_token: string;
+  /** The token's metadata. */
+  token: RegistrationTokenResponse;
 }
 
 /** `CreateResourceRequest` (generated from openapi.json). */
@@ -1843,6 +2020,42 @@ export interface LockoutPolicy {
 }
 
 /**
+ * Who created a client registration (D5, T21.4).
+ *
+ * The discriminator that separates a registration an administrator made from
+ * one that arrived over an open endpoint. Three things read it and each
+ * would otherwise have to infer provenance from something that is not
+ * provenance:
+ *
+ * * `axiam_oauth2::fapi` refuses a FAPI profile on anything but
+ * [`Admin`](Self::Admin) (I5) — a client nobody vetted cannot be
+ * financial-grade; * the authorization endpoint forces a consent hop for
+ * every other value (D4) — an unrelated party gets a question put to the end
+ * user, whatever scopes it asked for; * the T21.4 sweeper deletes only
+ * [`Dcr`](Self::Dcr) rows, so an administrator's client is never swept
+ * however long it sits unused.
+ *
+ * [`Admin`](Self::Admin) is the serde default and therefore what every row
+ * written before T21.4 decodes to, which is the truth: they were all created
+ * through `POST /oauth2-clients` by somebody holding
+ * `oauth2_clients:create`.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type ManagedBy =
+  | "admin"
+  | "dcr"
+  | "cimd"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
+
+/**
  * `POST /api/v1/mds/refresh` response — the outcome of one ingestion attempt
  * (mirrors `axiam_db::mds_ingest::MdsIngestOutcome`).
  */
@@ -2037,12 +2250,20 @@ export interface OAuth2ClientCreatedResponse {
   /** `client_id`. */
   client_id: string;
   /**
-   * `client_secret`.
+   * The plaintext client secret, shown exactly once.
+   *
+   * T21.2 — **absent** for a client registered with
+   * `token_endpoint_auth_method: none`. A public client is created with no
+   * secret, so there is nothing to show; the member is omitted rather than
+   * sent as `""`, which an operator (or an SDK) would reasonably read as a
+   * secret that happens to be empty. Every confidential registration — that
+   * is, every registration that existed before T21.2 — carries it exactly as
+   * before.
    *
    * **Secret.** Redacted from every string, log and JSON rendering; call
    * `.expose()` to read it.
    */
-  client_secret: Sensitive<string>;
+  client_secret?: Sensitive<string>;
   /** `created_at`. */
   created_at: string;
   /** `grant_types`. */
@@ -2070,7 +2291,7 @@ export interface OAuth2ClientCreatedResponse {
  */
 export interface OAuth2ClientCreatedResponseWire {
   client_id: string;
-  client_secret: string;
+  client_secret?: string;
   created_at: string;
   grant_types: string[];
   id: string;
@@ -2088,12 +2309,18 @@ export interface OAuth2ClientCreatedResponseWire {
 export function oAuth2ClientCreatedResponseFromWire(w: OAuth2ClientCreatedResponseWire): OAuth2ClientCreatedResponse {
   return {
     ...w,
-    client_secret: new Sensitive(w.client_secret),
+    client_secret: w.client_secret === undefined ? undefined : new Sensitive(w.client_secret),
   };
 }
 
 /** OAuth2 client response -- omits client_secret_hash. */
 export interface OAuth2ClientResponse {
+  /**
+   * T21.3 — echoed in its stored, normalised form, so an operator auditing
+   * which audiences a client may mint tokens for reads the strings the server
+   * actually compares rather than the ones they typed.
+   */
+  allowed_resources: string[];
   /**
    * X7.1 — echoed so an operator can audit which clients act on the OIDC
    * authentication-request parameters, from this endpoint rather than from the
@@ -2122,6 +2349,30 @@ export interface OAuth2ClientResponse {
   jwks?: string | null;
   /** `jwks_uri`. */
   jwks_uri?: string | null;
+  /**
+   * T21.4 — when this client was last issued an authorization code, for the
+   * sweeper that deletes self-registered clients nobody uses.
+   *
+   * Always absent for an `admin` client: the stamp is written only for a
+   * non-`admin` one, so that an administrator's client takes exactly the path
+   * it took before T21.4 (I1). `null` on a self-registered client means it has
+   * never been authorized, and the sweeper reads `created_at` instead.
+   */
+  last_authorized_at?: string | null;
+  /**
+   * T21.4 / D5 — who created this registration: `admin`, `dcr` or `cimd`.
+   *
+   * Echoed because an operator auditing a tenant needs to answer "which of
+   * these did we create?" from this endpoint rather than from the database,
+   * and because three behaviours hang off it: a non-`admin` client may never
+   * carry the FAPI profile, is always consent-gated, and is the only kind the
+   * unused-client sweeper touches.
+   *
+   * Read-only. There is no corresponding member on the update DTO: a
+   * registration's provenance is a fact about how it came to exist, and a
+   * field that could be edited to `admin` would be a field that launders one.
+   */
+  managed_by: ManagedBy;
   /** `name`. */
   name: string;
   /**
@@ -2206,25 +2457,106 @@ export interface OidcCallbackResponse {
 }
 
 /**
- * OpenID Connect surface controls (X7 G8, plan §4.6/§4.8).
+ * OpenID Connect surface controls (X7 G8, plan §4.6/§4.8; T21.4).
  *
- * Two settings that are not password rules, and are here because this is the
+ * Settings that are not password rules, here because this is the
  * org-baseline-plus-tenant-override surface every other per-tenant control
- * lives on. They are also the two settings in this model that are *not* of
- * the same kind as each other, so it is worth saying which is which:
+ * lives on. They are not all of the same kind as each other, and which is
+ * which is the whole of what [`validate_tenant_override`] and
+ * [`clamp_overrides_to_org`] read, so it is set out rather than inferred.
  *
- * * [`Self::sensitive_scopes_enabled`] **is** ordered. Releasing personal
- * data is the less-restrictive direction, so it is validated disable-only —
- * the mirror image of `mfa_enforced` — and a tenant can turn its
- * organization's decision off but never on. * [`Self::default_locale`] is
- * **not** ordered, and no ordering is invented for it. A language is a
- * presentation preference; there is no sense in which Italian is stricter
- * than French. [`validate_tenant_override`] therefore does not check it and
- * [`clamp_overrides_to_org`] never clears it. The model's rule is "a tenant
- * may only be more restrictive", which binds every field that *has* a
- * restrictiveness; a field that has none cannot violate it.
+ * **Ordered** — a tenant may be stricter than its organization and never
+ * more permissive:
+ *
+ * * [`Self::sensitive_scopes_enabled`], validated **disable-only** — the
+ * mirror image of `mfa_enforced`, because releasing personal data is the
+ * less-restrictive direction, so a tenant can turn its organization's
+ * decision off but never on. * [`Self::dynamic_registration`], on the ladder
+ * `disabled` → `initial_access_token` → `anonymous`: a tenant may move down
+ * it and never up. * [`Self::dcr_max_clients`] and
+ * [`Self::dcr_unused_client_ttl_days`], on the ordinary `tenant <= org` rule
+ * — with the wrinkle that `0` on the second means *never sweep*, which is
+ * the longest window of all and is handled by [`dcr_ttl_strictness`].
+ *
+ * **Not ordered**, therefore never validated against the baseline and never
+ * clamped:
+ *
+ * * [`Self::default_locale`]. A language is a presentation preference; there
+ * is no sense in which Italian is stricter than French. *
+ * [`Self::dcr_allowed_scopes`], [`Self::dcr_allowed_redirect_hosts`] and
+ * [`Self::external_client_allowed_resources`]. Each names per-tenant
+ * resources — *this* tenant's MCP servers, *this* tenant's callback hosts —
+ * and there is no sense in which one such list is stricter than another. A
+ * subset rule would force an organization to enumerate every tenant's
+ * resource servers in its own baseline before any tenant could name one.
+ *
+ * The model's rule is "a tenant may only be more restrictive", which binds
+ * every field that *has* a restrictiveness; a field that has none cannot
+ * violate it.
+ *
+ * One cross-field interlock spans both groups and is checked on the resolved
+ * policy rather than on either input: see [`validate_dcr_policy`].
  */
 export interface OidcPolicy {
+  /**
+   * T21.5 — whether a URL-shaped `client_id` is resolved by fetching the
+   * document it names, and on what terms. See [`CimdPolicy`]; off unless
+   * somebody turns it on (I1).
+   *
+   * Nested, and therefore inherited or overridden **whole**: the fields are
+   * terms of one decision, and a half-merged posture is one neither the
+   * organization nor the tenant wrote.
+   */
+  cimd?: CimdPolicy;
+  /**
+   * T21.4 — hosts a self-registered client's `redirect_uris` may point at, as
+   * globs (`*.example.com`, or `*` for any). The loopback hosts (`127.0.0.1`,
+   * `[::1]`, `localhost`) are always allowed whatever this says, because RFC
+   * 8252 §7.3 is how every desktop MCP client receives its callback and a
+   * tenant that forbade them would have turned registration on for nobody.
+   */
+  dcr_allowed_redirect_hosts?: string[];
+  /**
+   * T21.4 — the scopes a self-registered client may ask for. A `scope` a
+   * registration names that is not on this list is `invalid_client_metadata`;
+   * an empty list means a self-registered client gets no scopes at all, which
+   * is the honest default for a tenant that has turned registration on without
+   * deciding what it grants.
+   *
+   * May not contain `address` or `phone` — see this module's
+   * [`sensitive_scope_in_dcr_list`].
+   */
+  dcr_allowed_scopes?: string[];
+  /**
+   * T21.4 — how many externally registered clients this tenant may hold. See
+   * [`DEFAULT_DCR_MAX_CLIENTS`].
+   *
+   * **Counted once per mechanism, against the same number** (T21.8):
+   * `managed_by: dcr` rows and `managed_by: cimd` rows each have this many. So
+   * a tenant running both cannot have shadow rows materialised from documents
+   * exhaust the allowance for self-registration, or the reverse. The CIMD
+   * count is checked *before* the document is fetched, so a tenant at its
+   * ceiling is not an outbound amplifier either. It keeps its `dcr_` name
+   * because dynamic registration defined it, on the same precedent as
+   * [`Self::dcr_allowed_scopes`].
+   */
+  dcr_max_clients?: number;
+  /**
+   * T21.4 — how long an externally registered client survives without being
+   * used. See [`DEFAULT_DCR_UNUSED_CLIENT_TTL_DAYS`]. `0` disables the sweep
+   * for this tenant, which an operator who prunes out of band may legitimately
+   * want.
+   *
+   * **Two sweeps read it, over different clocks** (T21.8). A `managed_by: dcr`
+   * row is measured from its last authorization, falling back to when it was
+   * registered. A `managed_by: cimd` row is measured from the last time its
+   * document was *presented*, which every authorize, token and PAR request
+   * moves — so a document in daily use is never swept however old its
+   * registration is, and one nobody has presented since the window is, and
+   * re-materialises on the next request if it is still published. Like the
+   * ceiling, it keeps its `dcr_` name.
+   */
+  dcr_unused_client_ttl_days?: number;
   /**
    * The BCP 47 tag the sign-in page falls back to when the relying party's
    * `ui_locales` selects nothing (W5's chain, plan §4.6).
@@ -2240,6 +2572,29 @@ export interface OidcPolicy {
    * layering points inward.
    */
   default_locale?: string | null;
+  /**
+   * T21.4 — whether a client may register itself (RFC 7591), and on what
+   * terms. `disabled` unless somebody says otherwise (I1).
+   */
+  dynamic_registration?: string;
+  /**
+   * **D3** — the audiences an externally registered client may address.
+   *
+   * The single most important field on this policy, and the reason the
+   * settings handler refuses `dynamic_registration: anonymous` while it is
+   * empty. A client an unrelated party registered cannot declare its own
+   * `allowed_resources`; it inherits this list verbatim, so what a stranger
+   * can mint a token *for* is a decision the tenant took in advance rather
+   * than one the registration request makes.
+   *
+   * Empty means an externally registered client can obtain only today's
+   * `axiam:user` tokens — which AXIAM's own APIs accept. That is why the
+   * interlock exists: the empty list is not a safe default for an *open*
+   * registration endpoint, it is the most dangerous one.
+   *
+   * Shared with T5 (CIMD), which inherits the same list for the same reason.
+   */
+  external_client_allowed_resources?: string[];
   /**
    * Whether `address` and `phone` may be registered on a client, requested at
    * the authorization endpoint, and released at UserInfo (X7 G8).
@@ -2654,6 +3009,34 @@ export interface ReadyResponse {
   database: string;
   /** `status`. */
   status: string;
+}
+
+/**
+ * Metadata only. The handle exists in plaintext exactly once, in
+ * [`CreateRegistrationTokenResponse`].
+ */
+export interface RegistrationTokenResponse {
+  /** Row creation time. */
+  created_at: string;
+  /** The administrator who minted it. */
+  created_by: string;
+  /** When it stops being usable. */
+  expires_at: string;
+  /** Row identity. */
+  id: string;
+  /** The operator-facing label. */
+  name: string;
+  /** The tenant a registration on this token lands in. */
+  tenant_id: string;
+  /** When it was spent, if it was. */
+  used_at?: string | null;
+  /**
+   * Reserved; always absent in this build. See
+   * `axiam_core::models::oauth2_registration_token::OAuth2RegistrationToken::used_by_client_id`
+   * — the registration a token produced is recorded in the audit log, not
+   * here.
+   */
+  used_by_client_id?: string | null;
 }
 
 /**
@@ -3080,16 +3463,34 @@ export interface SetOrgSettings {
   access_token_lifetime_secs: number;
   /** `admin_notifications_enabled`. */
   admin_notifications_enabled: boolean;
+  /**
+   * T21.5 — defaulted, so an API client written before this task lands on
+   * `enabled: false`, which is what every deployment did before client ID
+   * metadata documents existed (I1).
+   */
+  cimd?: CimdPolicy;
+  /** `dcr_allowed_redirect_hosts`. */
+  dcr_allowed_redirect_hosts?: string[];
+  /** `dcr_allowed_scopes`. */
+  dcr_allowed_scopes?: string[];
+  /** `dcr_max_clients`. */
+  dcr_max_clients?: number;
+  /** `dcr_unused_client_ttl_days`. */
+  dcr_unused_client_ttl_days?: number;
   /** `default_cert_validity_days`. */
   default_cert_validity_days: number;
   /** `default_locale`. */
   default_locale?: string | null;
   /** `deletion_grace_period_days`. */
   deletion_grace_period_days?: number;
+  /** `dynamic_registration`. */
+  dynamic_registration?: string;
   /** `email_verification_grace_period_hours`. */
   email_verification_grace_period_hours: number;
   /** `email_verification_required`. */
   email_verification_required: boolean;
+  /** `external_client_allowed_resources`. */
+  external_client_allowed_resources?: string[];
   /** `hibp_check_enabled`. */
   hibp_check_enabled: boolean;
   /** `lockout_backoff_multiplier`. */
@@ -3300,6 +3701,16 @@ export interface TenantSettingsOverride {
   access_token_lifetime_secs?: number | null;
   /** `admin_notifications_enabled`. */
   admin_notifications_enabled?: boolean | null;
+  /** `cimd`. */
+  cimd?: CimdPolicy | null;
+  /** `dcr_allowed_redirect_hosts`. */
+  dcr_allowed_redirect_hosts?: string[] | null;
+  /** `dcr_allowed_scopes`. */
+  dcr_allowed_scopes?: string[] | null;
+  /** `dcr_max_clients`. */
+  dcr_max_clients?: number | null;
+  /** `dcr_unused_client_ttl_days`. */
+  dcr_unused_client_ttl_days?: number | null;
   /** `default_cert_validity_days`. */
   default_cert_validity_days?: number | null;
   /**
@@ -3309,10 +3720,14 @@ export interface TenantSettingsOverride {
   default_locale?: string | null;
   /** `deletion_grace_period_days`. */
   deletion_grace_period_days?: number | null;
+  /** `dynamic_registration`. */
+  dynamic_registration?: string | null;
   /** `email_verification_grace_period_hours`. */
   email_verification_grace_period_hours?: number | null;
   /** `email_verification_required`. */
   email_verification_required?: boolean | null;
+  /** `external_client_allowed_resources`. */
+  external_client_allowed_resources?: string[] | null;
   /** `hibp_check_enabled`. */
   hibp_check_enabled?: boolean | null;
   /** `lockout_backoff_multiplier`. */
@@ -3607,6 +4022,11 @@ export interface UpdateNotificationRuleRequest {
  * than sent as `null` (§27.4 rule 5).
  */
 export interface UpdateOAuth2ClientRequest {
+  /**
+   * T21.3 — see [`CreateOAuth2ClientRequest::allowed_resources`]. A whole-list
+   * replacement; `[]` withdraws every target.
+   */
+  allowed_resources?: string[] | null;
   /** `authn_request_params`. */
   authn_request_params?: AuthnRequestParamsMode | null;
   /**

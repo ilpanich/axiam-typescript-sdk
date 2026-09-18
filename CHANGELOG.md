@@ -136,22 +136,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   match the behaviour. Two other ports (C#, PHP) had independently asserted the media
   type defensively for the same reason.
 
-### Deferred
+- **F-28-01 — the vendored contract artefacts are re-synced from a merged `main`
+  (contract 1.49).** The re-sync this repository deferred — and that the T21.9 T9d
+  cross-SDK review found correct to defer, since the seven SDKs that took it from
+  `ilpanich/axiam`'s `claude/t21-2a-public-clients` phase branch were stale within
+  hours (CONTRACT.md §28.11 row R-1) — is done once, from **`ilpanich/axiam` `main` @
+  `e4c62180e`**, as contract 1.49 requires:
 
-- **F-28-01 — the vendored `openapi.json` and `CONTRACT.md` re-sync.** This
-  repository deferred the `openapi.json` re-sync, and the T21.9 T9d cross-SDK review
-  found that **correct and now normative**: seven of the eleven SDKs re-synced it from
-  `ilpanich/axiam`'s `claude/t21-2a-public-clients` phase branch, that branch kept
-  moving, and those seven were stale against it within hours. None of the eleven
-  matches `ilpanich/axiam`'s current tree. Between them the eleven held five distinct
-  byte-states of `CONTRACT.md` — this repository's is the oldest snapshot of the five,
-  predating T21.6's unnumbered entry — and two of `openapi.json`, all calling
-  themselves contract 1.48 (CONTRACT.md §28.11 row R-1). Contract **1.49** states the
-  rule that was missing: a vendored artefact is re-synced from a **merged** `main`,
-  never a phase branch. Both artefacts are therefore re-synced here **once**, as
-  F-28-01, after AXIAM Phase 21 lands on `main`, together with a regeneration of the
-  §27 management surface in the same commit. F-28-01 is recorded identically in all
-  eleven SDK repositories so that it cannot be lost.
+  | Artefact | Blob |
+  |---|---|
+  | `CONTRACT.md` (1.49) | `2493348c3285` |
+  | `openapi.json` | `b75e30eaa359` |
+  | `management-registry.json` | `4619f441aac0` |
+
+  `proto/` already matched and is unchanged. The §27 management surface is
+  regenerated in the same commit (`node scripts/gen-management.mjs`), moving from
+  **160 to 162 operations** across the same 24 namespaces:
+
+  - `client.oauth2Clients.createRegistrationToken(body)` and
+    `client.oauth2Clients.listRegistrationTokens()` — `POST` / `GET
+    /api/v1/oauth2-clients/registration-tokens`, the RFC 7591 initial access tokens
+    (T21.4). The create is not retried (§27.4 rule 8), like every write here.
+  - New models `CreateRegistrationTokenRequest`, `CreateRegistrationTokenResponse`,
+    `RegistrationTokenResponse`, `CimdPolicy` and the open `ManagedBy` union
+    (`"admin" | "dcr" | "cimd"`).
+  - `OAuth2ClientResponse` gains `managed_by`, `allowed_resources` and
+    `last_authorized_at`; `CreateOAuth2ClientRequest` / `UpdateOAuth2ClientRequest`
+    gain an optional `allowed_resources` (RFC 8707, T21.3).
+  - `ClientAuthMethod` gains `"none"`, and **`OAuth2ClientCreatedResponse.client_secret`
+    becomes optional** — absent, never empty, for a client registered as public
+    (contract 1.47, T21.2). Every confidential registration still carries it, but
+    code that read `created.client_secret.expose()` unconditionally must now
+    narrow it first.
+  - `OidcPolicy`, `SetOrgSettings` and `TenantSettingsOverride` gain the dynamic
+    registration and CIMD policy fields (`dynamic_registration`, `dcr_allowed_scopes`,
+    `dcr_allowed_redirect_hosts`, `dcr_max_clients`, `dcr_unused_client_ttl_days`,
+    `external_client_allowed_resources`, `cimd`).
+
+  `test/management.surface.generated.test.ts` is regenerated with it. No hand-written
+  operation changes signature or behaviour. The README's conformance statement now
+  names contract 1.49.
 
 ## [1.0.0-beta15] - 2026-09-15
 

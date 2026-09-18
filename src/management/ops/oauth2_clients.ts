@@ -123,4 +123,32 @@ export class Oauth2ClientsApi {
     });
   }
 
+  /**
+   * `POST /api/v1/oauth2-clients/registration-tokens`
+   *
+   * Not retried on failure (§27.4 rule 8): every write on this surface is
+   * issued exactly once, including the ones that look idempotent.
+   */
+  async createRegistrationToken(body: models.CreateRegistrationTokenRequest): Promise<models.CreateRegistrationTokenResponse> {
+    const wire = await sendManagement<models.CreateRegistrationTokenResponse>(this.#client, {
+      operation: 'oauth2_clients.create_registration_token',
+      method: 'POST',
+      pathTemplate: '/api/v1/oauth2-clients/registration-tokens',
+      path: '/api/v1/oauth2-clients/registration-tokens',
+      body: body,
+    });
+    return wire;
+  }
+
+  /** `GET /api/v1/oauth2-clients/registration-tokens` */
+  async listRegistrationTokens(): Promise<models.RegistrationTokenResponse[]> {
+    const wire = await sendManagement<models.RegistrationTokenResponse[]>(this.#client, {
+      operation: 'oauth2_clients.list_registration_tokens',
+      method: 'GET',
+      pathTemplate: '/api/v1/oauth2-clients/registration-tokens',
+      path: '/api/v1/oauth2-clients/registration-tokens',
+    });
+    return wire;
+  }
+
 }

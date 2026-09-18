@@ -680,26 +680,26 @@ describe('webhooks namespace', () => {
 describe('oauth2_clients namespace', () => {
   it('oauth2_clients.list', async () => {
     await withServer(async (server, client) => {
-      mountJson(server, 'GET', `/api/v1/oauth2-clients`, 200, {"items":[{"authn_request_params":"ignore","browser_sso":true,"client_id":"example","created_at":"2026-08-26T00:00:00Z","dpop_bound_access_tokens":true,"dpop_require_nonce":true,"grant_types":[],"id":"11111111-1111-4111-8111-111111111111","name":"example","profile":"standard","redirect_uris":[],"require_par":true,"scopes":[],"self_signed_tls_client_auth_thumbprints":[],"tenant_id":"11111111-1111-4111-8111-111111111111","tls_client_certificate_bound_access_tokens":true,"token_endpoint_auth_method":"client_secret_post","updated_at":"2026-08-26T00:00:00Z"}],"total":1,"offset":0,"limit":50});
+      mountJson(server, 'GET', `/api/v1/oauth2-clients`, 200, {"items":[{"allowed_resources":[],"authn_request_params":"ignore","browser_sso":true,"client_id":"example","created_at":"2026-08-26T00:00:00Z","dpop_bound_access_tokens":true,"dpop_require_nonce":true,"grant_types":[],"id":"11111111-1111-4111-8111-111111111111","managed_by":"admin","name":"example","profile":"standard","redirect_uris":[],"require_par":true,"scopes":[],"self_signed_tls_client_auth_thumbprints":[],"tenant_id":"11111111-1111-4111-8111-111111111111","tls_client_certificate_bound_access_tokens":true,"token_endpoint_auth_method":"client_secret_post","updated_at":"2026-08-26T00:00:00Z"}],"total":1,"offset":0,"limit":50});
       await client.oauth2Clients.list({ limit: 50 });
       await client.oauth2Clients.listAll({ limit: 50 });
     });
   });
   it('oauth2_clients.create', async () => {
     await withServer(async (server, client) => {
-      mountJson(server, 'POST', `/api/v1/oauth2-clients`, 201, {"client_id":"example","client_secret":"example","created_at":"2026-08-26T00:00:00Z","grant_types":[],"id":"11111111-1111-4111-8111-111111111111","name":"example","redirect_uris":[],"scopes":[],"tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z"});
+      mountJson(server, 'POST', `/api/v1/oauth2-clients`, 201, {"client_id":"example","created_at":"2026-08-26T00:00:00Z","grant_types":[],"id":"11111111-1111-4111-8111-111111111111","name":"example","redirect_uris":[],"scopes":[],"tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z"});
       await client.oauth2Clients.create({ grant_types: [], name: 'example', redirect_uris: [], scopes: [] });
     });
   });
   it('oauth2_clients.get', async () => {
     await withServer(async (server, client) => {
-      mountJson(server, 'GET', `/api/v1/oauth2-clients/${EXAMPLE_ID}`, 200, {"authn_request_params":"ignore","browser_sso":true,"client_id":"example","created_at":"2026-08-26T00:00:00Z","dpop_bound_access_tokens":true,"dpop_require_nonce":true,"grant_types":[],"id":"11111111-1111-4111-8111-111111111111","name":"example","profile":"standard","redirect_uris":[],"require_par":true,"scopes":[],"self_signed_tls_client_auth_thumbprints":[],"tenant_id":"11111111-1111-4111-8111-111111111111","tls_client_certificate_bound_access_tokens":true,"token_endpoint_auth_method":"client_secret_post","updated_at":"2026-08-26T00:00:00Z"});
+      mountJson(server, 'GET', `/api/v1/oauth2-clients/${EXAMPLE_ID}`, 200, {"allowed_resources":[],"authn_request_params":"ignore","browser_sso":true,"client_id":"example","created_at":"2026-08-26T00:00:00Z","dpop_bound_access_tokens":true,"dpop_require_nonce":true,"grant_types":[],"id":"11111111-1111-4111-8111-111111111111","managed_by":"admin","name":"example","profile":"standard","redirect_uris":[],"require_par":true,"scopes":[],"self_signed_tls_client_auth_thumbprints":[],"tenant_id":"11111111-1111-4111-8111-111111111111","tls_client_certificate_bound_access_tokens":true,"token_endpoint_auth_method":"client_secret_post","updated_at":"2026-08-26T00:00:00Z"});
       await client.oauth2Clients.get(EXAMPLE_ID);
     });
   });
   it('oauth2_clients.update', async () => {
     await withServer(async (server, client) => {
-      mountJson(server, 'PUT', `/api/v1/oauth2-clients/${EXAMPLE_ID}`, 200, {"authn_request_params":"ignore","browser_sso":true,"client_id":"example","created_at":"2026-08-26T00:00:00Z","dpop_bound_access_tokens":true,"dpop_require_nonce":true,"grant_types":[],"id":"11111111-1111-4111-8111-111111111111","name":"example","profile":"standard","redirect_uris":[],"require_par":true,"scopes":[],"self_signed_tls_client_auth_thumbprints":[],"tenant_id":"11111111-1111-4111-8111-111111111111","tls_client_certificate_bound_access_tokens":true,"token_endpoint_auth_method":"client_secret_post","updated_at":"2026-08-26T00:00:00Z"});
+      mountJson(server, 'PUT', `/api/v1/oauth2-clients/${EXAMPLE_ID}`, 200, {"allowed_resources":[],"authn_request_params":"ignore","browser_sso":true,"client_id":"example","created_at":"2026-08-26T00:00:00Z","dpop_bound_access_tokens":true,"dpop_require_nonce":true,"grant_types":[],"id":"11111111-1111-4111-8111-111111111111","managed_by":"admin","name":"example","profile":"standard","redirect_uris":[],"require_par":true,"scopes":[],"self_signed_tls_client_auth_thumbprints":[],"tenant_id":"11111111-1111-4111-8111-111111111111","tls_client_certificate_bound_access_tokens":true,"token_endpoint_auth_method":"client_secret_post","updated_at":"2026-08-26T00:00:00Z"});
       await client.oauth2Clients.update(EXAMPLE_ID, {  });
     });
   });
@@ -707,6 +707,18 @@ describe('oauth2_clients namespace', () => {
     await withServer(async (server, client) => {
       mountJson(server, 'DELETE', `/api/v1/oauth2-clients/${EXAMPLE_ID}`, 204, undefined);
       await client.oauth2Clients.delete(EXAMPLE_ID);
+    });
+  });
+  it('oauth2_clients.create_registration_token', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'POST', `/api/v1/oauth2-clients/registration-tokens`, 201, {"initial_access_token":"example","token":{"created_at":"2026-08-26T00:00:00Z","created_by":"11111111-1111-4111-8111-111111111111","expires_at":"2026-08-26T00:00:00Z","id":"11111111-1111-4111-8111-111111111111","name":"example","tenant_id":"11111111-1111-4111-8111-111111111111"}});
+      await client.oauth2Clients.createRegistrationToken({ name: 'example' });
+    });
+  });
+  it('oauth2_clients.list_registration_tokens', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/oauth2-clients/registration-tokens`, 200, [{"created_at":"2026-08-26T00:00:00Z","created_by":"11111111-1111-4111-8111-111111111111","expires_at":"2026-08-26T00:00:00Z","id":"11111111-1111-4111-8111-111111111111","name":"example","tenant_id":"11111111-1111-4111-8111-111111111111"}]);
+      await client.oauth2Clients.listRegistrationTokens();
     });
   });
 });
@@ -1126,9 +1138,11 @@ describe('generated surface', () => {
           "notification_rules.list",
           "notification_rules.update",
           "oauth2_clients.create",
+          "oauth2_clients.create_registration_token",
           "oauth2_clients.delete",
           "oauth2_clients.get",
           "oauth2_clients.list",
+          "oauth2_clients.list_registration_tokens",
           "oauth2_clients.update",
           "organizations.get",
           "organizations.list",
