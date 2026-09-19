@@ -1,5 +1,5 @@
-<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>IdTokenClaims | AXIAM TypeScript SDK</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
-<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK</a>
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>IdTokenClaims | AXIAM TypeScript SDK - v1.0.0-beta16</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK - v1.0.0-beta16</a>
 <div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
 <ul role="listbox" id="tsd-search-results"></ul>
 <div id="tsd-search-status" aria-live="polite" aria-atomic="true">
@@ -13,7 +13,7 @@
 <h1>Interface IdTokenClaims</h1></div>
 <section class="tsd-panel tsd-comment">
 <div class="tsd-comment tsd-typography"><p>The decoded, <strong>already-validated</strong> ID-token claim set carried by
-<a href="middleware.OidcTokenSet.html#idclaims" class="tsd-kind-property">OidcTokenSet.idClaims</a> (<a href="http://CONTRACT.md">CONTRACT.md</a> §12.1).</p>
+<a href="middleware.OidcTokenSet.html#idclaims" class="tsd-kind-property">OidcTokenSet.idClaims</a> (CONTRACT.md §12.1).</p>
 </div>
 <div class="tsd-comment tsd-typography">
 <div class="tsd-tag-remarks">
@@ -33,7 +33,7 @@ so unknown claims MUST be preserved and MUST NOT be rejected.</p>
 <div class="tsd-comment tsd-typography"><p>Any further claim the server sends (e.g. <code>email</code>, <code>preferred_username</code>) — preserved, never rejected (§12.1).</p>
 </div></li></ul></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/node/oidcIdToken.ts#L32">src/node/oidcIdToken.ts:32</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/node/oidcIdToken.ts#L32">src/node/oidcIdToken.ts:32</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -59,56 +59,56 @@ so unknown claims MUST be preserved and MUST NOT be rejected.</p>
 <div class="tsd-comment tsd-typography"><p>Audience — contains the relying party's <code>client_id</code> (§12.4 rule 4).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/node/oidcIdToken.ts#L38">src/node/oidcIdToken.ts:38</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/node/oidcIdToken.ts#L38">src/node/oidcIdToken.ts:38</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="azp"><code class="tsd-tag">Optional</code><span>azp</span><a href="#azp" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">azp</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Authorized party — required to equal <code>client_id</code> when <code>aud</code> holds multiple audiences (§12.4 rule 4).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/node/oidcIdToken.ts#L48">src/node/oidcIdToken.ts:48</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/node/oidcIdToken.ts#L48">src/node/oidcIdToken.ts:48</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="exp"><span>exp</span><a href="#exp" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">exp</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>Expiry time (epoch seconds).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/node/oidcIdToken.ts#L40">src/node/oidcIdToken.ts:40</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/node/oidcIdToken.ts#L40">src/node/oidcIdToken.ts:40</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="iat"><span>iat</span><a href="#iat" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">iat</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>Issued-at time (epoch seconds).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/node/oidcIdToken.ts#L42">src/node/oidcIdToken.ts:42</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/node/oidcIdToken.ts#L42">src/node/oidcIdToken.ts:42</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="iss"><span>iss</span><a href="#iss" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">iss</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Issuer — matched for exact string equality against the discovery document's <code>issuer</code> (§12.4 rule 3).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/node/oidcIdToken.ts#L34">src/node/oidcIdToken.ts:34</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/node/oidcIdToken.ts#L34">src/node/oidcIdToken.ts:34</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="nbf"><code class="tsd-tag">Optional</code><span>nbf</span><a href="#nbf" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">nbf</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>Not-before time (epoch seconds), when the server sends one.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/node/oidcIdToken.ts#L44">src/node/oidcIdToken.ts:44</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/node/oidcIdToken.ts#L44">src/node/oidcIdToken.ts:44</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="nonce"><code class="tsd-tag">Optional</code><span>nonce</span><a href="#nonce" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">nonce</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>The <code>nonce</code> echoed back from the authorization request (§12.4 rule 6).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/node/oidcIdToken.ts#L46">src/node/oidcIdToken.ts:46</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/node/oidcIdToken.ts#L46">src/node/oidcIdToken.ts:46</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="sub"><span>sub</span><a href="#sub" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">sub</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Subject — the authenticated end user's stable identifier at AXIAM.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/node/oidcIdToken.ts#L36">src/node/oidcIdToken.ts:36</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/node/oidcIdToken.ts#L36">src/node/oidcIdToken.ts:36</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -127,7 +127,7 @@ so unknown claims MUST be preserved and MUST NOT be rejected.</p>
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Properties</summary>
 <div><a href="#aud"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>aud</span></a><a href="#azp"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>azp</span></a><a href="#exp"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>exp</span></a><a href="#iat"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>iat</span></a><a href="#iss"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>iss</span></a><a href="#nbf"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>nbf</span></a><a href="#nonce"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>nonce</span></a><a href="#sub"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>sub</span></a></div></details></div></details></div>
 <div class="site-menu">
-<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK</a>
+<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK - v1.0.0-beta16</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
 <li>Loading...</li></ul></nav></div></div></div><footer>
 <p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>

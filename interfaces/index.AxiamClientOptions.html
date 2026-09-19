@@ -1,5 +1,5 @@
-<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>AxiamClientOptions | AXIAM TypeScript SDK</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
-<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK</a>
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>AxiamClientOptions | AXIAM TypeScript SDK - v1.0.0-beta16</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK - v1.0.0-beta16</a>
 <div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
 <ul role="listbox" id="tsd-search-results"></ul>
 <div id="tsd-search-status" aria-live="polite" aria-atomic="true">
@@ -19,12 +19,12 @@ argument.</p>
 <div class="tsd-tag-remarks">
 <h4 class="tsd-anchor-link" id="remarks">Remarks<a href="#remarks" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Either <code>tenantSlug</code> or <code>tenantId</code> MUST be provided — AXIAM is
 multi-tenant and has no default tenant, so construction throws when both
-are omitted (<a href="http://CONTRACT.md">CONTRACT.md</a> §5). <code>customCa</code> is the sole TLS escape hatch
-(<a href="http://CONTRACT.md">CONTRACT.md</a> §6); there is no option to disable certificate verification.</p>
+are omitted (CONTRACT.md §5). <code>customCa</code> is the sole TLS escape hatch
+(CONTRACT.md §6); there is no option to disable certificate verification.</p>
 </div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">AxiamClientOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#baseurl">baseUrl</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#clientcert">clientCert</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#clientkey">clientKey</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#connecttimeoutms">connectTimeoutMs</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#customca">customCa</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#decisionmemottlms">decisionMemoTtlMs</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#expectedaudience">expectedAudience</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#expectedissuer">expectedIssuer</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#orgid">orgId</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#orgslug">orgSlug</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#requesttimeoutms">requestTimeoutMs</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#retryenabled">retryEnabled</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#telemetryhook">telemetryHook</a><span class="tsd-signature-symbol">?:</span> <a href="../types/index.TelemetryHook.html" class="tsd-signature-type tsd-kind-type-alias">TelemetryHook</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#tenantid">tenantId</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#tenantslug">tenantSlug</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/core/config.ts#L28">src/core/config.ts:28</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/core/config.ts#L28">src/core/config.ts:28</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -57,7 +57,7 @@ are omitted (<a href="http://CONTRACT.md">CONTRACT.md</a> §5). <code>customCa</
 <div class="tsd-comment tsd-typography"><p>Base URL of the AXIAM server, e.g. &quot;<a href="https://iam.example.com">https://iam.example.com</a>&quot;.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/core/config.ts#L30">src/core/config.ts:30</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/core/config.ts#L30">src/core/config.ts:30</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="clientcert"><code class="tsd-tag">Optional</code><span>client<wbr/>Cert</span><a href="#clientcert" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">clientCert</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
@@ -68,7 +68,7 @@ ignored in the browser (browsers cannot present a client certificate from
 JS). Presenting a client certificate NEVER relaxes server verification.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/core/config.ts#L109">src/core/config.ts:109</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/core/config.ts#L109">src/core/config.ts:109</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="clientkey"><code class="tsd-tag">Optional</code><span>client<wbr/>Key</span><a href="#clientkey" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">clientKey</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
@@ -78,25 +78,25 @@ logged, or serialized (§7). MUST be provided together with <code>clientCert</co
 Node only — ignored in the browser.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/core/config.ts#L117">src/core/config.ts:117</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/core/config.ts#L117">src/core/config.ts:117</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="connecttimeoutms"><code class="tsd-tag">Optional</code><span>connect<wbr/>Timeout<wbr/>Ms</span><a href="#connecttimeoutms" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">connectTimeoutMs</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>Connection timeout in milliseconds. Defaults to DEFAULT_CONNECT_TIMEOUT_MS.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/core/config.ts#L134">src/core/config.ts:134</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/core/config.ts#L134">src/core/config.ts:134</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="customca"><code class="tsd-tag">Optional</code><span>custom<wbr/>Ca</span><a href="#customca" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">customCa</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>PEM-encoded custom CA certificate, for self-signed/dev environments (§6).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/core/config.ts#L54">src/core/config.ts:54</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/core/config.ts#L54">src/core/config.ts:54</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="decisionmemottlms"><code class="tsd-tag">Optional</code><span>decision<wbr/>Memo<wbr/>Ttl<wbr/>Ms</span><a href="#decisionmemottlms" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">decisionMemoTtlMs</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
-<div class="tsd-comment tsd-typography"><p>Enable the <a href="http://CONTRACT.md">CONTRACT.md</a> §17 client-side decision memo, in milliseconds.
+<div class="tsd-comment tsd-typography"><p>Enable the CONTRACT.md §17 client-side decision memo, in milliseconds.
 <strong>Default: <code>0</code>, which means disabled</strong> — not &quot;cache for zero milliseconds&quot;.</p>
 <h2 id="what-you-are-accepting" class="tsd-anchor-link">What you are accepting<a href="#what-you-are-accepting" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>The staleness bound is this TTL, <strong>in both directions</strong>. A grant revoked on
@@ -111,43 +111,43 @@ caching leaks the outcome through latency), failures are never memoized,
 and the memo is cleared on any credential change.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/core/config.ts#L88">src/core/config.ts:88</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/core/config.ts#L88">src/core/config.ts:88</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="expectedaudience"><code class="tsd-tag">Optional</code><span>expected<wbr/>Audience</span><a href="#expectedaudience" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">expectedAudience</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
-<div class="tsd-comment tsd-typography"><p>Expected <code>aud</code> claim for locally-verified access tokens (<a href="http://CONTRACT.md">CONTRACT.md</a>
+<div class="tsd-comment tsd-typography"><p>Expected <code>aud</code> claim for locally-verified access tokens (CONTRACT.md
 §10.1 rule 6). Optional and unset by default. A resource server guarding
 user-facing routes SHOULD set <code>&quot;axiam:user&quot;</code>; a machine-to-machine one
 <code>&quot;axiam:m2m&quot;</code>. When set, the §10 middleware rejects a token whose <code>aud</code>
 does not contain it.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/core/config.ts#L132">src/core/config.ts:132</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/core/config.ts#L132">src/core/config.ts:132</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="expectedissuer"><code class="tsd-tag">Optional</code><span>expected<wbr/>Issuer</span><a href="#expectedissuer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">expectedIssuer</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
-<div class="tsd-comment tsd-typography"><p>Expected <code>iss</code> claim for locally-verified access tokens (<a href="http://CONTRACT.md">CONTRACT.md</a>
+<div class="tsd-comment tsd-typography"><p>Expected <code>iss</code> claim for locally-verified access tokens (CONTRACT.md
 §10.1 rule 5). Optional and unset by default — the rule is conditional on
 configuration, and the SDK never hardcodes an issuer. When set, the §10
 middleware rejects a token whose <code>iss</code> differs.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/core/config.ts#L124">src/core/config.ts:124</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/core/config.ts#L124">src/core/config.ts:124</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="orgid"><code class="tsd-tag">Optional</code><span>org<wbr/>Id</span><a href="#orgid" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">orgId</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
-<div class="tsd-comment tsd-typography"><p>Organization UUID (<a href="http://CONTRACT.md">CONTRACT.md</a> §5). Optional at construction (see
+<div class="tsd-comment tsd-typography"><p>Organization UUID (CONTRACT.md §5). Optional at construction (see
 <a href="#orgslug" class="tsd-kind-property">orgSlug</a>). When supplied it is forwarded as <code>org_id</code> on login and
 used to build the <code>refresh</code> body; otherwise the resolved organization UUID
 is decoded from the authenticated session's access-token <code>org_id</code> claim
 after the first successful login. Mutually exclusive with <a href="#orgslug" class="tsd-kind-property">orgSlug</a>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/core/config.ts#L52">src/core/config.ts:52</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/core/config.ts#L52">src/core/config.ts:52</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="orgslug"><code class="tsd-tag">Optional</code><span>org<wbr/>Slug</span><a href="#orgslug" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">orgSlug</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
-<div class="tsd-comment tsd-typography"><p>Human-readable organization identifier (<a href="http://CONTRACT.md">CONTRACT.md</a> §5). Optional at
+<div class="tsd-comment tsd-typography"><p>Human-readable organization identifier (CONTRACT.md §5). Optional at
 construction, but the server REQUIRES an org context on login — a tenant
 slug is only unique <em>within</em> an organization — so a client that omits both
 <code>orgSlug</code> and <code>orgId</code> will fail login with a 400/401. Forwarded as
@@ -156,18 +156,18 @@ slug is only unique <em>within</em> an organization — so a client that omits b
 resolve).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/core/config.ts#L44">src/core/config.ts:44</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/core/config.ts#L44">src/core/config.ts:44</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="requesttimeoutms"><code class="tsd-tag">Optional</code><span>request<wbr/>Timeout<wbr/>Ms</span><a href="#requesttimeoutms" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">requestTimeoutMs</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>Request timeout in milliseconds. Defaults to DEFAULT_REQUEST_TIMEOUT_MS.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/core/config.ts#L136">src/core/config.ts:136</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/core/config.ts#L136">src/core/config.ts:136</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="retryenabled"><code class="tsd-tag">Optional</code><span>retry<wbr/>Enabled</span><a href="#retryenabled" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">retryEnabled</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
-<div class="tsd-comment tsd-typography"><p>Enable the <a href="http://CONTRACT.md">CONTRACT.md</a> §16 bounded read-only retry policy. <strong>Default:
+<div class="tsd-comment tsd-typography"><p>Enable the CONTRACT.md §16 bounded read-only retry policy. <strong>Default:
 <code>true</code>.</strong></p>
 <p>Set <code>false</code> to make every operation exactly one attempt. That is the right
 choice for a caller who owns their own retry layer — they know their
@@ -178,11 +178,11 @@ or delay cap above the contract's values, so there is no knob for those:
 eleven SDKs agreeing on one table is the point.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/core/config.ts#L68">src/core/config.ts:68</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/core/config.ts#L68">src/core/config.ts:68</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="telemetryhook"><code class="tsd-tag">Optional</code><span>telemetry<wbr/>Hook</span><a href="#telemetryhook" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">telemetryHook</span><span class="tsd-signature-symbol">?:</span> <a href="../types/index.TelemetryHook.html" class="tsd-signature-type tsd-kind-type-alias">TelemetryHook</a></div>
-<div class="tsd-comment tsd-typography"><p>Install a <a href="http://CONTRACT.md">CONTRACT.md</a> §19 telemetry sink.</p>
+<div class="tsd-comment tsd-typography"><p>Install a CONTRACT.md §19 telemetry sink.</p>
 <p>Receives request start/end, §16 retry and §9 refresh events, so metrics can
 be wired without this package depending on any metrics library. See
 <code>examples/telemetry-hook.ts</code>.</p>
@@ -192,21 +192,21 @@ union with a fixed field set (§19.2 rule 3). Invoked on the calling path,
 so it must not block; buffer on your side if you need async delivery.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/core/config.ts#L101">src/core/config.ts:101</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/core/config.ts#L101">src/core/config.ts:101</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="tenantid"><code class="tsd-tag">Optional</code><span>tenant<wbr/>Id</span><a href="#tenantid" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">tenantId</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Tenant UUID. At least one of tenantSlug/tenantId is required at runtime.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/core/config.ts#L34">src/core/config.ts:34</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/core/config.ts#L34">src/core/config.ts:34</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="tenantslug"><code class="tsd-tag">Optional</code><span>tenant<wbr/>Slug</span><a href="#tenantslug" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">tenantSlug</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Human-readable tenant identifier. At least one of tenantSlug/tenantId is required at runtime.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/core/config.ts#L32">src/core/config.ts:32</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/core/config.ts#L32">src/core/config.ts:32</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -229,7 +229,7 @@ so it must not block; buffer on your side if you need async delivery.</p>
 <ul>
 <li><a href="#what-you-are-accepting"><span>What you are accepting</span></a></li></ul></li></ul><a href="#expectedaudience"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>expected<wbr/>Audience</span></a><a href="#expectedissuer"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>expected<wbr/>Issuer</span></a><a href="#orgid"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>org<wbr/>Id</span></a><a href="#orgslug"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>org<wbr/>Slug</span></a><a href="#requesttimeoutms"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>request<wbr/>Timeout<wbr/>Ms</span></a><a href="#retryenabled"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>retry<wbr/>Enabled</span></a><a href="#telemetryhook"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>telemetry<wbr/>Hook</span></a><a href="#tenantid"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>tenant<wbr/>Id</span></a><a href="#tenantslug"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>tenant<wbr/>Slug</span></a></div></details></div></details></div>
 <div class="site-menu">
-<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK</a>
+<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK - v1.0.0-beta16</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
 <li>Loading...</li></ul></nav></div></div></div><footer>
 <p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>

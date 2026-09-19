@@ -1,5 +1,5 @@
-<!DOCTYPE html><html class="default" lang="en" data-base="./"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>AXIAM TypeScript SDK</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="assets/style.css"/><link rel="stylesheet" href="assets/highlight.css"/><script defer src="assets/main.js"></script><script async src="assets/icons.js" id="tsd-icons-script"></script><script async src="assets/search.js" id="tsd-search-script"></script><script async src="assets/navigation.js" id="tsd-nav-script"></script><script async src="assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
-<div class="tsd-toolbar-contents container"><a href="index.html" class="title">AXIAM TypeScript SDK</a>
+<!DOCTYPE html><html class="default" lang="en" data-base="./"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>AXIAM TypeScript SDK - v1.0.0-beta16</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="assets/style.css"/><link rel="stylesheet" href="assets/highlight.css"/><script defer src="assets/main.js"></script><script async src="assets/icons.js" id="tsd-icons-script"></script><script async src="assets/search.js" id="tsd-search-script"></script><script async src="assets/navigation.js" id="tsd-nav-script"></script><script async src="assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="index.html" class="title">AXIAM TypeScript SDK - v1.0.0-beta16</a>
 <div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
 <ul role="listbox" id="tsd-search-results"></ul>
 <div id="tsd-search-status" aria-live="polite" aria-atomic="true">
@@ -7,11 +7,16 @@
 <div class="container container-main">
 <div class="col-content">
 <div class="tsd-page-title">
-<h1>AXIAM TypeScript SDK</h1></div>
+<h1>AXIAM TypeScript SDK - v1.0.0-beta16</h1></div>
 <div class="tsd-panel tsd-typography"><h1 id="axiam-sdk-typescriptjavascript" class="tsd-anchor-link">axiam-sdk (TypeScript/JavaScript)<a href="#axiam-sdk-typescriptjavascript" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h1>
+<!-- Track the CURRENT channel's dist-tag, not `latest`: releases are prereleases and
+     the publish job keeps those off `latest` (see "Release / versioning"), so a plain
+     `npm/v/axiam-sdk` badge reports whatever was last published to `latest` — today
+     1.0.0-alpha28, dozens of releases stale. Move `beta` below to `rc`, then drop it
+     entirely, as the channel advances. -->
 <p><a href="https://github.com/ilpanich/axiam-typescript-sdk/actions/workflows/sdk-ci-typescript.yml"><img src="https://github.com/ilpanich/axiam-typescript-sdk/actions/workflows/sdk-ci-typescript.yml/badge.svg?branch=main" alt="CI"></a>
 <a href="https://coveralls.io/github/ilpanich/axiam-typescript-sdk?branch=main"><img src="https://coveralls.io/repos/github/ilpanich/axiam-typescript-sdk/badge.svg?branch=main" alt="Coverage Status"></a>
-<a href="https://www.npmjs.com/package/axiam-sdk"><img src="https://img.shields.io/npm/v/axiam-sdk.svg" alt="npm"></a>
+<a href="https://www.npmjs.com/package/axiam-sdk"><img src="https://img.shields.io/npm/v/axiam-sdk/beta?label=npm%20beta" alt="npm"></a>
 <a href="https://ilpanich.github.io/axiam-typescript-sdk/"><img src="https://img.shields.io/badge/docs-TypeDoc-blue.svg" alt="Docs"></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License"></a></p>
 <p>Official TypeScript/JavaScript client SDK for <a href="https://github.com/ilpanich/axiam">AXIAM</a> — Access eXtended Identity and Authorization Management.</p>
@@ -19,15 +24,15 @@
 <h2 id="package-identity" class="tsd-anchor-link">Package identity<a href="#package-identity" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <ul>
 <li><strong>npm package:</strong> <code>axiam-sdk</code></li>
-<li><strong>Registry:</strong> <a href="https://www.npmjs.com/package/axiam-sdk">npmjs.com/package/axiam-sdk</a> <em>(reserved, not yet published)</em></li>
+<li><strong>Registry:</strong> <a href="https://www.npmjs.com/package/axiam-sdk">npmjs.com/package/axiam-sdk</a> — published as prereleases, under the <code>alpha</code>/<code>beta</code> dist-tags</li>
 <li><strong>Source:</strong> <a href="https://github.com/ilpanich/axiam-typescript-sdk">github.com/ilpanich/axiam-typescript-sdk</a></li>
 <li><strong>License:</strong> Apache-2.0</li>
 <li><strong>Node:</strong> <code>&gt;=22</code> — see <a href="#supported-node-versions">Supported Node versions</a></li>
 </ul>
 <h2 id="contract-conformance" class="tsd-anchor-link">Contract conformance<a href="#contract-conformance" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
-<p>This SDK conforms to <strong>contract 1.42</strong>: <a href="http://CONTRACT.md">CONTRACT.md</a> §1–§13 and §12.7, §14, §15, §17, §19,
-§20, §21, §22, §23, §24, §25, §26, §27 (including §6.1 mTLS client certificates, the §10.1
-minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
+<p>This SDK conforms to <strong>contract 1.50</strong>: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
+§20, §21, §22, §23, §24, §25, §26, §27, §28 (including §6.1 mTLS client certificates, the
+§10.1 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
 <code>verifyWebhook</code> signature verifier). §12 is implemented in full at its 1.38 shape: all
 <strong>thirteen</strong> operations, including the four public &quot;Sign in with X&quot; entry points.</p>
 <p><strong>§12's operations live on <code>OidcClient</code>, not on <code>AxiamClient</code></strong> — the separate host §12.2
@@ -38,10 +43,14 @@ them, even though three of them need no Node-only code at all.</p>
 <p>§27 is implemented <strong>in full</strong>, both halves: the 160-operation imperative surface <em>and</em>
 the §27.6 declarative manifest with its §27.7 <code>defineManifest</code> and decorator forms. The
 contract asks an SDK that ships only one half to say which; this one ships both.</p>
-<p>§12.7, §14, §15, §22, §24, §25, §26 and §27 are named rather than folded into the range
-because they landed after this SDK already claimed §1–§13: widening the range silently
-would turn a statement that was true when written into a different claim without anyone
-editing it.</p>
+<p>§28 (MCP resource-server helpers) is implemented on <strong>both</strong> framework surfaces — the
+Express middleware and the Fastify plugin — with all three operations, the
+<code>resourceMetadataUrl</code> guard option and §28.9's five required tests. This SDK is §28.10's
+reference implementation: it lands first and the ten ports are read against it.</p>
+<p>§12.7, §14, §15, §22, §24, §25, §26, §27 and §28 are named rather than folded into the
+range because they landed after this SDK already claimed §1–§13: widening the range
+silently would turn a statement that was true when written into a different claim without
+anyone editing it.</p>
 <h3 id="§101-minimum-local-verification-set" class="tsd-anchor-link">§10.1 minimum local-verification set<a href="#§101-minimum-local-verification-set" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <p><code>axiamMiddleware</code> / <code>axiamPlugin</code> (and the <code>requireAuth</code> / <code>requireAccess</code> / <code>requireRole</code>
 helpers built on them) funnel through <code>authenticateRequest</code>, which applies <strong>every</strong> §10.1
@@ -62,9 +71,13 @@ for integrators implementing their own policy. It checks the signature and nothi
 never use it to guard a route.</p>
 <p>See <a href="media/CONTRACT.md"><code>CONTRACT.md</code></a> for the full cross-language behavioral contract.</p>
 <h2 id="install" class="tsd-anchor-link">Install<a href="#install" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
-<pre><code class="bash"><span class="hl-3">npm</span><span class="hl-1"> </span><span class="hl-5">install</span><span class="hl-1"> </span><span class="hl-5">axiam-sdk</span>
+<pre><code class="bash"><span class="hl-3">npm</span><span class="hl-1"> </span><span class="hl-5">install</span><span class="hl-1"> </span><span class="hl-5">axiam-sdk@beta</span>
 </code><button type="button">Copy</button></pre>
 
+<p>Every release so far is a prerelease, and the publish job files each one under its
+channel's dist-tag (<code>beta</code> today) rather than <code>latest</code> — so name the channel, or pin an
+exact version. A bare <code>npm install axiam-sdk</code> resolves <code>latest</code>, which no prerelease
+moves.</p>
 <h2 id="supported-node-versions" class="tsd-anchor-link">Supported Node versions<a href="#supported-node-versions" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <table>
 <thead>
@@ -130,7 +143,7 @@ never contains <code>@grpc/grpc-js</code> or <code>amqplib</code>):</p>
 <tr>
 <td><code>axiam-sdk/browser</code></td>
 <td>Browser only</td>
-<td>The WebAuthn <strong>platform ceremony</strong> — <code>webauthnRegister</code>/<code>webauthnSetupRegister</code>/<code>webauthnLogin</code>/<code>webauthnDiscoverableLogin</code> over <code>navigator.credentials</code> (<a href="http://CONTRACT.md">CONTRACT.md</a> §24.6b). The relying-party operations themselves are on <code>AxiamClient</code> in <code>/rest</code> and work in Node too.</td>
+<td>The WebAuthn <strong>platform ceremony</strong> — <code>webauthnRegister</code>/<code>webauthnSetupRegister</code>/<code>webauthnLogin</code>/<code>webauthnDiscoverableLogin</code> over <code>navigator.credentials</code> (CONTRACT.md §24.6b). The relying-party operations themselves are on <code>AxiamClient</code> in <code>/rest</code> and work in Node too.</td>
 </tr>
 <tr>
 <td><code>axiam-sdk/grpc</code></td>
@@ -140,22 +153,22 @@ never contains <code>@grpc/grpc-js</code> or <code>amqplib</code>):</p>
 <tr>
 <td><code>axiam-sdk/amqp</code></td>
 <td>Node only</td>
-<td><code>consume()</code> — HMAC-verified AMQP audit/authz event consumer (<a href="http://CONTRACT.md">CONTRACT.md</a> §8)</td>
+<td><code>consume()</code> — HMAC-verified AMQP audit/authz event consumer (CONTRACT.md §8)</td>
 </tr>
 <tr>
 <td><code>axiam-sdk/node</code></td>
 <td>Node only</td>
-<td>The Node persona (<code>createNodeSession</code>/<code>createNodeClient</code>, cookie jar + local-JWKS verifier) plus the <strong>OIDC/SSO relying-party helpers</strong> — <code>OidcClient</code>, <code>MemoryOidcStateStore</code>, PKCE primitives (<a href="http://CONTRACT.md">CONTRACT.md</a> §12)</td>
+<td>The Node persona (<code>createNodeSession</code>/<code>createNodeClient</code>, cookie jar + local-JWKS verifier) plus the <strong>OIDC/SSO relying-party helpers</strong> — <code>OidcClient</code>, <code>MemoryOidcStateStore</code>, PKCE primitives (CONTRACT.md §12)</td>
 </tr>
 <tr>
 <td><code>axiam-sdk/middleware</code></td>
 <td>Node only</td>
-<td><code>axiamMiddleware</code> (Express) / <code>axiamPlugin</code> (Fastify) — shared local-JWKS verify core (<a href="http://CONTRACT.md">CONTRACT.md</a> §10) — plus <code>requireAuth</code>/<code>requireAccess</code>/<code>requireRole</code> declarative route guards (<a href="http://CONTRACT.md">CONTRACT.md</a> §11) and the <code>oidcLoginHandlers</code>/<code>oidcLoginPlugin</code> &quot;Login with AXIAM&quot; routes (<a href="http://CONTRACT.md">CONTRACT.md</a> §12)</td>
+<td><code>axiamMiddleware</code> (Express) / <code>axiamPlugin</code> (Fastify) — shared local-JWKS verify core (CONTRACT.md §10) — plus <code>requireAuth</code>/<code>requireAccess</code>/<code>requireRole</code> declarative route guards (CONTRACT.md §11) and the <code>oidcLoginHandlers</code>/<code>oidcLoginPlugin</code> &quot;Login with AXIAM&quot; routes (CONTRACT.md §12)</td>
 </tr>
 <tr>
 <td><code>axiam-sdk/nestjs</code></td>
 <td>Node only, optional</td>
-<td><code>@RequireAccess</code>/<code>@RequireAuth</code>/<code>@RequireRole</code> metadata decorators + <code>AxiamGuard</code> (<a href="http://CONTRACT.md">CONTRACT.md</a> §11, Tier 2)</td>
+<td><code>@RequireAccess</code>/<code>@RequireAuth</code>/<code>@RequireRole</code> metadata decorators + <code>AxiamGuard</code> (CONTRACT.md §11, Tier 2)</td>
 </tr>
 </tbody>
 </table>
@@ -164,13 +177,13 @@ never contains <code>@grpc/grpc-js</code> or <code>amqplib</code>):</p>
 dependencies (<code>@grpc/grpc-js</code>, <code>amqplib</code>, <code>jose</code>'s Node crypto, <code>express</code>/<code>fastify</code> types)
 that do not belong in a browser bundle.</p>
 <h2 id="construction" class="tsd-anchor-link">Construction<a href="#construction" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
-<p><code>tenantSlug</code> (or <code>tenantId</code>) is a non-optional constructor parameter (<a href="http://CONTRACT.md">CONTRACT.md</a> §5) —
+<p><code>tenantSlug</code> (or <code>tenantId</code>) is a non-optional constructor parameter (CONTRACT.md §5) —
 there is no default tenant:</p>
 <pre><code class="typescript"><span class="hl-7">import</span><span class="hl-1"> { </span><span class="hl-4">AxiamClient</span><span class="hl-1"> } </span><span class="hl-7">from</span><span class="hl-1"> </span><span class="hl-5">&#39;axiam-sdk&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">client</span><span class="hl-1"> = </span><span class="hl-0">new</span><span class="hl-1"> </span><span class="hl-3">AxiamClient</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-4">baseUrl:</span><span class="hl-1"> </span><span class="hl-5">&#39;https://iam.example.com&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">tenantSlug:</span><span class="hl-1"> </span><span class="hl-5">&#39;acme&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-6">// Organization context is required for login/refresh — a tenant slug is only</span><br/><span class="hl-1">  </span><span class="hl-6">// unique within an organization (CONTRACT.md §5.1). Pass orgSlug (or orgId).</span><br/><span class="hl-1">  </span><span class="hl-4">orgSlug:</span><span class="hl-1"> </span><span class="hl-5">&#39;acme&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-6">// customCa is optional — PEM-encoded CA cert for self-signed dev environments (§6)</span><br/><span class="hl-1">  </span><span class="hl-6">// customCa: pemString,</span><br/><span class="hl-1">});</span>
 </code><button type="button">Copy</button></pre>
 
 <h3 id="mtls-client-certificates-node-only" class="tsd-anchor-link">mTLS / client certificates (Node only)<a href="#mtls-client-certificates-node-only" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<p>For IoT devices and service accounts authenticated by <strong>mutual TLS</strong> (<a href="http://CONTRACT.md">CONTRACT.md</a> §6.1),
+<p>For IoT devices and service accounts authenticated by <strong>mutual TLS</strong> (CONTRACT.md §6.1),
 pass a PEM client-certificate chain and its PEM private key. The identity is presented on
 <strong>both</strong> the REST and gRPC transports of the same client. Presenting a client certificate
 <strong>never</strong> relaxes server verification — strict TLS stays on.</p>
@@ -181,12 +194,12 @@ pass a PEM client-certificate chain and its PEM private key. The identity is pre
 <li><code>clientCert</code> and <code>clientKey</code> are <strong>all-or-nothing</strong> — providing exactly one throws at
 construction, and each is validated to be PEM-shaped (as <code>customCa</code> is).</li>
 <li>The private key is secret material: it is passed straight to the Node TLS stack and is
-never retained on a public property, logged, or serialized (<a href="http://CONTRACT.md">CONTRACT.md</a> §7).</li>
+never retained on a public property, logged, or serialized (CONTRACT.md §7).</li>
 <li><strong>Node only.</strong> Browsers cannot present a client certificate from JavaScript, so the
 browser build validates the PEM shape then ignores <code>clientCert</code>/<code>clientKey</code> — exactly as
 it already ignores <code>customCa</code>.</li>
 </ul>
-<h4 id="rfc-8705-§5-contract-140-contractmd-§213-rule-2" class="tsd-anchor-link">RFC 8705 §5 <code>mtls_endpoint_aliases</code> (contract 1.40, <a href="http://CONTRACT.md">CONTRACT.md</a> §21.3 rule 2)<a href="#rfc-8705-§5-contract-140-contractmd-§213-rule-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4>
+<h4 id="rfc-8705-§5-contract-140-contractmd-§213-rule-2" class="tsd-anchor-link">RFC 8705 §5 <code>mtls_endpoint_aliases</code> (contract 1.40, CONTRACT.md §21.3 rule 2)<a href="#rfc-8705-§5-contract-140-contractmd-§213-rule-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4>
 <p>A TLS listener decides whether to ask for a client certificate during the handshake,
 before it has seen a byte of HTTP, so &quot;request one on <code>/oauth2/token</code> but not on
 <code>/oauth2/authorize</code>&quot; is not something a single listener can do. A deployment that wants
@@ -286,15 +299,15 @@ truncated — a truncated set is a guard that admits some revoked sessions and r
 </code><button type="button">Copy</button></pre>
 
 <p>Tokens arrive exclusively via <code>httpOnly</code> <code>Set-Cookie</code> — no raw session token is ever
-exposed to application code. CSRF forwarding (cookie double-submit, <a href="http://CONTRACT.md">CONTRACT.md</a> §3) and
-single-flight refresh (<a href="http://CONTRACT.md">CONTRACT.md</a> §9) are handled automatically.</p>
+exposed to application code. CSRF forwarding (cookie double-submit, CONTRACT.md §3) and
+single-flight refresh (CONTRACT.md §9) are handled automatically.</p>
 <h3 id="node-grpc-authz-" class="tsd-anchor-link">Node — gRPC authz (<code>axiam-sdk/grpc</code>)<a href="#node-grpc-authz-" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <pre><code class="typescript"><span class="hl-7">import</span><span class="hl-1"> { </span><span class="hl-4">AuthzGrpcClient</span><span class="hl-1">, </span><span class="hl-4">createNodeSession</span><span class="hl-1"> } </span><span class="hl-7">from</span><span class="hl-1"> </span><span class="hl-5">&#39;axiam-sdk/grpc&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">session</span><span class="hl-1"> = </span><span class="hl-3">createNodeSession</span><span class="hl-1">({ </span><span class="hl-4">baseUrl:</span><span class="hl-1"> </span><span class="hl-5">&#39;https://iam.example.com&#39;</span><span class="hl-1">, </span><span class="hl-4">tenantSlug:</span><span class="hl-1"> </span><span class="hl-5">&#39;acme&#39;</span><span class="hl-1"> });</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">grpcClient</span><span class="hl-1"> = </span><span class="hl-0">new</span><span class="hl-1"> </span><span class="hl-3">AuthzGrpcClient</span><span class="hl-1">(</span><span class="hl-4">session</span><span class="hl-1">, { </span><span class="hl-4">baseUrl:</span><span class="hl-1"> </span><span class="hl-5">&#39;https://iam.example.com&#39;</span><span class="hl-1"> });</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">decision</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">grpcClient</span><span class="hl-1">.</span><span class="hl-3">checkAccess</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-4">tenantId:</span><span class="hl-1"> </span><span class="hl-5">&#39;tenant-1&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">subjectId:</span><span class="hl-1"> </span><span class="hl-5">&#39;user-1&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">action:</span><span class="hl-1"> </span><span class="hl-5">&#39;read&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">resourceId:</span><span class="hl-1"> </span><span class="hl-5">&#39;doc:1&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">});</span><br/><br/><span class="hl-4">grpcClient</span><span class="hl-1">.</span><span class="hl-3">close</span><span class="hl-1">();</span>
 </code><button type="button">Copy</button></pre>
 
 <p>The gRPC channel is constructed once and reused; <code>UNAUTHENTICATED</code> responses transparently
-share the same single-flight refresh guard as the REST persona (<a href="http://CONTRACT.md">CONTRACT.md</a> §9).</p>
-<h4 id="grpc-userinfo-contractmd-§11" class="tsd-anchor-link">gRPC userinfo (<code>UserInfoGrpcClient.getUserInfo</code>, <a href="http://CONTRACT.md">CONTRACT.md</a> §1.1)<a href="#grpc-userinfo-contractmd-§11" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4>
+share the same single-flight refresh guard as the REST persona (CONTRACT.md §9).</p>
+<h4 id="grpc-userinfo-contractmd-§11" class="tsd-anchor-link">gRPC userinfo (<code>UserInfoGrpcClient.getUserInfo</code>, CONTRACT.md §1.1)<a href="#grpc-userinfo-contractmd-§11" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4>
 <p><code>getUserInfo</code> is a <strong>gRPC-only</strong> operation (contract 1.3) — the low-latency counterpart of
 the server's REST <code>/oauth2/userinfo</code> endpoint. It takes no arguments; the caller's identity
 is derived server-side from the bearer token. It reuses the same channel, auth + <code>x-tenant-id</code>
@@ -304,7 +317,7 @@ client built from the same session shares the pooled connection).</p>
 </code><button type="button">Copy</button></pre>
 
 <p>Calling <code>getUserInfo()</code> with no token present raises <code>AuthError</code> client-side, without a wire
-call (<a href="http://CONTRACT.md">CONTRACT.md</a> §1.1). A <code>UNAUTHENTICATED</code> response drives exactly one refresh + one retry,
+call (CONTRACT.md §1.1). A <code>UNAUTHENTICATED</code> response drives exactly one refresh + one retry,
 identical to <code>checkAccess</code>.</p>
 <h3 id="node-amqp-consumer-" class="tsd-anchor-link">Node — AMQP consumer (<code>axiam-sdk/amqp</code>)<a href="#node-amqp-consumer-" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <pre><code class="typescript"><span class="hl-7">import</span><span class="hl-1"> { </span><span class="hl-4">consume</span><span class="hl-1">, </span><span class="hl-4">Sensitive</span><span class="hl-1"> } </span><span class="hl-7">from</span><span class="hl-1"> </span><span class="hl-5">&#39;axiam-sdk/amqp&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">signingKey</span><span class="hl-1"> = </span><span class="hl-0">new</span><span class="hl-1"> </span><span class="hl-3">Sensitive</span><span class="hl-1">(</span><span class="hl-4">Buffer</span><span class="hl-1">.</span><span class="hl-3">from</span><span class="hl-1">(</span><span class="hl-4">process</span><span class="hl-1">.</span><span class="hl-4">env</span><span class="hl-1">.</span><span class="hl-2">AXIAM_AMQP_SIGNING_KEY</span><span class="hl-1"> ?? </span><span class="hl-5">&#39;&#39;</span><span class="hl-1">, </span><span class="hl-5">&#39;hex&#39;</span><span class="hl-1">));</span><br/><br/><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-3">consume</span><span class="hl-1">(</span><br/><span class="hl-1">  </span><span class="hl-6">// §8b: amqps:// only, enforced — a plaintext URL is refused before a socket</span><br/><span class="hl-1">  </span><span class="hl-6">// opens, and there is no fallback for it to take.</span><br/><span class="hl-1">  </span><span class="hl-5">&#39;amqps://localhost:5671&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-5">&#39;axiam.audit.events&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">signingKey</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-0">async</span><span class="hl-1"> (</span><span class="hl-4">event</span><span class="hl-1">) </span><span class="hl-0">=&gt;</span><span class="hl-1"> {</span><br/><span class="hl-1">    </span><span class="hl-6">// Only a verified event ever reaches this closure — HMAC-SHA256</span><br/><span class="hl-1">    </span><span class="hl-6">// signature checked and stripped by the SDK before your handler runs</span><br/><span class="hl-1">    </span><span class="hl-6">// (CONTRACT.md §8). Verification failures are nacked-without-requeue.</span><br/><span class="hl-1">    </span><span class="hl-4">console</span><span class="hl-1">.</span><span class="hl-3">log</span><span class="hl-1">(</span><span class="hl-5">&#39;verified audit event:&#39;</span><span class="hl-1">, </span><span class="hl-4">event</span><span class="hl-1">);</span><br/><span class="hl-1">  },</span><br/><span class="hl-1">  </span><span class="hl-6">// Optional. The PEM bundle for a privately issued broker certificate — the</span><br/><span class="hl-1">  </span><span class="hl-6">// common in-cluster case (§8b rule 2), and the only TLS knob this SDK has.</span><br/><span class="hl-1">  { </span><span class="hl-4">tls:</span><span class="hl-1"> { </span><span class="hl-4">caCert:</span><span class="hl-1"> </span><span class="hl-3">readFileSync</span><span class="hl-1">(</span><span class="hl-5">&#39;/etc/axiam/broker-ca.pem&#39;</span><span class="hl-1">, </span><span class="hl-5">&#39;utf8&#39;</span><span class="hl-1">) } },</span><br/><span class="hl-1">);</span>
@@ -339,7 +352,7 @@ A switch like that appears in a dev compose file, works, and travels unchanged
 into production, where it turns TLS into an expensive no-op against precisely
 the attacker TLS exists to stop. <code>caCert</code> covers the legitimate reason people
 reach for one.</p>
-<h3 id="node-reactors-amqp-extension-actors--contractmd-§22" class="tsd-anchor-link">Node — reactors, AMQP extension actors (<code>axiam-sdk/amqp</code>, <a href="http://CONTRACT.md">CONTRACT.md</a> §22)<a href="#node-reactors-amqp-extension-actors--contractmd-§22" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<h3 id="node-reactors-amqp-extension-actors--contractmd-§22" class="tsd-anchor-link">Node — reactors, AMQP extension actors (<code>axiam-sdk/amqp</code>, CONTRACT.md §22)<a href="#node-reactors-amqp-extension-actors--contractmd-§22" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <p>A <strong>reactor</strong> is an external process that subscribes to named hook events on the AMQP bus and
 answers back — allow, deny, or a field-allow-listed mutation — inside a timeout the server
 declared. It is AXIAM's answer to Zitadel Actions and Keycloak SPIs, and the difference is the
@@ -498,9 +511,9 @@ correlation.</p>
 <p>Both middleware integrations verify the session against a locally-cached JWKS (no
 <code>cookie-parser</code> / <code>@fastify/cookie</code> peer dependency required), inject the authenticated
 identity into the request context, and surface <code>AuthError</code> as HTTP 401 / <code>AuthzError</code> as
-HTTP 403 with a standardized JSON error body (<a href="http://CONTRACT.md">CONTRACT.md</a> §10).</p>
+HTTP 403 with a standardized JSON error body (CONTRACT.md §10).</p>
 <h3 id="declarative-authorization-helpers-" class="tsd-anchor-link">Declarative authorization helpers (<code>axiam-sdk/middleware</code>)<a href="#declarative-authorization-helpers-" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<p><a href="http://CONTRACT.md">CONTRACT.md</a> §11 adds a per-endpoint authorization layer on top of the §10 guard above:
+<p>CONTRACT.md §11 adds a per-endpoint authorization layer on top of the §10 guard above:
 <code>requireAuth</code>, <code>requireAccess</code>, <code>requireRole</code> (Express) and their <code>*Hook</code> counterparts
 (Fastify). They never extract or verify a token themselves — they read the identity
 <code>axiamMiddleware</code>/<code>axiamPlugin</code> already injected (401 if absent) — and <code>requireAccess</code>
@@ -535,7 +548,7 @@ Express or Fastify) so <code>request.axiamUser</code> is already set:</p>
 <code>axiamMiddleware</code> wiring <code>AxiamGuard</code> depends on).</p>
 <p>More runnable examples (all compiling under <code>tsc --noEmit -p examples/tsconfig.json</code>) live
 in <code>examples/</code> at the package root.</p>
-<h2 id="oidc-sso-relying-party-helpers--contractmd-§12" class="tsd-anchor-link">OIDC / SSO relying-party helpers (<code>axiam-sdk/node</code>, <a href="http://CONTRACT.md">CONTRACT.md</a> §12)<a href="#oidc-sso-relying-party-helpers--contractmd-§12" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<h2 id="oidc-sso-relying-party-helpers--contractmd-§12" class="tsd-anchor-link">OIDC / SSO relying-party helpers (<code>axiam-sdk/node</code>, CONTRACT.md §12)<a href="#oidc-sso-relying-party-helpers--contractmd-§12" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>Everything a backend needs to offer <strong>&quot;Login with AXIAM&quot;</strong> — authorization code + PKCE
 against AXIAM's own OIDC provider — plus service-account M2M login, token
 introspection/revocation, the upstream-IdP federation endpoints, and — as of <strong>contract
@@ -706,7 +719,7 @@ protocol error), <code>503</code> when AXIAM is unreachable — never a silent s
 an unchecked redirect target is an open-redirect vector, and the SDK cannot know which
 destinations your app considers safe.</p>
 <h3 id="id-token-validation-always-on" class="tsd-anchor-link">ID-token validation (always on)<a href="#id-token-validation-always-on" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<p>Every ID token is validated before <code>oidcExchange</code> returns, per <a href="http://CONTRACT.md">CONTRACT.md</a> §12.4:
+<p>Every ID token is validated before <code>oidcExchange</code> returns, per CONTRACT.md §12.4:
 <code>alg</code> must be exactly <code>EdDSA</code> (<code>none</code> and everything else rejected, checked from the header
 <em>before</em> any signature work); the Ed25519 signature must verify against the key selected by
 <code>kid</code> from the document's <code>jwks_uri</code> (one JWKS re-fetch on an unknown <code>kid</code>, then fail);
@@ -722,11 +735,11 @@ to disable or skip this.</p>
 </code><button type="button">Copy</button></pre>
 
 <p><code>access_token</code>, <code>refresh_token</code>, <code>id_token</code>, <code>client_secret</code> and <code>code_verifier</code> are all
-<code>Sensitive&lt;T&gt;</code> (<a href="http://CONTRACT.md">CONTRACT.md</a> §12.5) — they redact to <code>[SENSITIVE]</code> in <code>toString()</code>,
+<code>Sensitive&lt;T&gt;</code> (CONTRACT.md §12.5) — they redact to <code>[SENSITIVE]</code> in <code>toString()</code>,
 <code>JSON.stringify()</code> and <code>console.log</code>. <code>state</code> and <code>nonce</code> are not secrets and stay plain
 strings.</p>
 <p>See <code>examples/express-oidc-login.ts</code> for a complete, runnable example.</p>
-<h2 id="opaque-contractmd-§23" class="tsd-anchor-link">OPAQUE (<a href="http://CONTRACT.md">CONTRACT.md</a> §23)<a href="#opaque-contractmd-§23" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<h2 id="opaque-contractmd-§23" class="tsd-anchor-link">OPAQUE (CONTRACT.md §23)<a href="#opaque-contractmd-§23" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p><code>loginOpaque</code> proves the password without sending it. What crosses the wire is
 a blinded group element and a MAC, neither useful without the account's
 registration record <strong>and</strong> the tenant's OPRF seed.</p>
@@ -750,7 +763,7 @@ just failed to prove it holds the record.</p>
 it is <code>&quot;optional&quot;</code> — the mid-migration state, where accounts acquire a
 registration record only as their passwords are next set — a failed exchange is
 not yet a verdict on the credentials, so <code>loginOpaque</code> retries over
-<code>POST /api/v1/auth/login</code> itself and returns that call's outcome (<a href="http://CONTRACT.md">CONTRACT.md</a>
+<code>POST /api/v1/auth/login</code> itself and returns that call's outcome (CONTRACT.md
 §23.4 rule 7). Under <code>&quot;required&quot;</code>, and against a server too old to send <code>mode</code>
 at all, it fails closed exactly as before. <code>mode</code> is <strong>not</strong> downgrade
 protection: a hostile server that wanted the plaintext could answer <code>404</code> and
@@ -786,7 +799,7 @@ it names.</p>
 sealed under the server's oblivious PRF, so there is no offline computation that
 produces a valid record. The SRP verifier needed no network at all.</p>
 <h3 id="this-sdk-does-not-implement-opaque" class="tsd-anchor-link">This SDK does not implement OPAQUE<a href="#this-sdk-does-not-implement-opaque" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<p><a href="http://CONTRACT.md">CONTRACT.md</a> §23.1 forbids it. SRP was hand-written eleven times because it is
+<p>CONTRACT.md §23.1 forbids it. SRP was hand-written eleven times because it is
 modular arithmetic every language has; OPAQUE needs an oblivious PRF,
 <code>hash_to_curve</code>, <code>expand_message_xmd</code>, an envelope construction and a
 three-message AKE. <code>core/srp.ts</code> — 419 lines of it — is replaced by a loader
@@ -813,7 +826,7 @@ instantiate it twice.</p>
 t=2 by default, tens to hundreds of milliseconds of synchronous work. That cost
 is the point — it is what makes a stolen record expensive to attack even by
 someone holding the OPRF seed. In a browser, consider a Web Worker.</p>
-<h2 id="webauthn-and-passkeys-contractmd-§24" class="tsd-anchor-link">WebAuthn and passkeys (<a href="http://CONTRACT.md">CONTRACT.md</a> §24)<a href="#webauthn-and-passkeys-contractmd-§24" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<h2 id="webauthn-and-passkeys-contractmd-§24" class="tsd-anchor-link">WebAuthn and passkeys (CONTRACT.md §24)<a href="#webauthn-and-passkeys-contractmd-§24" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>A passkey ceremony is <strong>two exchanges stacked</strong>: one with an <em>authenticator</em>,
 which needs a platform API, and one with <em>AXIAM</em>, which is four ordinary JSON
 round trips. This SDK splits along that seam, and where you import from tells
@@ -916,7 +929,7 @@ attestation and the FIDO metadata service has no usable snapshot. It is a server
 configuration state, not a transient failure, and it is deliberately <strong>not</strong>
 retried: retrying changes nothing and delays a message an operator needs.</li>
 </ul>
-<h2 id="account-lifecycle-and-mfa-enrolment-contractmd-§25" class="tsd-anchor-link">Account lifecycle and MFA enrolment (<a href="http://CONTRACT.md">CONTRACT.md</a> §25)<a href="#account-lifecycle-and-mfa-enrolment-contractmd-§25" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<h2 id="account-lifecycle-and-mfa-enrolment-contractmd-§25" class="tsd-anchor-link">Account lifecycle and MFA enrolment (CONTRACT.md §25)<a href="#account-lifecycle-and-mfa-enrolment-contractmd-§25" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>§1 locks the <em>middle</em> of an account's life — <code>login</code>, <code>verifyMfa</code>, <code>refresh</code>,
 <code>logout</code> all assume an account that already exists, is verified, and already has
 its second factor. These nine operations are how it gets there.</p>
@@ -1025,7 +1038,7 @@ cannot know the parameters before it has a token to ask with:</p>
 <p>The context discloses no identity — an unauthenticated endpoint that confirmed
 which account a token belongs to would be an oracle worth not having — and a
 <code>404</code> covers unknown, expired and already-consumed without distinguishing them.</p>
-<h2 id="device-authorization-grant-contractmd-§14" class="tsd-anchor-link">Device authorization grant (<code>axiam-sdk/node</code>, <a href="http://CONTRACT.md">CONTRACT.md</a> §14)<a href="#device-authorization-grant-contractmd-§14" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<h2 id="device-authorization-grant-contractmd-§14" class="tsd-anchor-link">Device authorization grant (<code>axiam-sdk/node</code>, CONTRACT.md §14)<a href="#device-authorization-grant-contractmd-§14" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>RFC 8628 — signing in a device that cannot show a browser: a TV, a CLI, a headless
 commissioning tool.</p>
 <pre><code class="ts"><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">tokens</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">oidc</span><span class="hl-1">.</span><span class="hl-3">deviceLogin</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-3">onUserCode</span><span class="hl-4">:</span><span class="hl-1"> (</span><span class="hl-4">auth</span><span class="hl-1">) </span><span class="hl-0">=&gt;</span><span class="hl-1"> {</span><br/><span class="hl-1">    </span><span class="hl-6">// Called BEFORE the first poll. Display it however the device can —</span><br/><span class="hl-1">    </span><span class="hl-6">// screen, QR code, e-ink panel. The SDK never prints it for you.</span><br/><span class="hl-1">    </span><span class="hl-4">console</span><span class="hl-1">.</span><span class="hl-3">log</span><span class="hl-1">(</span><span class="hl-5">`visit </span><span class="hl-0">${</span><span class="hl-4">auth</span><span class="hl-8">.</span><span class="hl-4">verificationUri</span><span class="hl-0">}</span><span class="hl-5"> and enter </span><span class="hl-0">${</span><span class="hl-4">auth</span><span class="hl-8">.</span><span class="hl-4">userCode</span><span class="hl-0">}</span><span class="hl-5">`</span><span class="hl-1">);</span><br/><span class="hl-1">  },</span><br/><span class="hl-1">});</span>
@@ -1046,7 +1059,7 @@ already approved.</li>
 and wrapping it would defeat the one thing it is for.</p>
 <p>Per §14.3 rule 4, <code>deviceLogin</code> <strong>returns</strong> the token set rather than adopting it. See
 <a href="media/device-login.ts"><code>examples/device-login.ts</code></a>.</p>
-<h2 id="token-exchange-contractmd-§15" class="tsd-anchor-link">Token exchange (<code>axiam-sdk/node</code>, <a href="http://CONTRACT.md">CONTRACT.md</a> §15)<a href="#token-exchange-contractmd-§15" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<h2 id="token-exchange-contractmd-§15" class="tsd-anchor-link">Token exchange (<code>axiam-sdk/node</code>, CONTRACT.md §15)<a href="#token-exchange-contractmd-§15" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>RFC 8693 — a service holding a user's token exchanging it for a <em>narrower</em> one before
 calling the next service.</p>
 <pre><code class="ts"><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">exchanged</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">oidc</span><span class="hl-1">.</span><span class="hl-3">tokenExchange</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-4">subjectToken:</span><span class="hl-1"> </span><span class="hl-0">new</span><span class="hl-1"> </span><span class="hl-3">Sensitive</span><span class="hl-1">(</span><span class="hl-4">userToken</span><span class="hl-1">),</span><br/><span class="hl-1">  </span><span class="hl-4">subjectTokenType:</span><span class="hl-1"> </span><span class="hl-2">ACCESS_TOKEN_TYPE</span><span class="hl-1">, </span><span class="hl-6">// required (§15.1), no default</span><br/><span class="hl-1">  </span><span class="hl-4">scopes:</span><span class="hl-1"> [</span><span class="hl-5">&#39;orders:read&#39;</span><span class="hl-1">],</span><br/><span class="hl-1">  </span><span class="hl-4">audience:</span><span class="hl-1"> </span><span class="hl-5">&#39;orders-service&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">});</span>
@@ -1065,7 +1078,7 @@ silently re-privilege every later call this client makes. A MUST NOT, where
 <code>loginClientCredentials</code> adoption is a MAY.</li>
 </ul>
 <p>See <a href="media/token-exchange.ts"><code>examples/token-exchange.ts</code></a>.</p>
-<h3 id="external-idp-subject-tokens-contractmd-§157" class="tsd-anchor-link">External-IdP subject tokens (<a href="http://CONTRACT.md">CONTRACT.md</a> §15.7)<a href="#external-idp-subject-tokens-contractmd-§157" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<h3 id="external-idp-subject-tokens-contractmd-§157" class="tsd-anchor-link">External-IdP subject tokens (CONTRACT.md §15.7)<a href="#external-idp-subject-tokens-contractmd-§157" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <p>The same method exchanges a token minted by a <strong>trusted external IdP</strong> — a partner's
 Entra, Okta or Keycloak — for an AXIAM token scoped to what the resolved AXIAM user may
 actually do. There is no separate operation:</p>
@@ -1087,7 +1100,7 @@ exchanged again — exchanges do not compose.</li>
 </ul>
 <p>See <a href="media/external-token-exchange.ts"><code>examples/external-token-exchange.ts</code></a> and the
 operator guide, <code>docs/api/federated-token-exchange.md</code>.</p>
-<h2 id="pushed-authorization-requests-contractmd-§26" class="tsd-anchor-link">Pushed authorization requests (<code>axiam-sdk/node</code>, <a href="http://CONTRACT.md">CONTRACT.md</a> §26)<a href="#pushed-authorization-requests-contractmd-§26" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<h2 id="pushed-authorization-requests-contractmd-§26" class="tsd-anchor-link">Pushed authorization requests (<code>axiam-sdk/node</code>, CONTRACT.md §26)<a href="#pushed-authorization-requests-contractmd-§26" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>PAR (RFC 9126) moves the authorization request off the browser. Instead of
 putting <code>scope</code>, <code>redirect_uri</code>, <code>state</code> and the PKCE challenge into a URL the
 user agent carries, the client POSTs them straight to AXIAM over an
@@ -1142,7 +1155,7 @@ the RFC 7638 value this parameter wants.</p>
 makes it the one authorization parameter a client MUST NOT push; <code>openapi.json</code>
 models it on the request schema so the <em>server</em> can refuse it. A client able to
 send one is a client able to chain one pushed request into another.</p>
-<h2 id="logout-rp-initiated-and-back-channel--contractmd-§127" class="tsd-anchor-link">Logout — RP-initiated and back-channel (<code>axiam-sdk/node</code>, <a href="http://CONTRACT.md">CONTRACT.md</a> §12.7)<a href="#logout-rp-initiated-and-back-channel--contractmd-§127" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<h2 id="logout-rp-initiated-and-back-channel--contractmd-§127" class="tsd-anchor-link">Logout — RP-initiated and back-channel (<code>axiam-sdk/node</code>, CONTRACT.md §12.7)<a href="#logout-rp-initiated-and-back-channel--contractmd-§127" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p><code>logoutUrl</code> builds the redirect; <code>verifyLogoutToken</code> validates a token the OP <strong>pushed</strong> to
 your back-channel endpoint.</p>
 <pre><code class="ts"><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">url</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">oidc</span><span class="hl-1">.</span><span class="hl-3">logoutUrl</span><span class="hl-1">({ </span><span class="hl-4">idToken</span><span class="hl-1"> });</span><br/><br/><span class="hl-6">// …and at your registered backchannel_logout_uri:</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">verified</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">oidc</span><span class="hl-1">.</span><span class="hl-3">verifyLogoutToken</span><span class="hl-1">(</span><span class="hl-4">logoutToken</span><span class="hl-1">);</span><br/><span class="hl-7">if</span><span class="hl-1"> (</span><span class="hl-4">verified</span><span class="hl-1">.</span><span class="hl-4">sid</span><span class="hl-1">) {</span><br/><span class="hl-1">  </span><span class="hl-3">endSession</span><span class="hl-1">(</span><span class="hl-4">verified</span><span class="hl-1">.</span><span class="hl-4">sid</span><span class="hl-1">); </span><span class="hl-6">// that session ONLY</span><br/><span class="hl-1">}</span>
@@ -1159,7 +1172,7 @@ end. <strong>Dedup on <code>jti</code> yourself</strong> — delivery is at-leas
 arrives twice; the SDK has no durable store and an in-memory guard would silently drop a
 real second logout after a restart.</p>
 <p>See <a href="media/logout.ts"><code>examples/logout.ts</code></a>.</p>
-<h2 id="uma-20-protection-api-and-ticket-grant-contractmd-§20" class="tsd-anchor-link">UMA 2.0 — Protection API and ticket grant (<a href="http://CONTRACT.md">CONTRACT.md</a> §20)<a href="#uma-20-protection-api-and-ticket-grant-contractmd-§20" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<h2 id="uma-20-protection-api-and-ticket-grant-contractmd-§20" class="tsd-anchor-link">UMA 2.0 — Protection API and ticket grant (CONTRACT.md §20)<a href="#uma-20-protection-api-and-ticket-grant-contractmd-§20" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>The resource-server side of User-Managed Access: register what you guard, ask the
 authorization server what a caller would need, and redeem the resulting ticket.</p>
 <p>The two runnable halves are <a href="media/uma-resource-server.ts"><code>examples/uma-resource-server.ts</code></a>
@@ -1193,7 +1206,7 @@ security bug.</p>
 <code>umaRequestTicket</code>, <code>umaExchangeTicket</code> — plus the rules they enforce (a ticket is never
 retried, the RPT is never adopted, an update replaces the scope list rather than merging it)
 is documented on the generated API docs for <code>axiam-sdk/node</code>.</p>
-<h2 id="webhook-signature-verification-contractmd-§13" class="tsd-anchor-link">Webhook signature verification (<code>axiam-sdk/node</code>, <a href="http://CONTRACT.md">CONTRACT.md</a> §13)<a href="#webhook-signature-verification-contractmd-§13" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<h2 id="webhook-signature-verification-contractmd-§13" class="tsd-anchor-link">Webhook signature verification (<code>axiam-sdk/node</code>, CONTRACT.md §13)<a href="#webhook-signature-verification-contractmd-§13" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>AXIAM signs every webhook delivery with a Stripe-style signed timestamp:</p>
 <pre><code><span class="hl-2">X</span><span class="hl-1">-</span><span class="hl-4">Axiam</span><span class="hl-1">-</span><span class="hl-11">Signature</span><span class="hl-1">: </span><span class="hl-4">t</span><span class="hl-1">=&lt;</span><span class="hl-10">unix_seconds</span><span class="hl-1">&gt;,</span><span class="hl-4">v1</span><span class="hl-1">=&lt;</span><span class="hl-10">hex_lowercase_hmac</span><span class="hl-1">&gt;</span>
 </code><button>Copy</button></pre>
@@ -1218,7 +1231,146 @@ bytes by default, so capture them explicitly on the webhook route. With Express,
 like a stale one — and accepts a <code>tolerance</code> override plus a <code>now</code> injection seam for tests. A
 failure always raises the typed <code>WebhookVerifyError</code> (never a generic exception whose message
 could leak the expected signature).</p>
-<h2 id="client-quality-of-life-contractmd-§16§19" class="tsd-anchor-link">Client quality-of-life (<a href="http://CONTRACT.md">CONTRACT.md</a> §16–§19)<a href="#client-quality-of-life-contractmd-§16§19" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<h2 id="mcp-resource-server-helpers-contractmd-§28" class="tsd-anchor-link">MCP resource-server helpers (<code>axiam-sdk/middleware</code>, CONTRACT.md §28)<a href="#mcp-resource-server-helpers-contractmd-§28" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>The resource-server half of the Model Context Protocol authorization handshake: publish the
+RFC 9728 document that tells an MCP client which authorization server guards this resource,
+and put the RFC 6750 <code>WWW-Authenticate</code> challenge on the 401 that starts its discovery.</p>
+<p><strong>AXIAM is the authorization server and implements none of this.</strong> Your MCP server is the
+resource server, and this is its side. Nothing here talks to AXIAM, performs any network I/O
+or touches the SDK client's own session — all three operations are pure local computation,
+like <code>oidcBegin</code> and <code>umaParseChallenge</code>. The <em>client</em> half — parsing a challenge, fetching
+a document, deciding whether to trust the authorization server it names — is deliberately
+not in the SDK: a helper that read a 401 and acted on it would send a credential to whatever
+host the 401 asked it to.</p>
+<p><strong>It is opt-in and off by default.</strong> With <code>resourceMetadataUrl</code> unset, every guard behaves
+byte-for-byte as it did before §28 existed: no header on any response, no status changed, no
+body changed.</p>
+<h3 id="the-whole-integration" class="tsd-anchor-link">The whole integration<a href="#the-whole-integration" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<pre><code class="ts"><span class="hl-7">import</span><span class="hl-1"> </span><span class="hl-4">express</span><span class="hl-1"> </span><span class="hl-7">from</span><span class="hl-1"> </span><span class="hl-5">&#39;express&#39;</span><span class="hl-1">;</span><br/><span class="hl-7">import</span><span class="hl-1"> { </span><span class="hl-4">createVerifier</span><span class="hl-1"> } </span><span class="hl-7">from</span><span class="hl-1"> </span><span class="hl-5">&#39;axiam-sdk/node&#39;</span><span class="hl-1">;</span><br/><span class="hl-7">import</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-4">axiamMiddleware</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">protectedResourceMetadata</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">serveProtectedResourceMetadata</span><span class="hl-1">,</span><br/><span class="hl-1">} </span><span class="hl-7">from</span><span class="hl-1"> </span><span class="hl-5">&#39;axiam-sdk/middleware&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-6">// 1. Describe the resource server. Validated here, at construction — before any</span><br/><span class="hl-6">//    route exists and before any request is served.</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">metadata</span><span class="hl-1"> = </span><span class="hl-3">protectedResourceMetadata</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-4">resource:</span><span class="hl-1"> </span><span class="hl-5">&#39;https://mcp.example.com/mcp&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">authorizationServers:</span><span class="hl-1"> [</span><span class="hl-5">&#39;https://axiam.example.com&#39;</span><span class="hl-1">],</span><br/><span class="hl-1">  </span><span class="hl-4">scopesSupported:</span><span class="hl-1"> [</span><span class="hl-5">&#39;mcp:read&#39;</span><span class="hl-1">, </span><span class="hl-5">&#39;mcp:tools&#39;</span><span class="hl-1">],</span><br/><span class="hl-1">});</span><br/><br/><span class="hl-6">// 2. Configure the guard FROM that value rather than by retyping the strings —</span><br/><span class="hl-6">//    retyping is how the guard and the document come to disagree. The session</span><br/><span class="hl-6">//    is the same plain `VerifiableSession` literal §10.4&#39;s feed is attached to.</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">session</span><span class="hl-1"> = {</span><br/><span class="hl-1">  </span><span class="hl-4">jwksVerifier:</span><span class="hl-1"> </span><span class="hl-3">createVerifier</span><span class="hl-1">(</span><span class="hl-5">&#39;https://axiam.example.com&#39;</span><span class="hl-1">),</span><br/><span class="hl-1">  </span><span class="hl-4">tenantHeaderValue:</span><span class="hl-1"> </span><span class="hl-2">TENANT_UUID</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">expectedAudience:</span><span class="hl-1"> </span><span class="hl-4">metadata</span><span class="hl-1">.</span><span class="hl-4">document</span><span class="hl-1">.</span><span class="hl-4">resource</span><span class="hl-1">, </span><span class="hl-6">// https://mcp.example.com/mcp</span><br/><span class="hl-1">  </span><span class="hl-4">resourceMetadataUrl:</span><span class="hl-1"> </span><span class="hl-4">metadata</span><span class="hl-1">.</span><span class="hl-4">metadataUrl</span><span class="hl-1">,    </span><span class="hl-6">// https://mcp.example.com/.well-known/…/mcp</span><br/><span class="hl-1">};</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">app</span><span class="hl-1"> = </span><span class="hl-3">express</span><span class="hl-1">();</span><br/><span class="hl-4">app</span><span class="hl-1">.</span><span class="hl-3">use</span><span class="hl-1">(</span><span class="hl-3">axiamMiddleware</span><span class="hl-1">(</span><span class="hl-4">session</span><span class="hl-1">));</span><br/><br/><span class="hl-6">// 3. Publish the document. Passing `session` is what lets the SDK check that</span><br/><span class="hl-6">//    the three strings agree; it throws at startup if they do not.</span><br/><span class="hl-3">serveProtectedResourceMetadata</span><span class="hl-1">(</span><span class="hl-4">app</span><span class="hl-1">, </span><span class="hl-4">metadata</span><span class="hl-1">, </span><span class="hl-4">session</span><span class="hl-1">);</span><br/><br/><span class="hl-4">app</span><span class="hl-1">.</span><span class="hl-3">post</span><span class="hl-1">(</span><span class="hl-5">&#39;/mcp&#39;</span><span class="hl-1">, </span><span class="hl-4">handler</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Fastify is the same three calls — <code>axiamPlugin(session)</code> instead of <code>axiamMiddleware</code>, and
+the Fastify instance instead of the Express app. <code>serveProtectedResourceMetadata</code> takes
+either.</p>
+<p>A request with no credential now gets what it needs to go and get one:</p>
+<pre><code class="http"><span class="hl-0">HTTP</span><span class="hl-1">/</span><span class="hl-12">1.1</span><span class="hl-1"> </span><span class="hl-12">401</span><span class="hl-1"> </span><span class="hl-5">Unauthorized</span><br/><span class="hl-13">WWW-Authenticate</span><span class="hl-0">:</span><span class="hl-1"> </span><span class="hl-5">Bearer resource_metadata=&quot;https://mcp.example.com/.well-known/oauth-protected-resource/mcp&quot;</span><br/><span class="hl-13">Content-Type</span><span class="hl-0">:</span><span class="hl-1"> </span><span class="hl-5">application/json</span><br/><br/><span class="hl-1">{</span><span class="hl-14">&quot;error&quot;</span><span class="hl-1">:</span><span class="hl-5">&quot;authentication_failed&quot;</span><span class="hl-1">,</span><span class="hl-14">&quot;message&quot;</span><span class="hl-1">:</span><span class="hl-5">&quot;...&quot;</span><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<p>and the document it points at answers without a credential:</p>
+<pre><code class="json"><span class="hl-1">{</span><br/><span class="hl-1">  </span><span class="hl-14">&quot;resource&quot;</span><span class="hl-1">: </span><span class="hl-5">&quot;https://mcp.example.com/mcp&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-14">&quot;authorization_servers&quot;</span><span class="hl-1">: [</span><span class="hl-5">&quot;https://axiam.example.com&quot;</span><span class="hl-1">],</span><br/><span class="hl-1">  </span><span class="hl-14">&quot;scopes_supported&quot;</span><span class="hl-1">: [</span><span class="hl-5">&quot;mcp:read&quot;</span><span class="hl-1">, </span><span class="hl-5">&quot;mcp:tools&quot;</span><span class="hl-1">],</span><br/><span class="hl-1">  </span><span class="hl-14">&quot;bearer_methods_supported&quot;</span><span class="hl-1">: [</span><span class="hl-5">&quot;header&quot;</span><span class="hl-1">]</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<p><strong>The path is derived from the resource, not chosen.</strong> RFC 9728 §3.1 inserts
+<code>/.well-known/oauth-protected-resource</code> between the authority and the path, so
+<code>https://mcp.example.com/mcp</code> publishes at <code>/.well-known/oauth-protected-resource/mcp</code> and
+<code>https://mcp.example.com</code> at the bare well-known path. A trailing slash is carried through
+rather than trimmed — it is part of the identifier the client compares, and two resources
+that differ only by it are two resources. Exactly one route is registered; a deployment
+fronting several resources calls the helper once per resource.</p>
+<p><strong>You do not have to order the routes.</strong> Where the guard is mounted globally it exempts the
+document's path itself, from the <code>resourceMetadataUrl</code> it was configured with — which is the
+only thing that works on Fastify, where a <code>preHandler</code> hook applies to every route in its
+context no matter when it was registered.</p>
+<h3 id="announcing-yourself-obliges-you-to-check" class="tsd-anchor-link">Announcing yourself obliges you to check<a href="#announcing-yourself-obliges-you-to-check" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p><strong><code>expectedAudience</code> is mandatory once <code>resourceMetadataUrl</code> is set</strong>, and every guard
+factory refuses the configuration at construction, naming both options. A resource server
+that publishes <em>&quot;tokens for me carry this <code>aud</code>&quot;</em> and then does not check <code>aud</code> has published
+a claim it does not honour — and a token minted for a <strong>different</strong> MCP server opens it. That
+is the confusion RFC 8707 exists to prevent, so it is impossible to configure rather than
+merely discouraged:</p>
+<pre><code class="ts"><span class="hl-3">axiamMiddleware</span><span class="hl-1">({ </span><span class="hl-4">jwksVerifier</span><span class="hl-1">, </span><span class="hl-4">tenantHeaderValue</span><span class="hl-1">, </span><span class="hl-4">resourceMetadataUrl:</span><span class="hl-1"> </span><span class="hl-4">metadata</span><span class="hl-1">.</span><span class="hl-4">metadataUrl</span><span class="hl-1"> });</span><br/><span class="hl-6">// ValidationError: resourceMetadataUrl: requires expectedAudience to be set on the</span><br/><span class="hl-6">// same session (CONTRACT.md §28.5 rule 2) — …</span>
+</code><button type="button">Copy</button></pre>
+
+<p>With both set, a token carrying <code>aud: &quot;axiam:user&quot;</code> — a perfectly valid AXIAM token that
+simply was not minted for this resource — is a 401, exactly like a token minted for
+<code>https://other.example.com/mcp</code>.</p>
+<h3 id="the-403-that-asks-for-a-scope" class="tsd-anchor-link">The 403 that asks for a scope<a href="#the-403-that-asks-for-a-scope" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>One class of 403 carries a challenge, and only one: a <code>requireAccess</code>/<code>requireAccessHook</code>
+that <strong>named a scope</strong> whose decision came back <code>allowed: false</code> with <code>reasonCode: &quot;no_grant&quot;</code>.</p>
+<pre><code class="ts"><span class="hl-4">app</span><span class="hl-1">.</span><span class="hl-3">post</span><span class="hl-1">(</span><span class="hl-5">&#39;/mcp/tools&#39;</span><span class="hl-1">, </span><span class="hl-3">requireAccess</span><span class="hl-1">(</span><span class="hl-4">session</span><span class="hl-1">, </span><span class="hl-5">&#39;mcp:invoke&#39;</span><span class="hl-1">, </span><span class="hl-5">&#39;tools&#39;</span><span class="hl-1">, { </span><span class="hl-4">scope:</span><span class="hl-1"> </span><span class="hl-5">&#39;mcp:tools&#39;</span><span class="hl-1"> }), </span><span class="hl-4">handler</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<pre><code class="http"><span class="hl-0">HTTP</span><span class="hl-1">/</span><span class="hl-12">1.1</span><span class="hl-1"> </span><span class="hl-12">403</span><span class="hl-1"> </span><span class="hl-5">Forbidden</span><br/><span class="hl-13">WWW-Authenticate</span><span class="hl-0">:</span><span class="hl-1"> </span><span class="hl-5">Bearer error=&quot;insufficient_scope&quot;, scope=&quot;mcp:tools&quot;, resource_metadata=&quot;https://mcp.example.com/.well-known/oauth-protected-resource/mcp&quot;</span><br/><span class="hl-13">Content-Type</span><span class="hl-0">:</span><span class="hl-1"> </span><span class="hl-5">application/json</span><br/><br/><span class="hl-1">{</span><span class="hl-14">&quot;error&quot;</span><span class="hl-1">:</span><span class="hl-5">&quot;authorization_denied&quot;</span><span class="hl-1">,</span><span class="hl-14">&quot;message&quot;</span><span class="hl-1">:</span><span class="hl-5">&quot;...&quot;</span><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<p><code>insufficient_scope</code> is in the header and <code>authorization_denied</code> is in the body, and they are
+not two spellings of one thing: the body is the §11 error taxonomy, unchanged, and the header
+is the RFC 6750 hint. The scope named is the one the route asked for, <strong>verbatim</strong> — never
+synthesised, never derived from <code>action</code>/<code>resource</code>, never substituted from the document's
+<code>scopes_supported</code>, because where a deployment's AXIAM resource-scope names and its OAuth
+scope names differ, that mapping is the operator's decision and the SDK cannot see it.</p>
+<p>Every other 403 carries no header at all: a <code>requireAccess</code> with no <code>scope</code> argument, a
+<code>requireRole</code> failure, a CSRF refusal, and — the one that matters — a decision whose
+<code>reasonCode</code> is <code>denied_by_rule</code>. <code>no_grant</code> means <em>ask for more</em>, which is what a challenge
+invites a client to do; <code>denied_by_rule</code> means <em>an administrator has already decided</em>, and
+challenging on it would send an MCP client all the way around the authorization loop to
+arrive at the identical 403. An absent or unrecognised <code>reasonCode</code> is not eligible either.</p>
+<p>Where a route also carries a <code>umaChallenge</code> (§20.3), the UMA challenge wins: it is per-route
+opt-in and carries a live ticket for the exact authority just refused, where this one is the
+generic hint. Only one <code>WWW-Authenticate</code> value is ever emitted.</p>
+<h3 id="the-challenge-says-only-what-rfc-6750-can-say" class="tsd-anchor-link">The challenge says only what RFC 6750 can say<a href="#the-challenge-says-only-what-rfc-6750-can-say" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>Expired, not yet valid, wrong tenant, wrong audience, bad signature, <code>alg</code> confusion, a <code>cnf</code>
+the guard could not satisfy, a <code>sid</code> in the §10.4 revocation feed — all of them are
+<code>invalid_token</code>, indistinguishably. The SDK's own guard never emits an <code>error_description</code>,
+and adds nothing to the response that tells them apart. It is a 401 to an unauthenticated
+stranger: every distinction it draws is an oracle.</p>
+<p><code>bearerChallenge</code> exists for the challenge you build yourself, for your own 400, and it takes
+<code>errorDescription</code> for that reason alone. It <strong>refuses rather than escapes</strong>: RFC 6750
+restricts every parameter to a character set that cannot contain <code>&quot;</code> or ``, so a value
+needing an escape is a value that does not belong in a challenge.</p>
+<pre><code class="ts"><span class="hl-3">bearerChallenge</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-4">resourceMetadataUrl:</span><span class="hl-1"> </span><span class="hl-4">metadata</span><span class="hl-1">.</span><span class="hl-4">metadataUrl</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">error:</span><span class="hl-1"> </span><span class="hl-5">&#39;invalid_request&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">errorDescription:</span><span class="hl-1"> </span><span class="hl-5">&#39;The access token is malformed&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">scope:</span><span class="hl-1"> </span><span class="hl-5">&#39;mcp:read mcp:tools&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">});</span><br/><span class="hl-6">// Bearer error=&quot;invalid_request&quot;, error_description=&quot;The access token is malformed&quot;,</span><br/><span class="hl-6">//   scope=&quot;mcp:read mcp:tools&quot;, resource_metadata=&quot;https://mcp.example.com/.well-known/…/mcp&quot;</span><br/><br/><span class="hl-3">bearerChallenge</span><span class="hl-1">({ </span><span class="hl-4">resourceMetadataUrl:</span><span class="hl-1"> </span><span class="hl-4">metadata</span><span class="hl-1">.</span><span class="hl-4">metadataUrl</span><span class="hl-1">, </span><span class="hl-4">errorDescription:</span><span class="hl-1"> </span><span class="hl-5">&#39;he said &quot;no&quot;&#39;</span><span class="hl-1"> });</span><br/><span class="hl-6">// ValidationError — never a challenge containing \&quot;</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="validation-refuses-it-never-repairs" class="tsd-anchor-link">Validation refuses; it never repairs<a href="#validation-refuses-it-never-repairs" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>Every §28.2 rule is checked by <code>protectedResourceMetadata</code> itself, and a violation throws
+<code>ValidationError</code> (§2's taxonomy, unchanged — §28 adds no error type). Nothing is normalised,
+trimmed, lowercased or re-encoded to make it pass: that would publish a document describing a
+resource server that does not exist. The rules, in one list:</p>
+<table>
+<thead>
+<tr>
+<th>Member</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>resource</code></td>
+<td>absolute URI with a scheme and an authority, <strong>no query and no fragment</strong>; a trailing slash is significant</td>
+</tr>
+<tr>
+<td>any URL</td>
+<td><code>https</code>, except on <code>127.0.0.1</code>, <code>[::1]</code> or <code>localhost</code> — there is no flag, env var or debug build that widens this</td>
+</tr>
+<tr>
+<td><code>authorizationServers</code></td>
+<td>at least one entry, each an issuer <strong>verbatim</strong> (no <code>?tenant_id=</code>), no query, no fragment, no duplicates</td>
+</tr>
+<tr>
+<td><code>scopesSupported</code></td>
+<td>RFC 6749 <code>NQCHAR</code> tokens, order preserved, no duplicates; an empty list <strong>omits the member</strong></td>
+</tr>
+<tr>
+<td><code>bearerMethodsSupported</code></td>
+<td>exactly <code>[&quot;header&quot;]</code> — this SDK's guard reads a bearer credential from the <code>Authorization</code> header alone</td>
+</tr>
+<tr>
+<td><code>resourceDocumentation</code></td>
+<td>an absolute URL, query and fragment permitted; omitted when absent, never <code>null</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Nothing in the document may come from a request.</strong> <code>resource</code> and <code>authorizationServers</code>
+are configuration, and this SDK offers no option to build either from the <code>Host</code> header, the
+<code>Forwarded</code>/<code>X-Forwarded-*</code> family or the request URL. A document assembled from the request
+is a document an attacker can point at an authorization server of their choosing — the whole
+handshake redirected with one header.</p>
+<p>Nothing in §28 is wrapped in <code>Sensitive&lt;T&gt;</code>, and that is a rule rather than an omission: the
+document is published unauthenticated to the world and the challenge goes to a caller who has
+just failed to authenticate, so both must stay readable. The corollary is the one that
+matters — <strong>no part of the presented credential reaches either of them</strong>, in any parameter,
+any header, any body or any log line the guard writes on the 401 path.</p>
+<h2 id="client-quality-of-life-contractmd-§16§19" class="tsd-anchor-link">Client quality-of-life (CONTRACT.md §16–§19)<a href="#client-quality-of-life-contractmd-§16§19" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <h3 id="retry-policy-§16" class="tsd-anchor-link">Retry policy (§16)<a href="#retry-policy-§16" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <p>Read-only authorization checks — <code>checkAccess</code>, <code>can</code>, <code>batchCheck</code> — retry transient
 failures under the contract's normative table: <strong>3 attempts</strong> (1 initial + 2 retries),
@@ -1280,7 +1432,7 @@ identically — asymmetric caching would leak which outcome occurred through lat
 Failures are never memoized: caching a transport error as a deny would turn a blip into a
 TTL-long outage. The memo is cleared on <code>login</code>, <code>verifyMfa</code>, <code>refresh</code> and <code>logout</code>, since
 entries are keyed by subject rather than by session.</p>
-<h2 id="management-api-contractmd-§27" class="tsd-anchor-link">Management API (<a href="http://CONTRACT.md">CONTRACT.md</a> §27)<a href="#management-api-contractmd-§27" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<h2 id="management-api-contractmd-§27" class="tsd-anchor-link">Management API (CONTRACT.md §27)<a href="#management-api-contractmd-§27" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>Everything above assumes a populated tenant. <code>login</code> signs a user in,
 <code>checkAccess</code> asks about a resource, <code>verifyWebhook</code> checks a delivery signature — and
 none of them can create the user, declare the resource or register the webhook. The
@@ -1415,7 +1567,7 @@ re-vendoring <code>management-registry.json</code> or <code>openapi.json</code>:
 </code><button type="button">Copy</button></pre>
 
 <h2 id="error-handling" class="tsd-anchor-link">Error handling<a href="#error-handling" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
-<p>Every persona throws the three <a href="http://CONTRACT.md">CONTRACT.md</a> §2 error types — <code>AuthError</code>, <code>AuthzError</code>,
+<p>Every persona throws the three CONTRACT.md §2 error types — <code>AuthError</code>, <code>AuthzError</code>,
 <code>NetworkError</code> — plus one <code>AuthError</code> <strong>sub-type</strong>, <code>OAuthProtocolError</code>, for RFC 6749
 protocol errors from <code>/oauth2/*</code> (its <code>message</code> is always <code>&quot;&lt;error&gt;: &lt;error_description&gt;&quot;</code>,
 and <code>instanceof AuthError</code> still matches it):</p>
@@ -1426,16 +1578,16 @@ and <code>instanceof AuthError</code> still matches it):</p>
 <ul>
 <li>Token-carrying values are wrapped in <code>Sensitive&lt;T&gt;</code> — <code>toString()</code>/<code>toJSON()</code>/
 <code>util.inspect</code> all redact to <code>[SENSITIVE]</code>; the raw value is only reachable via an
-explicit accessor (<a href="http://CONTRACT.md">CONTRACT.md</a> §7).</li>
+explicit accessor (CONTRACT.md §7).</li>
 <li>Strict TLS verification is always on; the only server-trust escape hatch is the
-constructor's <code>customCa</code> option for self-signed development environments (<a href="http://CONTRACT.md">CONTRACT.md</a> §6).</li>
+constructor's <code>customCa</code> option for self-signed development environments (CONTRACT.md §6).</li>
 <li>Optional mutual TLS (mTLS): a PEM <code>clientCert</code>/<code>clientKey</code> client identity (Node only) is
-presented on both REST and gRPC without ever relaxing server verification (<a href="http://CONTRACT.md">CONTRACT.md</a> §6.1).</li>
+presented on both REST and gRPC without ever relaxing server verification (CONTRACT.md §6.1).</li>
 <li>AMQP messages are HMAC-SHA256 verified before your handler ever sees them; verification
-failures are nacked without requeue (<a href="http://CONTRACT.md">CONTRACT.md</a> §8).</li>
+failures are nacked without requeue (CONTRACT.md §8).</li>
 <li>The OIDC relying-party flow is PKCE <strong>S256</strong>-only (<code>plain</code> is not implemented), ID tokens are
 <code>EdDSA</code>-only and validated on every exchange with no opt-out, and login state
-(<code>state</code>/<code>nonce</code>/<code>code_verifier</code>) is never stored inside the SDK (<a href="http://CONTRACT.md">CONTRACT.md</a> §12).</li>
+(<code>state</code>/<code>nonce</code>/<code>code_verifier</code>) is never stored inside the SDK (CONTRACT.md §12).</li>
 </ul>
 <h2 id="release-versioning" class="tsd-anchor-link">Release / versioning<a href="#release-versioning" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>Tagged releases follow the plain <code>vX.Y.Z</code> convention (e.g. <code>v1.0.0</code>). CI runs the full
@@ -1566,6 +1718,14 @@ the TypeDoc API reference to this repo's GitHub Pages site.</p>
 <li><a href="#making-a-denial-actionable-"><span>Making a denial actionable ()</span></a></li>
 <li><a href="#consuming-the-challenge-"><span>Consuming the challenge ()</span></a></li></ul></li>
 <li><a href="#webhook-signature-verification-contractmd-§13"><span>Webhook signature verification (, <wbr/>CONTRACT.md §13)</span></a></li>
+<li><a href="#mcp-resource-server-helpers-contractmd-§28"><span>MCP resource-<wbr/>server helpers (, <wbr/>CONTRACT.md §28)</span></a></li>
+<li>
+<ul>
+<li><a href="#the-whole-integration"><span>The whole integration</span></a></li>
+<li><a href="#announcing-yourself-obliges-you-to-check"><span>Announcing yourself obliges you to check</span></a></li>
+<li><a href="#the-403-that-asks-for-a-scope"><span>The 403 that asks for a scope</span></a></li>
+<li><a href="#the-challenge-says-only-what-rfc-6750-can-say"><span>The challenge says only what <wbr/>RFC 6750 can say</span></a></li>
+<li><a href="#validation-refuses-it-never-repairs"><span>Validation refuses; it never repairs</span></a></li></ul></li>
 <li><a href="#client-quality-of-life-contractmd-§16§19"><span>Client quality-<wbr/>of-<wbr/>life (<wbr/>CONTRACT.md §16–§19)</span></a></li>
 <li>
 <ul>
@@ -1586,7 +1746,7 @@ the TypeDoc API reference to this repo's GitHub Pages site.</p>
 <li><a href="#building-from-source"><span>Building from source</span></a></li>
 <li><a href="#license"><span>License</span></a></li></ul></div></details></div>
 <div class="site-menu">
-<nav class="tsd-navigation"><a href="modules.html">AXIAM TypeScript SDK</a>
+<nav class="tsd-navigation"><a href="modules.html">AXIAM TypeScript SDK - v1.0.0-beta16</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
 <li>Loading...</li></ul></nav></div></div></div><footer>
 <p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>

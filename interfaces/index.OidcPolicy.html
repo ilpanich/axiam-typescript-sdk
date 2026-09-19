@@ -1,5 +1,5 @@
-<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>OidcPolicy | AXIAM TypeScript SDK</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
-<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK</a>
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>OidcPolicy | AXIAM TypeScript SDK - v1.0.0-beta16</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK - v1.0.0-beta16</a>
 <div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
 <ul role="listbox" id="tsd-search-results"></ul>
 <div id="tsd-search-status" aria-live="polite" aria-atomic="true">
@@ -12,27 +12,46 @@
 <li><a href="" aria-current="page">OidcPolicy</a></li></ul>
 <h1>Interface OidcPolicy</h1></div>
 <section class="tsd-panel tsd-comment">
-<div class="tsd-comment tsd-typography"><p>OpenID Connect surface controls (X7 G8, plan §4.6/§4.8).</p>
-<p>Two settings that are not password rules, and are here because this is the
+<div class="tsd-comment tsd-typography"><p>OpenID Connect surface controls (X7 G8, plan §4.6/§4.8; T21.4).</p>
+<p>Settings that are not password rules, here because this is the
 org-baseline-plus-tenant-override surface every other per-tenant control
-lives on. They are also the two settings in this model that are <em>not</em> of
-the same kind as each other, so it is worth saying which is which:</p>
+lives on. They are not all of the same kind as each other, and which is
+which is the whole of what [<code>validate_tenant_override</code>] and
+[<code>clamp_overrides_to_org</code>] read, so it is set out rather than inferred.</p>
+<p><strong>Ordered</strong> — a tenant may be stricter than its organization and never
+more permissive:</p>
 <ul>
-<li>[<code>Self::sensitive_scopes_enabled</code>] <strong>is</strong> ordered. Releasing personal
-data is the less-restrictive direction, so it is validated disable-only —
-the mirror image of <code>mfa_enforced</code> — and a tenant can turn its
-organization's decision off but never on. * [<code>Self::default_locale</code>] is
-<strong>not</strong> ordered, and no ordering is invented for it. A language is a
-presentation preference; there is no sense in which Italian is stricter
-than French. [<code>validate_tenant_override</code>] therefore does not check it and
-[<code>clamp_overrides_to_org</code>] never clears it. The model's rule is &quot;a tenant
-may only be more restrictive&quot;, which binds every field that <em>has</em> a
-restrictiveness; a field that has none cannot violate it.</li>
+<li>[<code>Self::sensitive_scopes_enabled</code>], validated <strong>disable-only</strong> — the
+mirror image of <code>mfa_enforced</code>, because releasing personal data is the
+less-restrictive direction, so a tenant can turn its organization's
+decision off but never on. * [<code>Self::dynamic_registration</code>], on the ladder
+<code>disabled</code> → <code>initial_access_token</code> → <code>anonymous</code>: a tenant may move down
+it and never up. * [<code>Self::dcr_max_clients</code>] and
+[<code>Self::dcr_unused_client_ttl_days</code>], on the ordinary <code>tenant &lt;= org</code> rule
+— with the wrinkle that <code>0</code> on the second means <em>never sweep</em>, which is
+the longest window of all and is handled by [<code>dcr_ttl_strictness</code>].</li>
 </ul>
-</div></section>
-<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">OidcPolicy</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#default_locale">default_locale</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#sensitive_scopes_enabled">sensitive_scopes_enabled</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
+<p><strong>Not ordered</strong>, therefore never validated against the baseline and never
+clamped:</p>
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/management/models.ts#L2227">src/management/models.ts:2227</a></li></ul></aside>
+<li>[<code>Self::default_locale</code>]. A language is a presentation preference; there
+is no sense in which Italian is stricter than French. *
+[<code>Self::dcr_allowed_scopes</code>], [<code>Self::dcr_allowed_redirect_hosts</code>] and
+[<code>Self::external_client_allowed_resources</code>]. Each names per-tenant
+resources — <em>this</em> tenant's MCP servers, <em>this</em> tenant's callback hosts —
+and there is no sense in which one such list is stricter than another. A
+subset rule would force an organization to enumerate every tenant's
+resource servers in its own baseline before any tenant could name one.</li>
+</ul>
+<p>The model's rule is &quot;a tenant may only be more restrictive&quot;, which binds
+every field that <em>has</em> a restrictiveness; a field that has none cannot
+violate it.</p>
+<p>One cross-field interlock spans both groups and is checked on the resolved
+policy rather than on either input: see [<code>validate_dcr_policy</code>].</p>
+</div></section>
+<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">OidcPolicy</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#cimd">cimd</a><span class="tsd-signature-symbol">?:</span> <a href="index.CimdPolicy.html" class="tsd-signature-type tsd-kind-interface">CimdPolicy</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#dcr_allowed_redirect_hosts">dcr_allowed_redirect_hosts</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#dcr_allowed_scopes">dcr_allowed_scopes</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#dcr_max_clients">dcr_max_clients</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#dcr_unused_client_ttl_days">dcr_unused_client_ttl_days</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#default_locale">default_locale</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#dynamic_registration">dynamic_registration</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#external_client_allowed_resources">external_client_allowed_resources</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#sensitive_scopes_enabled">sensitive_scopes_enabled</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/management/models.ts#L2526">src/management/models.ts:2526</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -40,12 +59,89 @@ restrictiveness; a field that has none cannot violate it.</li>
 <div class="tsd-accordion-details">
 <section class="tsd-index-section">
 <h3 class="tsd-index-heading tsd-anchor-link" id="properties">Properties<a href="#properties" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<div class="tsd-index-list"><a href="#default_locale" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>default_<wbr/>locale?</span></a>
+<div class="tsd-index-list"><a href="#cimd" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>cimd?</span></a>
+<a href="#dcr_allowed_redirect_hosts" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>dcr_<wbr/>allowed_<wbr/>redirect_<wbr/>hosts?</span></a>
+<a href="#dcr_allowed_scopes" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>dcr_<wbr/>allowed_<wbr/>scopes?</span></a>
+<a href="#dcr_max_clients" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>dcr_<wbr/>max_<wbr/>clients?</span></a>
+<a href="#dcr_unused_client_ttl_days" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>dcr_<wbr/>unused_<wbr/>client_<wbr/>ttl_<wbr/>days?</span></a>
+<a href="#default_locale" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>default_<wbr/>locale?</span></a>
+<a href="#dynamic_registration" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>dynamic_<wbr/>registration?</span></a>
+<a href="#external_client_allowed_resources" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>external_<wbr/>client_<wbr/>allowed_<wbr/>resources?</span></a>
 <a href="#sensitive_scopes_enabled" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>sensitive_<wbr/>scopes_<wbr/>enabled</span></a>
 </div></section></div></details></section></section>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="properties-1">Properties<a href="#properties-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="cimd"><code class="tsd-tag">Optional</code><span>cimd</span><a href="#cimd" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">cimd</span><span class="tsd-signature-symbol">?:</span> <a href="index.CimdPolicy.html" class="tsd-signature-type tsd-kind-interface">CimdPolicy</a></div>
+<div class="tsd-comment tsd-typography"><p>T21.5 — whether a URL-shaped <code>client_id</code> is resolved by fetching the
+document it names, and on what terms. See [<code>CimdPolicy</code>]; off unless
+somebody turns it on (I1).</p>
+<p>Nested, and therefore inherited or overridden <strong>whole</strong>: the fields are
+terms of one decision, and a half-merged posture is one neither the
+organization nor the tenant wrote.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/management/models.ts#L2536">src/management/models.ts:2536</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="dcr_allowed_redirect_hosts"><code class="tsd-tag">Optional</code><span>dcr_<wbr/>allowed_<wbr/>redirect_<wbr/>hosts</span><a href="#dcr_allowed_redirect_hosts" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">dcr_allowed_redirect_hosts</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></div>
+<div class="tsd-comment tsd-typography"><p>T21.4 — hosts a self-registered client's <code>redirect_uris</code> may point at, as
+globs (<code>*.example.com</code>, or <code>*</code> for any). The loopback hosts (<code>127.0.0.1</code>,
+<code>[::1]</code>, <code>localhost</code>) are always allowed whatever this says, because RFC
+8252 §7.3 is how every desktop MCP client receives its callback and a
+tenant that forbade them would have turned registration on for nobody.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/management/models.ts#L2544">src/management/models.ts:2544</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="dcr_allowed_scopes"><code class="tsd-tag">Optional</code><span>dcr_<wbr/>allowed_<wbr/>scopes</span><a href="#dcr_allowed_scopes" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">dcr_allowed_scopes</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></div>
+<div class="tsd-comment tsd-typography"><p>T21.4 — the scopes a self-registered client may ask for. A <code>scope</code> a
+registration names that is not on this list is <code>invalid_client_metadata</code>;
+an empty list means a self-registered client gets no scopes at all, which
+is the honest default for a tenant that has turned registration on without
+deciding what it grants.</p>
+<p>May not contain <code>address</code> or <code>phone</code> — see this module's
+[<code>sensitive_scope_in_dcr_list</code>].</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/management/models.ts#L2555">src/management/models.ts:2555</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="dcr_max_clients"><code class="tsd-tag">Optional</code><span>dcr_<wbr/>max_<wbr/>clients</span><a href="#dcr_max_clients" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">dcr_max_clients</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
+<div class="tsd-comment tsd-typography"><p>T21.4 — how many externally registered clients this tenant may hold. See
+[<code>DEFAULT_DCR_MAX_CLIENTS</code>].</p>
+<p><strong>Counted once per mechanism, against the same number</strong> (T21.8):
+<code>managed_by: dcr</code> rows and <code>managed_by: cimd</code> rows each have this many. So
+a tenant running both cannot have shadow rows materialised from documents
+exhaust the allowance for self-registration, or the reverse. The CIMD
+count is checked <em>before</em> the document is fetched, so a tenant at its
+ceiling is not an outbound amplifier either. It keeps its <code>dcr_</code> name
+because dynamic registration defined it, on the same precedent as
+[<code>Self::dcr_allowed_scopes</code>].</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/management/models.ts#L2569">src/management/models.ts:2569</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="dcr_unused_client_ttl_days"><code class="tsd-tag">Optional</code><span>dcr_<wbr/>unused_<wbr/>client_<wbr/>ttl_<wbr/>days</span><a href="#dcr_unused_client_ttl_days" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">dcr_unused_client_ttl_days</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
+<div class="tsd-comment tsd-typography"><p>T21.4 — how long an externally registered client survives without being
+used. See [<code>DEFAULT_DCR_UNUSED_CLIENT_TTL_DAYS</code>]. <code>0</code> disables the sweep
+for this tenant, which an operator who prunes out of band may legitimately
+want.</p>
+<p><strong>Two sweeps read it, over different clocks</strong> (T21.8). A <code>managed_by: dcr</code>
+row is measured from its last authorization, falling back to when it was
+registered. A <code>managed_by: cimd</code> row is measured from the last time its
+document was <em>presented</em>, which every authorize, token and PAR request
+moves — so a document in daily use is never swept however old its
+registration is, and one nobody has presented since the window is, and
+re-materialises on the next request if it is still published. Like the
+ceiling, it keeps its <code>dcr_</code> name.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/management/models.ts#L2585">src/management/models.ts:2585</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="default_locale"><code class="tsd-tag">Optional</code><span>default_<wbr/>locale</span><a href="#default_locale" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">default_locale</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></div>
@@ -61,7 +157,33 @@ lives in <code>axiam-oauth2</code>, four layers above this crate, and the crate
 layering points inward.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/management/models.ts#L2242">src/management/models.ts:2242</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/management/models.ts#L2600">src/management/models.ts:2600</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="dynamic_registration"><code class="tsd-tag">Optional</code><span>dynamic_<wbr/>registration</span><a href="#dynamic_registration" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">dynamic_registration</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
+<div class="tsd-comment tsd-typography"><p>T21.4 — whether a client may register itself (RFC 7591), and on what
+terms. <code>disabled</code> unless somebody says otherwise (I1).</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/management/models.ts#L2605">src/management/models.ts:2605</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="external_client_allowed_resources"><code class="tsd-tag">Optional</code><span>external_<wbr/>client_<wbr/>allowed_<wbr/>resources</span><a href="#external_client_allowed_resources" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">external_client_allowed_resources</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></div>
+<div class="tsd-comment tsd-typography"><p><strong>D3</strong> — the audiences an externally registered client may address.</p>
+<p>The single most important field on this policy, and the reason the
+settings handler refuses <code>dynamic_registration: anonymous</code> while it is
+empty. A client an unrelated party registered cannot declare its own
+<code>allowed_resources</code>; it inherits this list verbatim, so what a stranger
+can mint a token <em>for</em> is a decision the tenant took in advance rather
+than one the registration request makes.</p>
+<p>Empty means an externally registered client can obtain only today's
+<code>axiam:user</code> tokens — which AXIAM's own APIs accept. That is why the
+interlock exists: the empty list is not a safe default for an <em>open</em>
+registration endpoint, it is the most dangerous one.</p>
+<p>Shared with T5 (CIMD), which inherits the same list for the same reason.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/management/models.ts#L2623">src/management/models.ts:2623</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="sensitive_scopes_enabled"><span>sensitive_<wbr/>scopes_<wbr/>enabled</span><a href="#sensitive_scopes_enabled" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">sensitive_scopes_enabled</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
@@ -79,7 +201,7 @@ still has to have consented. It is the first of four gates, and it is the
 only one an operator can close for everybody at once.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/3085c216835585f8af2e280b3426bfadfa2998e6/src/management/models.ts#L2259">src/management/models.ts:2259</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/management/models.ts#L2640">src/management/models.ts:2640</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -96,9 +218,9 @@ only one an operator can close for everybody at once.</p>
 <h3>On This Page</h3></summary>
 <div class="tsd-accordion-details">
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Properties</summary>
-<div><a href="#default_locale"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>default_<wbr/>locale</span></a><a href="#sensitive_scopes_enabled"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>sensitive_<wbr/>scopes_<wbr/>enabled</span></a></div></details></div></details></div>
+<div><a href="#cimd"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>cimd</span></a><a href="#dcr_allowed_redirect_hosts"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>dcr_<wbr/>allowed_<wbr/>redirect_<wbr/>hosts</span></a><a href="#dcr_allowed_scopes"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>dcr_<wbr/>allowed_<wbr/>scopes</span></a><a href="#dcr_max_clients"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>dcr_<wbr/>max_<wbr/>clients</span></a><a href="#dcr_unused_client_ttl_days"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>dcr_<wbr/>unused_<wbr/>client_<wbr/>ttl_<wbr/>days</span></a><a href="#default_locale"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>default_<wbr/>locale</span></a><a href="#dynamic_registration"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>dynamic_<wbr/>registration</span></a><a href="#external_client_allowed_resources"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>external_<wbr/>client_<wbr/>allowed_<wbr/>resources</span></a><a href="#sensitive_scopes_enabled"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>sensitive_<wbr/>scopes_<wbr/>enabled</span></a></div></details></div></details></div>
 <div class="site-menu">
-<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK</a>
+<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK - v1.0.0-beta16</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
 <li>Loading...</li></ul></nav></div></div></div><footer>
 <p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>
