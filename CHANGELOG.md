@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-beta16] - 2026-09-19
+
 ### Added
+
+- MCP resource-server helpers (CONTRACT.md §28, contract 1.48)
 
 - MCP resource-server helpers — RFC 9728 protected-resource metadata and the RFC 6750
   bearer challenge (CONTRACT.md §28, contract 1.48)
@@ -123,6 +127,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and a schedule: F-28-01 below.**
 
 ### Changed
+
+- Re-sync CONTRACT.md 1.50 and management-registry.json from axiam main @ da94e1d04
+
+- F-28-01 — re-sync CONTRACT.md 1.49, openapi.json and management-registry.json from axiam main @ e4c62180e
+
+- Record the §28.3 Content-Type erratum's acceptance and F-28-01 (T21.9 T9d)
+
+- Stop markdown-it linkifying "CONTRACT.md" into a dead link
+
+- Report the current release in the npm badge, not npm's `latest`
+
+- Label the published API reference with its release version
 
 - **Breaking — `CreateRegistrationTokenResponse.initial_access_token` is now
   `Sensitive<string>` (contract 1.50, CONTRACT.md §27.5).** The field was a plain
