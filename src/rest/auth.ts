@@ -406,11 +406,18 @@ export async function authenticateDevice(client: AxiamClient): Promise<DeviceTok
         '(CONTRACT.md §6.1 rule 7); this client has neither',
     );
   }
-  // §17.1 rule 9: this is a credential change, exactly as login() is.
+  // §17.1 rule 9: this is a credential change, exactly as login() is. The
+  // memo MAY be cleared unconditionally even on a refusal below (§17 rule
+  // 8: dropping entries is always safe) — CONTRACT 1.52 N4.2 (C-12) only
+  // protects the CREDENTIAL, not the memo.
   client.decisionMemo.clear();
-  // A fresh call gets a fresh credential — this client's PREVIOUS device
-  // token (if any) must not linger and be sent alongside this attempt, or a
-  // failure below would leave a stale one still adopted.
+  // CONTRACT 1.52 N4.2 (C-12): "A refused or malformed device login changes
+  // no client state. The previous credential ... [is] left as [it was]."
+  // Cleared only for the DURATION of this attempt — this client's PREVIOUS
+  // device token (if any) must not linger and be sent alongside THIS
+  // attempt (§6.1 rule 11 item 1), but a failure below restores it rather
+  // than leaving this client with no credential at all.
+  const previousDeviceToken = client.session.deviceAccessToken;
   client.session.deviceAccessToken = undefined;
 
   try {
@@ -445,6 +452,10 @@ export async function authenticateDevice(client: AxiamClient): Promise<DeviceTok
     // case this comment used to (wrongly) say could not happen. A 429 maps
     // to NetworkError through the same §2 mapping every other REST call
     // uses.
+    // CONTRACT 1.52 N4.2 (C-12): this attempt failed, so it changes no
+    // client state beyond the memo above — restore whatever credential this
+    // client held before it, rather than leaving it with none.
+    client.session.deviceAccessToken = previousDeviceToken;
     if (err instanceof AxiamError) throw err;
     const status = extractAxiosStatus(err);
     if (status !== undefined) {

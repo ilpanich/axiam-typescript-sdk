@@ -78,6 +78,18 @@ in the `axiam` repository, task C-2). Ported from the reference implementation,
 
 ### Fixed
 
+- **A refused re-authentication over `authenticateDevice()` no longer drops the previously
+  adopted device credential** (CONTRACT.md §6.1 rule 11, CONTRACT 1.52 N4.2, C-12). Found
+  while auditing this SDK against every C-12 rule, not in the review's own findings list.
+  `authenticateDevice()` cleared `session.deviceAccessToken` unconditionally before
+  issuing the POST, so that a stale device credential would not ride along on the new
+  attempt's own request — correct on its own, but the code never restored it when the
+  attempt failed, so a client re-authenticating into a refusal (e.g. a revoked
+  certificate) was left with **no** credential instead of the one it already had. The
+  previous token is now held locally and restored in the `catch` branch, so a refused or
+  malformed device login changes no client state beyond the §17 decision memo (which §17
+  rule 8 always allows dropping).
+
 - **`SubjectAltName` refuses neither/both of its keys, client-side, before any request**
   (CONTRACT.md §27.13, CONTRACT 1.52 N3, C-12). `SubjectAltName`'s externally-tagged
   `{"dns": …} | {"ip": …}` union type does not itself stop a value built up field-by-field

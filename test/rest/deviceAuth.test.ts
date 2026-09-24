@@ -331,6 +331,73 @@ describe('CONTRACT 1.52 N4.5 (C-12) — a 401 on the device POST itself is never
   });
 });
 
+// CONTRACT 1.52 N4.2 (C-12): "A refused or malformed device login changes
+// no client state. The previous credential, the cookie jar and the
+// acting-tenant gate are left as they were." Before this fix,
+// authenticateDevice() cleared session.deviceAccessToken UNCONDITIONALLY
+// before issuing the POST (to keep a stale device token off the new
+// attempt's own wire request, satisfying N4.1) — but never restored it when
+// the attempt failed, so a device client that already held a working
+// credential and re-authenticated into a refusal was left with NO
+// credential at all instead of the one it had.
+describe('CONTRACT 1.52 N4.2 (C-12) — a refused re-authentication leaves the previous device credential held', () => {
+  it('a second, refused authenticateDevice() call leaves the first token adopted', async () => {
+    currentToken = deviceToken();
+    const firstToken = currentToken;
+    const client = deviceClient();
+    await client.authenticateDevice();
+
+    server.use(
+      http.post(`${BASE_URL}/api/v1/auth/device`, () => {
+        deviceLoginCalls += 1;
+        return HttpResponse.json({ error: 'authentication_failed', message: 'certificate revoked' }, { status: 401 });
+      }),
+    );
+    await expect(client.authenticateDevice()).rejects.toThrow(AuthError);
+
+    // The FIRST token is still the client's credential — a later call still
+    // carries it, exactly as if the refused re-authentication had never
+    // been attempted.
+    await client.management.serviceAccounts.list();
+    const req = captured.at(-1)!;
+    expect(req.headers.get('authorization')).toBe(`Bearer ${firstToken}`);
+  });
+
+  it('the refused re-authentication attempt itself does not carry the stale first token (N4.1 unaffected)', async () => {
+    currentToken = deviceToken();
+    const firstToken = currentToken;
+    const client = deviceClient();
+    await client.authenticateDevice();
+
+    server.use(
+      http.post(`${BASE_URL}/api/v1/auth/device`, () => {
+        deviceLoginCalls += 1;
+        return HttpResponse.json({ error: 'authentication_failed', message: 'certificate revoked' }, { status: 401 });
+      }),
+    );
+    await expect(client.authenticateDevice()).rejects.toThrow(AuthError);
+
+    const secondAttempt = captured.at(-1)!;
+    expect(secondAttempt.headers.get('authorization')).not.toBe(`Bearer ${firstToken}`);
+  });
+
+  // I4 twin: a SUCCESSFUL re-authentication still replaces the credential
+  // with the new one, exactly as before this fix.
+  it('twin (I4): a successful re-authentication still replaces the credential with the new token', async () => {
+    currentToken = deviceToken();
+    const client = deviceClient();
+    await client.authenticateDevice();
+
+    currentToken = deviceToken();
+    const secondToken = currentToken;
+    await client.authenticateDevice();
+
+    await client.management.serviceAccounts.list();
+    const req = captured.at(-1)!;
+    expect(req.headers.get('authorization')).toBe(`Bearer ${secondToken}`);
+  });
+});
+
 describe('§6.1 rule 8 — a 429 is not an authentication failure and is not retried', () => {
   it('a rate-limited device login maps to NetworkError, called exactly once', async () => {
     server.use(
