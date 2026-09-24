@@ -78,6 +78,15 @@ in the `axiam` repository, task C-2). Ported from the reference implementation,
 
 ### Fixed
 
+- **An SSO/federation completion resets the acting-tenant gate** (CONTRACT.md §5.2 rule 1,
+  C-12 question 5). `OidcClient.ssoComplete`, `.ssoCompleteOauth2` and `.ssoCompleteHandoff`
+  establish a new session, possibly as a different principal, and carry no `LoginUserInfo`,
+  but left the previous login's `principalScope` in place. After a non-organization-level
+  login followed by a federation sign-in, `actingTenant()` therefore still refused
+  client-side on the previous principal's report. Each completion now clears it, and the §17
+  decision memo, on success, as WebAuthn authentication and the device login already did. A
+  refused completion changes nothing.
+
 - **`memoKey()`** (§17) now takes the acting tenant as an optional parameter; without it a
   memoized decision for one acting tenant would have been returned for another within the
   TTL once `actingTenant()` existed to make that possible.

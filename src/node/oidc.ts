@@ -976,6 +976,7 @@ export class OidcClient {
     );
 
     this.#session.authenticated = true;
+    this.#forgetPreviousPrincipal();
     // Same post-login sync login()/verifyMfa() perform (CR-01/D-05): reads the
     // freshly-set axiam_csrf/axiam_access cookies out of the jar. A no-op on
     // the browser SharedSession, which has no jar.
@@ -2145,6 +2146,20 @@ export class OidcClient {
    * (§4, §3) — reading the freshly-set `axiam_csrf`/`axiam_access` cookies out
    * of the jar.
    */
+  /**
+   * CONTRACT.md §5.2 rule 1 (C-12 question 5): a federation sign-in completes a
+   * new session, possibly as a different principal, and its response carries no
+   * LoginUserInfo. Forget what the previous login reported, so `actingTenant()`
+   * does not gate on a stale principal and sends the header for the server to
+   * decide, and drop the §17 memo, whose entries answered for that principal.
+   * Called only after the server accepted the completion; a refused one
+   * establishes no session and changes nothing.
+   */
+  #forgetPreviousPrincipal(): void {
+    this.#session.principalScope = undefined;
+    this.#session.decisionMemo.clear();
+  }
+
   async #completeFederationSession(
     url: string,
     body: Record<string, string>,
@@ -2153,6 +2168,7 @@ export class OidcClient {
     const response = await this.#postJson<SsoLoginSuccessResponseWire>(url, body, fallbackMessage);
 
     this.#session.authenticated = true;
+    this.#forgetPreviousPrincipal();
     await this.#session.onAuthenticated?.();
 
     return {
