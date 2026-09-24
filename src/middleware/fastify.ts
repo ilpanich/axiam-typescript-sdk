@@ -31,6 +31,7 @@ import {
   type OidcLoginOptions,
   type OidcLoginOutcome,
 } from './oidcLoginCore.js';
+import { certificateProofFromSocket } from './peerCertificate.js';
 import { authenticateRequest, type AxiamIdentity, type VerifiableSession } from './verifyCore.js';
 
 /** A Fastify `FastifyRequest` augmented with the AXIAM identity that `axiamPlugin` injects after §10 verification. */
@@ -116,7 +117,12 @@ function buildAuthHook(session: VerifiableSession, operation: string): PreHandle
     }
 
     try {
-      const identity = await authenticateRequest(session, credential.token);
+      // §10.1 rule 9: same evidence as the Express guard — the peer
+      // certificate the TLS layer verified for THIS connection, from
+      // Fastify's raw Node request. `{}` (no evidence) when it is not
+      // TLS-shaped or carries no certificate.
+      const proofs = await certificateProofFromSocket(request.raw.socket);
+      const identity = await authenticateRequest(session, credential.token, proofs);
       (request as AxiamFastifyRequest).axiamUser = identity;
     } catch (err) {
       if (err instanceof AuthzError) {

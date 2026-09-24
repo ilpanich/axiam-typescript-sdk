@@ -78,13 +78,17 @@ export type {
 // writing their own guard on top of `Verifier` applies the same policy the
 // middleware does.
 //
-// Rule 9 in particular: `verifyAccessToken` cannot apply it (it has no
-// transport to ask for a peer certificate), so a guard that accepts
-// certificate-bound tokens MUST reach for `verifyTokenBinding` itself — which
-// means it has to be reachable from the entry point that guard is written
-// against. `verifyCertificateBinding` remains for transports that can only
-// ever produce a certificate; it refuses a DPoP-bound token rather than
-// ignoring the half it cannot check.
+// Rule 9 in particular (contract 1.51 fix — see verifyCore.ts's
+// authenticateRequest doc for the full story): `verifyAccessToken` still
+// cannot apply it on its own (it has no transport to ask for a peer
+// certificate), but `authenticateRequest` — and so `axiamMiddleware`/
+// `axiamPlugin` — now DOES, automatically, via `certificateProofFromSocket`
+// reading the request's own raw socket. `verifyTokenBinding` stays exported
+// for a consumer writing their own guard on top of `Verifier` directly (or
+// supplying evidence this middleware cannot gather on its own, such as a
+// verified DPoP proof); `verifyCertificateBinding` remains for transports
+// that can only ever produce a certificate — it refuses a DPoP-bound token
+// rather than ignoring the half it cannot check.
 export {
   assertTenantClaim,
   CLOCK_SKEW_LEEWAY_SEC,
@@ -92,6 +96,11 @@ export {
   verifyTokenBinding,
   certificateThumbprintS256,
 } from '../node/jwks.js';
+// The peer-certificate evidence source `axiamMiddleware`/`axiamPlugin` use
+// automatically (contract 1.51, §10.1 rule 9) — re-exported for a consumer
+// building a custom guard on `authenticateRequest` who wants the same
+// evidence without re-implementing the socket read.
+export { certificateProofFromSocket, type PeerCertificateSocket } from './peerCertificate.js';
 // Same rationale for the §12 types the login glue's own signatures reference
 // (`OidcLoginOptions.client`/`.store`, `onSuccess`'s arguments): re-exported so
 // this entry point's generated docs resolve them without a dangling
