@@ -461,16 +461,29 @@ describe('§10.1 rule 9 — sender-constrained tokens', () => {
     expect(() => verifyCertificateBinding(dpopish, THUMBPRINT)).toThrow(/cannot verify/);
   });
 
-  it('carries the cnf claim through a real verifyAccessToken round trip', async () => {
+  it('carries the cnf claim through a real verifyAccessToken round trip, and verifyAccessToken applies rule 9 itself (contract 1.51 fix)', async () => {
     const key = await serveJwks();
     const token = await sign(key, { ...goodPayload(), cnf: { 'x5t#S256': THUMBPRINT } });
-    const claims = await createVerifier(BASE_URL).verifyAccessToken(token, {
-      expectedTenantId: TENANT,
-    });
+    const verifier = createVerifier(BASE_URL);
+
+    // No proofs (the default) — verifyAccessToken refuses a bound token
+    // itself now; it no longer hands the caller a usable identity for a
+    // credential it cannot prove was presented by its holder.
+    await expect(
+      verifier.verifyAccessToken(token, { expectedTenantId: TENANT }),
+    ).rejects.toThrow(/no client certificate was presented/);
+
+    // Matching evidence, supplied via the third `proofs` argument, accepts
+    // it and the returned claims still carry `cnf` untouched.
+    const claims = await verifier.verifyAccessToken(
+      token,
+      { expectedTenantId: TENANT },
+      { certificateThumbprint: THUMBPRINT },
+    );
     expect(claims.cnf?.['x5t#S256']).toBe(THUMBPRINT);
-    // verifyAccessToken deliberately does NOT apply rule 9 — it has no
-    // transport to ask. The caller applies it with the thumbprint its TLS
-    // layer gives it.
+
+    // The lower-level primitive still composes the same way for a caller
+    // building its own guard on top of the raw claims.
     expect(() => verifyCertificateBinding(claims, THUMBPRINT)).not.toThrow();
     expect(() => verifyCertificateBinding(claims, undefined)).toThrow();
   });
@@ -551,5 +564,104 @@ describe('§10.1 rule 9 — sender-constrained tokens', () => {
     expect(tp).not.toContain('=');
     expect(tp).not.toMatch(/[+/]/);
     expect(await certificateThumbprintS256(der)).toBe(tp);
+  });
+
+  // -------------------------------------------------------------------------
+  // `Verifier.verifyAccessToken` applies rule 9 itself (contract 1.51 fix).
+  //
+  // Before this fix, `verifyAccessToken` — the SDK's own documented "anything
+  // guarding a route MUST use this" entry point (see
+  // `verifySignatureOnlyUnchecked`'s doc) — applied §10.1 rules 1-8 only and
+  // never read `cnf` at all. A guard written directly on it (bypassing
+  // `authenticateRequest`) therefore accepted a certificate- or DPoP-bound
+  // token as an ordinary bearer credential — the SEC-071/SEC-080 shape rule 9
+  // exists to close, and exactly what every device token from
+  // `authenticateDevice()` (§6.1) mints. `authenticateRequest` was already
+  // safe (it called `verifyTokenBinding` itself after `verifyAccessToken`),
+  // but that was luck at the call site, not a property of the entry point.
+  // -------------------------------------------------------------------------
+  describe('verifyAccessToken applies rule 9 itself (contract 1.51 fix)', () => {
+    it('refuses a certificate-bound token with no evidence (the default — no third argument)', async () => {
+      const key = await serveJwks();
+      const token = await sign(key, { ...goodPayload(), cnf: { 'x5t#S256': THUMBPRINT } });
+
+      // The exact call every hand-rolled guard makes per verifyAccessToken's
+      // own doc — no third argument.
+      await expect(
+        createVerifier(BASE_URL).verifyAccessToken(token, { expectedTenantId: TENANT }),
+      ).rejects.toThrow(/no client certificate was presented/);
+    });
+
+    it('accepts the same token with matching certificate evidence, refuses it with mismatching evidence', async () => {
+      const key = await serveJwks();
+      const token = await sign(key, { ...goodPayload(), cnf: { 'x5t#S256': THUMBPRINT } });
+      const verifier = createVerifier(BASE_URL);
+
+      const claims = await verifier.verifyAccessToken(
+        token,
+        { expectedTenantId: TENANT },
+        { certificateThumbprint: THUMBPRINT },
+      );
+      expect(claims.sub).toBe('user-1');
+
+      await expect(
+        verifier.verifyAccessToken(
+          token,
+          { expectedTenantId: TENANT },
+          { certificateThumbprint: OTHER_THUMBPRINT },
+        ),
+      ).rejects.toThrow(/bound to a different client certificate/);
+    });
+
+    it('refuses a DPoP-bound token (cnf.jkt) with no evidence', async () => {
+      const key = await serveJwks();
+      const token = await sign(key, { ...goodPayload(), cnf: { jkt: JKT } });
+
+      await expect(
+        createVerifier(BASE_URL).verifyAccessToken(token, { expectedTenantId: TENANT }),
+      ).rejects.toThrow(/no verified DPoP proof/);
+
+      // Evidence for the OTHER method does not help — the claimed method is
+      // jkt, and a certificate thumbprint answers a question rule 9 did not
+      // ask.
+      await expect(
+        createVerifier(BASE_URL).verifyAccessToken(
+          token,
+          { expectedTenantId: TENANT },
+          { certificateThumbprint: THUMBPRINT },
+        ),
+      ).rejects.toThrow(/no verified DPoP proof/);
+    });
+
+    it('accepts a DPoP-bound token when the matching verified proof thumbprint is supplied', async () => {
+      const key = await serveJwks();
+      const token = await sign(key, { ...goodPayload(), cnf: { jkt: JKT } });
+
+      const claims = await createVerifier(BASE_URL).verifyAccessToken(
+        token,
+        { expectedTenantId: TENANT },
+        { dpopThumbprint: JKT },
+      );
+      expect(claims.sub).toBe('user-1');
+    });
+
+    // The I4 twin — the positive regression this fix must not break. An
+    // unbound token was never affected by rule 9 and must stay that way,
+    // with or without proofs offered.
+    it('an unbound token still verifies exactly as before, with or without proofs', async () => {
+      const key = await serveJwks();
+      const token = await sign(key, goodPayload()); // no cnf at all
+      const verifier = createVerifier(BASE_URL);
+
+      const withoutProofs = await verifier.verifyAccessToken(token, { expectedTenantId: TENANT });
+      expect(withoutProofs.sub).toBe('user-1');
+
+      const withProofs = await verifier.verifyAccessToken(
+        token,
+        { expectedTenantId: TENANT },
+        { certificateThumbprint: 'unrelated', dpopThumbprint: 'also-unrelated' },
+      );
+      expect(withProofs.sub).toBe('user-1');
+    });
   });
 });
