@@ -7,7 +7,7 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { AuthzError } from '../../src/core/index.js';
+import { AuthzError, Sensitive } from '../../src/core/index.js';
 import { AxiamClient } from '../../src/rest/client.js';
 import {
   createOidcClient,
@@ -107,6 +107,46 @@ describe('§5.2 rule 1: an SSO/federation completion resets the acting-tenant ga
 
       expect(client.session.principalScope?.organizationLevel).toBe(false);
       expect(() => client.actingTenant(OTHER_TENANT)).toThrow(AuthzError);
+    });
+  }
+});
+
+// CONTRACT 1.52 N4.4 (C-12): "Any later session-establishing call replaces
+// it [the device credential] ... an SSO completion ..." Before this fix,
+// none of the three SSO/federation completions touched
+// `session.deviceAccessToken` — `#forgetPreviousPrincipal()` cleared only
+// `principalScope`/`decisionMemo` — so a client that had called
+// authenticateDevice() and then completed a federation sign-in kept riding
+// the STALE device credential on every later request:
+// installDeviceTokenInterceptor sends it unconditionally whenever
+// `deviceAccessToken` is set, silently overriding the brand-new cookie
+// session ssoComplete/etc. just established.
+describe('CONTRACT 1.52 N4.4 (C-12) — an SSO/federation completion replaces a previously-adopted device credential', () => {
+  for (const completion of completions) {
+    it(`${completion.name} clears a previously-adopted device credential on success`, async () => {
+      const client = new AxiamClient({ baseUrl: BASE_URL, tenantSlug: 'acme' });
+      const oidc = createOidcClient(client.session, { clientId: 'app' });
+      client.session.deviceAccessToken = new Sensitive('stale-device-token');
+
+      server.use(http.post(`${BASE_URL}${completion.path}`, () => HttpResponse.json(ssoSuccess)));
+      await completion.run(oidc);
+
+      expect(client.session.deviceAccessToken).toBeUndefined();
+    });
+
+    it(`twin (I4): a refused ${completion.name} leaves an ABSENT device credential absent`, async () => {
+      const client = new AxiamClient({ baseUrl: BASE_URL, tenantSlug: 'acme' });
+      const oidc = createOidcClient(client.session, { clientId: 'app' });
+      expect(client.session.deviceAccessToken).toBeUndefined();
+
+      server.use(
+        http.post(`${BASE_URL}${completion.path}`, () =>
+          HttpResponse.json({ error: 'invalid_request', message: 'refused' }, { status: 400 }),
+        ),
+      );
+      await expect(completion.run(oidc)).rejects.toThrow();
+
+      expect(client.session.deviceAccessToken).toBeUndefined();
     });
   }
 });

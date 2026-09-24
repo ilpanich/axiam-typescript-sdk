@@ -404,6 +404,14 @@ async function finishSignIn(
   );
 
   client.session.authenticated = true;
+  // CONTRACT 1.52 N4.4 (C-12): a WebAuthn authentication is one of the
+  // session-establishing calls that REPLACES a previously-adopted device
+  // credential. Without this, a client that had called authenticateDevice()
+  // and then signed in with a passkey kept riding the stale device token on
+  // every later request — installDeviceTokenInterceptor sends it
+  // unconditionally whenever `deviceAccessToken` is set, regardless of what
+  // new session was just established.
+  client.session.deviceAccessToken = undefined;
   // §5.2 rule 1 (C-12): unlike the password/OPAQUE/MFA-setup paths, this
   // wire shape (WebauthnLoginWire) carries no LoginUserInfo at all — there is
   // genuinely nothing to read, so this session's principal reach is unknown

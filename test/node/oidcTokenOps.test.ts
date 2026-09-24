@@ -275,6 +275,44 @@ describe('loginClientCredentials (§12.1)', () => {
     expect(tokenEndpointAuthHeader).toBeNull();
   });
 
+  // CONTRACT 1.52 N4.4 (C-12): "Any later session-establishing call
+  // replaces it [the device credential] ... client-credentials adoption
+  // ..." Before this fix, `loginClientCredentials({ adoptAsCredential:
+  // true })` never touched `session.deviceAccessToken`, so a client that
+  // had previously called authenticateDevice() and then adopted
+  // client-credentials kept riding the STALE device token on every later
+  // same-origin request — installDeviceTokenInterceptor sends it
+  // unconditionally whenever `deviceAccessToken` is set, ahead of the
+  // client-credentials interceptor's own Authorization header.
+  it('CONTRACT 1.52 N4.4 (C-12) — adopting client-credentials clears a previously-adopted device credential', async () => {
+    const state = createMockState();
+    server.use(
+      discoveryHandler(state),
+      http.post(TOKEN_ENDPOINT, () => HttpResponse.json(tokenResponse({ access_token: 'm2m-access-token' }))),
+    );
+    const { session, oidc } = createClient({ clientSecret: CLIENT_SECRET });
+    session.deviceAccessToken = new Sensitive('stale-device-token');
+
+    await oidc.loginClientCredentials({ adoptAsCredential: true });
+
+    expect(session.deviceAccessToken).toBeUndefined();
+  });
+
+  // I4 twin: a client with no device credential is unaffected.
+  it('twin (I4): a client with no device credential is unaffected by adoption', async () => {
+    const state = createMockState();
+    server.use(
+      discoveryHandler(state),
+      http.post(TOKEN_ENDPOINT, () => HttpResponse.json(tokenResponse({ access_token: 'm2m-access-token' }))),
+    );
+    const { session, oidc } = createClient({ clientSecret: CLIENT_SECRET });
+    expect(session.deviceAccessToken).toBeUndefined();
+
+    await oidc.loginClientCredentials({ adoptAsCredential: true });
+
+    expect(session.deviceAccessToken).toBeUndefined();
+  });
+
   it('does not touch the session credential unless adoption was requested', async () => {
     const state = createMockState();
     let protectedAuthHeader: string | null = null;

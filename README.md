@@ -263,7 +263,15 @@ await device.management.serviceAccounts.list(); // adopted: carries Authorizatio
   `Authorization` header, so a stale one would otherwise silently win.
 - **There is no refresh token.** A device re-authenticates by calling
   `authenticateDevice()` again — one TLS handshake. A later `401` on the adopted token
-  surfaces as `AuthError` without a refresh attempt.
+  surfaces as `AuthError` without a refresh attempt, on REST and gRPC alike — gRPC calls
+  send the device token too (not the cookie-jar-synced one) once it is adopted.
+- **Held until replaced.** `logout()` clears it; `refresh()` does not. Any later
+  session-establishing call replaces it with its own session: `login()`, `verifyMfa()`,
+  `loginOpaque()`, a WebAuthn authentication, an SSO/federation completion,
+  `loginClientCredentials({ adoptAsCredential: true })`, or another `authenticateDevice()`
+  call. A **refused** re-authentication over `authenticateDevice()` leaves the previously
+  adopted device credential exactly as it was — it does not fail into "no credential at
+  all".
 - **Every refusal is a `401`** — unknown, untrusted, expired, revoked or unbound
   certificate, or a `Server`-type certificate — mapped to `AuthError` verbatim. The route is
   rate-limited per client IP; a `429` maps to `NetworkError`, not `AuthError`, and is never

@@ -78,6 +78,21 @@ in the `axiam` repository, task C-2). Ported from the reference implementation,
 
 ### Fixed
 
+- **OPAQUE, WebAuthn, SSO/federation, and client-credentials adoption all now replace a
+  previously-adopted device credential** (CONTRACT.md §6.1 rule 11, CONTRACT 1.52 N4.4,
+  C-12). Found while auditing this SDK against every C-12 rule, not in the review's own
+  findings list. `session.deviceAccessToken` was cleared by `login()`, `verifyMfa()` and
+  `logout()`, but by none of `loginOpaque()`, the WebAuthn authentication ceremonies
+  (`webauthnAuthenticateFinish`/`webauthnDiscoverableFinish`), the three SSO/federation
+  completions (`ssoComplete`/`ssoCompleteOauth2`/`ssoCompleteHandoff`), or
+  `loginClientCredentials({ adoptAsCredential: true })`. A client that had previously
+  called `authenticateDevice()` and then completed one of those calls kept riding the
+  STALE device credential on every later same-origin request:
+  `installDeviceTokenInterceptor` attaches it — and strips the cookie jar — unconditionally
+  whenever `session.deviceAccessToken` is set, regardless of what new session had just been
+  established, silently overriding it. All five now clear the device credential on success,
+  matching `login()`/`verifyMfa()`.
+
 - **A refused re-authentication over `authenticateDevice()` no longer drops the previously
   adopted device credential** (CONTRACT.md §6.1 rule 11, CONTRACT 1.52 N4.2, C-12). Found
   while auditing this SDK against every C-12 rule, not in the review's own findings list.
@@ -195,6 +210,18 @@ in the `axiam` repository, task C-2). Ported from the reference implementation,
   behaviour is unchanged, so `axiamMiddleware`/`axiamPlugin`/`requireAuth`/`requireAccess`/
   `requireRole`/the NestJS `AxiamGuard` need no caller-side change. An unbound (ordinary)
   token is completely unaffected, with or without `proofs` supplied.
+
+- **`loginOpaque()`, a WebAuthn authentication, an SSO/federation completion, and
+  `loginClientCredentials({ adoptAsCredential: true })` now replace a previously-adopted
+  device credential** (CONTRACT.md §6.1 rule 11, CONTRACT 1.52 N4.4, C-12). Before this
+  release, a client that had called `authenticateDevice()` and then completed one of these
+  calls silently kept sending the OLD device credential (and no cookie) on every later
+  same-origin request instead of the new session — `installDeviceTokenInterceptor` acts
+  unconditionally on `session.deviceAccessToken` regardless of what else the client had
+  just done. A caller whose code happened to depend on that (unintended) persistence — most
+  plausibly, a device client that adopts client-credentials as a secondary identity and
+  expected both to coexist — now sees the newer session win, as `login()`/`verifyMfa()`
+  already behaved. No change for a client that never calls `authenticateDevice()`.
 
 ## [1.0.0-beta16] - 2026-09-19
 

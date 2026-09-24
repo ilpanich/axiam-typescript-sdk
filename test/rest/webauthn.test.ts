@@ -284,6 +284,44 @@ describe('§24.3 adoption', () => {
     expect(credential.credentialType).toBe('passkey');
     expect(credential.lastUsedAt).toBeUndefined();
   });
+
+  // CONTRACT 1.52 N4.4 (C-12): "Any later session-establishing call
+  // replaces it [the device credential], and that session is then used: ...
+  // a WebAuthn authentication ..." Before this fix, neither WebAuthn
+  // authentication ceremony cleared `session.deviceAccessToken`, so a
+  // client that had previously called authenticateDevice() and then signed
+  // in with a passkey kept riding the STALE device credential on every
+  // later request — the installDeviceTokenInterceptor sends it
+  // unconditionally whenever `deviceAccessToken` is set, silently
+  // overriding the brand-new passkey session.
+  it('CONTRACT 1.52 N4.4 (C-12) — replaces a previously-adopted device credential', async () => {
+    const client = anonymousClient();
+    client.session.deviceAccessToken = new Sensitive('stale-device-token');
+
+    await client.webauthnAuthenticateFinish(STATE_TOKEN, AUTHENTICATION_RESPONSE);
+
+    expect(client.session.deviceAccessToken).toBeUndefined();
+  });
+
+  it('CONTRACT 1.52 N4.4 (C-12) — the discoverable ceremony replaces it too (twin, I4)', async () => {
+    const client = anonymousClient();
+    client.session.deviceAccessToken = new Sensitive('stale-device-token');
+
+    await client.webauthnDiscoverableFinish(STATE_TOKEN, AUTHENTICATION_RESPONSE);
+
+    expect(client.session.deviceAccessToken).toBeUndefined();
+  });
+
+  // I4 twin: a client that never held a device credential is unaffected —
+  // still `undefined` afterward, exactly as before this fix.
+  it('twin (I4): a client with no device credential is unaffected', async () => {
+    const client = anonymousClient();
+    expect(client.session.deviceAccessToken).toBeUndefined();
+
+    await client.webauthnAuthenticateFinish(STATE_TOKEN, AUTHENTICATION_RESPONSE);
+
+    expect(client.session.deviceAccessToken).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
