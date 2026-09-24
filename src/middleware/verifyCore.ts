@@ -7,7 +7,7 @@
 // TTL").
 
 import { AuthError } from '../core/index.js';
-import { assertTenantClaim, verifyTokenBinding, type PresentedProofs, type Verifier } from '../node/jwks.js';
+import { assertTenantClaim, type PresentedProofs, type Verifier } from '../node/jwks.js';
 import type { RevocationFeed } from '../node/revocationFeed.js';
 
 /**
@@ -113,16 +113,20 @@ export interface AxiamIdentity {
  * ignores its expectations still cannot get a cross-tenant token past the
  * middleware, and rule 9 — see `proofs` below.
  *
- * **`proofs` and rule 9 (contract 1.51 fix).** `verifyAccessToken` cannot
- * apply rule 9 itself — it has no transport to ask for a peer certificate —
- * and until this fix nothing else applied it either: `axiamMiddleware` and
- * `axiamPlugin` called this function and injected the resulting identity
- * with no rule-9 check anywhere in between. A `cnf`-bound token (every
- * device token from `authenticateDevice()`, §6.1, carries one) therefore
- * passed as an ordinary bearer credential through every route this SDK's own
- * guards protect — the exact defect the CONTRACT.md §10.1 rule 9 preamble
- * names ("the same defect recurred independently in two SDKs"), now found in
- * a third.
+ * **`proofs` and rule 9.** A token carrying `cnf` is not a bearer token
+ * (§10.1 rule 9): it may be used only by a presenter that proves possession
+ * of the key it names. `proofs` is this function's transport evidence — a
+ * certificate thumbprint the caller's TLS layer verified for this
+ * connection, a DPoP key thumbprint from a proof the caller has **itself**
+ * verified, or both — and it is passed straight into `verifyAccessToken`,
+ * which is where rule 9 is now enforced (contract 1.51 fix; see
+ * `verifyAccessToken`'s own doc in `node/jwks.ts`). There is deliberately no
+ * *second* rule-9 check here: `verifyAccessToken` already reuses
+ * `verifyTokenBinding` internally, and re-running that same check against
+ * the same `proofs` a moment later would only be able to agree with itself —
+ * the risk worth guarding against is a check run against *different* inputs
+ * (for example the transport's real evidence at one call site and `{}` at
+ * another), not the same evidence read twice.
  *
  * `proofs` defaults to `{}` — **no evidence** — so a `cnf`-bound token is
  * refused by default, which is the fail-closed, spec-correct behaviour for a
@@ -147,11 +151,19 @@ export async function authenticateRequest(
 ): Promise<AxiamIdentity> {
   let claims;
   try {
-    claims = await session.jwksVerifier.verifyAccessToken(token, {
-      expectedTenantId: session.tenantHeaderValue,
-      expectedIssuer: session.expectedIssuer,
-      expectedAudience: session.expectedAudience,
-    });
+    // proofs flows straight into verifyAccessToken, which now applies rule 9
+    // itself (contract 1.51 fix) — see the doc comment above for why this
+    // stays a single check rather than a second one against the same
+    // evidence.
+    claims = await session.jwksVerifier.verifyAccessToken(
+      token,
+      {
+        expectedTenantId: session.tenantHeaderValue,
+        expectedIssuer: session.expectedIssuer,
+        expectedAudience: session.expectedAudience,
+      },
+      proofs,
+    );
   } catch (err) {
     throw new AuthError(err instanceof Error ? err.message : 'invalid or expired token');
   }
@@ -166,19 +178,6 @@ export async function authenticateRequest(
   // may implement themselves — the middleware must not delegate a
   // fail-closed control to a type it does not own.
   assertTenantClaim(claims.tenant_id, session.tenantHeaderValue);
-
-  // §10.1 rule 9 (contract 1.51 fix, see the doc comment above): a token
-  // carrying `cnf` is not a bearer token, and MUST NOT be accepted as one
-  // without evidence it names. Runs after every other §10.1 rule has
-  // already decided — rule 9's own table only ever narrows an otherwise-
-  // valid token from "accept" to "reject", never the reverse.
-  try {
-    verifyTokenBinding(claims, proofs);
-  } catch (err) {
-    throw new AuthError(
-      err instanceof Error ? err.message : 'token carries an unsatisfiable cnf confirmation',
-    );
-  }
 
   // §10.4 rules 4 and 6. Runs LAST: every §10.1 rule has already decided, and
   // the feed can only turn an accept into a reject. A token with no `sid`

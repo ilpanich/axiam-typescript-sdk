@@ -91,6 +91,26 @@ in the `axiam` repository, task C-2). Ported from the reference implementation,
   memoized decision for one acting tenant would have been returned for another within the
   TTL once `actingTenant()` existed to make that possible.
 
+- **`Verifier.verifyAccessToken` now enforces CONTRACT.md §10.1 rule 9 (C-12).** This is a
+  second, independent instance of the same class of defect the previous `authenticateRequest`
+  fix above closed, found this time at the raw entry point rather than the middleware built on
+  it. `verifyAccessToken`'s own doc says "anything guarding a route MUST use
+  `Verifier.verifyAccessToken` (or, better, the §10 middleware built on it)" — but
+  `verifyAccessToken` itself applied §10.1 rules 1–8 only and never read `cnf`, because it has
+  no transport of its own to ask for a peer certificate. A guard written directly on it, per its
+  own documentation, therefore accepted a certificate- or DPoP-bound token — every device token
+  `authenticateDevice()` (§6.1) mints — as an ordinary bearer credential, even on a build where
+  `authenticateRequest` was already safe. `verifyAccessToken` now takes an optional third
+  `proofs` argument (the same `PresentedProofs` shape `authenticateRequest` already took) and
+  defaults it to `{}` — no evidence — so a bound token is refused unless the caller supplies
+  matching evidence. It reuses the existing `verifyTokenBinding` implementation rather than
+  duplicating it, so this entry point can never disagree with `authenticateRequest` about
+  whether a token is a bearer token. `authenticateRequest` now forwards its own `proofs`
+  argument into this single call instead of separately re-running `verifyTokenBinding`
+  afterward, so the same evidence is read exactly once rather than checked twice with
+  potentially different inputs; its observable behaviour (accept with matching evidence, refuse
+  without or with mismatching evidence, unbound tokens unaffected) is unchanged.
+
 ### Breaking
 
 - **`authenticateRequest` (`axiamMiddleware`/`axiamPlugin`, and everything built on them —
@@ -106,6 +126,20 @@ in the `axiam` repository, task C-2). Ported from the reference implementation,
   never meant to be used bearer-style there. An unbound (ordinary) token is completely
   unaffected. `authenticateRequest` gains an optional third `proofs` parameter for a
   caller building a custom guard directly on it.
+
+- **`Verifier.verifyAccessToken` (`createVerifier`/`createJwksVerifier`, and anything built
+  directly on it) now enforces CONTRACT.md §10.1 rule 9 (C-12).** A caller who called
+  `verifyAccessToken(token, expectations)` on a certificate- or DPoP-bound token with no
+  third argument previously got back a usable identity for that token; it now rejects with
+  the same "no client certificate was presented" / "no verified DPoP proof was presented"
+  errors `verifyTokenBinding` already raised for `authenticateRequest`. To keep accepting
+  such tokens, pass the transport evidence as the new optional third `proofs` argument —
+  `PresentedProofs`, the same shape `authenticateRequest`/`verifyTokenBinding` already
+  use. `authenticateRequest` itself forwards its own `proofs` argument straight into this
+  call and no longer re-checks the binding separately afterward — its own observable
+  behaviour is unchanged, so `axiamMiddleware`/`axiamPlugin`/`requireAuth`/`requireAccess`/
+  `requireRole`/the NestJS `AxiamGuard` need no caller-side change. An unbound (ordinary)
+  token is completely unaffected, with or without `proofs` supplied.
 
 ## [1.0.0-beta16] - 2026-09-19
 

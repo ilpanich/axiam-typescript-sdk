@@ -39,6 +39,7 @@ This SDK conforms to **contract 1.51**: CONTRACT.md §1–§13 and §12.7, §14,
 | §6.1 rules 6–10 — `authenticateDevice()`, the mTLS device login | Shipped |
 | §1.1.1 / §10.3 — `TokenGrpcClient.validateToken`/`.introspectToken` | Shipped |
 | §10.1 rule 9 at the default middleware entry point | **Fixed a real defect** — see the §10.1 section below and the CHANGELOG's `[Unreleased]` Breaking entry |
+| §10.1 rule 9 at `Verifier.verifyAccessToken` itself | **Fixed a real defect** — see the §10.1 section below and the CHANGELOG's `[Unreleased]` Breaking entry |
 | §27.6.1 — manifest `resources[].metadata`, the two-shape role binding, `serviceAccounts` | Shipped |
 | §27.6.1 — manifest `webhooks` | **Declined** — named by the contract without being specified, and no consumer has asked for it |
 | §6.1 rule 7 as a typestate | **Declined** — the client-side `AuthError` the rule itself names as conforming is what this SDK ships; a typestate would make `AxiamClient` generic in every caller for the sake of one operation |
@@ -83,6 +84,23 @@ refuses a bound token, correctly, rather than silently accepting it. **This clos
 defect**: before 1.51 `authenticateRequest` applied no rule-9 check at all, so a `cnf`-bound
 device token (every token `authenticateDevice()`, §6.1, mints) passed through as an
 ordinary bearer credential. See the CHANGELOG's `[Unreleased]` Breaking entry.
+
+**A second, independent defect in the same rule closed alongside it:**
+`Verifier.verifyAccessToken` — the SDK's own documented "anything guarding a
+route MUST use this" entry point (see `verifySignatureOnlyUnchecked`'s doc) —
+applied rules 1–8 only and never read `cnf` at all, because it had no
+transport to ask for a peer certificate. A guard written directly on it, per
+that doc, therefore accepted a certificate- or DPoP-bound token — a device
+token from `authenticateDevice()` among them — as an ordinary bearer
+credential, even though `authenticateRequest` (and so `axiamMiddleware`/
+`axiamPlugin`) was by then already safe. `verifyAccessToken` now takes an
+optional third `proofs` argument — the same shape `authenticateRequest`
+takes and forwards straight through — and defaults it to `{}` (no evidence),
+so a bound token is refused unless the caller supplies matching evidence.
+Internally it reuses `verifyTokenBinding`, the same function
+`authenticateRequest` and a hand-rolled guard call, so local verification
+never disagrees with itself about whether a token is a bearer token. See the
+CHANGELOG's `[Unreleased]` Breaking entry.
 
 Because the `/oauth2/jwks` trust anchor is **organization-wide**, the session guarding a
 resource server must be configured with the tenant **UUID** (`tenantId`), since that is

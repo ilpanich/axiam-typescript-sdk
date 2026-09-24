@@ -59,9 +59,13 @@ export interface AxiamClaims {
    * a key, and accepting it without proving the caller holds that key
    * converts it straight back into a bearer token.
    *
-   * {@link Verifier.verifyAccessToken} does **not** check this — it cannot,
-   * having no access to the connection's client certificate. Use
-   * {@link verifyCertificateBinding}.
+   * {@link Verifier.verifyAccessToken} checks this against the `proofs` you
+   * pass it (contract 1.51 fix) — omit `proofs` (or pass `{}`) and a token
+   * carrying `cnf` is refused, never silently accepted as a bearer token.
+   * Supply the evidence your transport holds (a certificate thumbprint, a
+   * verified DPoP key thumbprint, or both) to accept a bound token. See
+   * {@link verifyCertificateBinding} / {@link verifyTokenBinding} for the
+   * shared implementation `verifyAccessToken` reuses.
    */
   cnf?: CnfClaim;
 }
@@ -357,25 +361,48 @@ export interface Verifier {
    * | 5 | `iss` | checked only when `expectedIssuer` is supplied. |
    * | 6 | `aud` | checked only when `expectedAudience` is supplied. |
    * | 7 | clock skew | {@link CLOCK_SKEW_LEEWAY_SEC}, passed as `clockTolerance`. |
+   * | 9 | `cnf` | (contract 1.51 fix) `proofs` defaults to `{}` — no evidence — so a token carrying `cnf` is refused unless the caller supplies matching evidence. Enforced by handing the verified claims and `proofs` to {@link verifyTokenBinding}, the same function {@link verifyCertificateBinding}, `authenticateRequest` and a hand-rolled guard share, so local verification never disagrees with itself about whether a token is a bearer token. An unbound token is unaffected whether or not `proofs` is supplied. |
+   *
+   * **`proofs` and which entry point to call.** This method is the SDK's
+   * documented §10 guard entry point (see {@link verifySignatureOnlyUnchecked}),
+   * and until the contract 1.51 fix it applied rules 1–8 only: it had no
+   * transport to ask for a certificate, so it silently treated every
+   * `cnf`-bound token as an ordinary bearer credential — precisely the
+   * SEC-071/SEC-080 downgrade §10.1 rule 9 exists to close, and exactly what
+   * every device token `authenticateDevice()` (§6.1) mints. `proofs` is now
+   * how a caller supplies that evidence: a certificate thumbprint the
+   * transport verified for this connection, a DPoP key thumbprint from a
+   * proof the caller has **itself** verified per §21.7, or both. Omitting it
+   * (or passing `{}`) is exactly {@link verifySignatureOnlyUnchecked}'s
+   * opposite number for rule 9 — refuse rather than guess — and is the
+   * correct default for a caller with no transport evidence to offer; an
+   * unbound token is accepted either way, which is what keeps every existing
+   * bearer-only deployment working unchanged.
    *
    * Rejects with the underlying error on any failed rule; the §10 middleware
    * wraps that into an `AuthError`.
    */
-  verifyAccessToken(token: string, expectations: AccessTokenExpectations): Promise<AxiamClaims>;
+  verifyAccessToken(
+    token: string,
+    expectations: AccessTokenExpectations,
+    proofs?: PresentedProofs,
+  ): Promise<AxiamClaims>;
 
   /**
    * Verify **only** the EdDSA signature of `token` — CONTRACT.md §10.1's
    * "raw signature-only primitive".
    *
    * @remarks
-   * **This is not a guard.** It performs no `exp`, `nbf`, `tenant_id`, `iss`
-   * or `aud` check whatsoever: an expired token, a not-yet-valid token, and a
-   * token minted for a *different tenant* in the same organization all pass.
-   * It exists only for integrators deliberately implementing their own
-   * policy on top of the signature — the `Unchecked` suffix is there to make
-   * that omission obvious at the call site. Anything guarding a route MUST
-   * use {@link Verifier.verifyAccessToken} (or, better, the §10 middleware
-   * built on it).
+   * **This is not a guard.** It performs no `exp`, `nbf`, `tenant_id`, `iss`,
+   * `aud` or `cnf` (rule 9) check whatsoever: an expired token, a
+   * not-yet-valid token, a token minted for a *different tenant* in the same
+   * organization, and a certificate- or DPoP-bound token presented with no
+   * evidence at all, all pass. It exists only for integrators deliberately
+   * implementing their own policy on top of the signature — the `Unchecked`
+   * suffix is there to make that omission obvious at the call site. Anything
+   * guarding a route MUST use {@link Verifier.verifyAccessToken}, passing
+   * `proofs` when it may see a certificate- or DPoP-bound token (or, better,
+   * the §10 middleware built on it, which does this automatically).
    */
   verifySignatureOnlyUnchecked(token: string): Promise<AxiamClaims>;
 }
@@ -472,6 +499,7 @@ export function createJwksVerifier(jwksUri: string): JwksVerifier {
     async verifyAccessToken(
       token: string,
       expectations: AccessTokenExpectations,
+      proofs: PresentedProofs = {},
     ): Promise<AxiamClaims> {
       const { jwtVerify } = await import('jose');
       const jwks = await getJwks();
@@ -515,7 +543,20 @@ export function createJwksVerifier(jwksUri: string): JwksVerifier {
       // defect, not a pass.
       assertTenantClaim(payload.tenant_id, expectations.expectedTenantId);
 
-      return payload as unknown as AxiamClaims;
+      const claims = payload as unknown as AxiamClaims;
+
+      // §10.1 rule 9 (contract 1.51 fix). This entry point is the SDK's
+      // documented guard — its own `verifySignatureOnlyUnchecked` doc says so
+      // — so it must not accept a `cnf`-bound token as an ordinary bearer
+      // credential just because it was handed no evidence. `proofs` defaults
+      // to `{}` (no evidence), which is exactly the "reject" row of rule 9's
+      // table for a bound token; an unbound token is unaffected. Reuses
+      // `verifyTokenBinding` rather than duplicating it, so this entry point
+      // and `authenticateRequest`/a hand-rolled guard can never disagree
+      // about whether a token is a bearer token.
+      verifyTokenBinding(claims, proofs);
+
+      return claims;
     },
 
     async verifySignatureOnlyUnchecked(token: string): Promise<AxiamClaims> {

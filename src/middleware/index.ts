@@ -78,13 +78,15 @@ export type {
 // writing their own guard on top of `Verifier` applies the same policy the
 // middleware does.
 //
-// Rule 9 in particular (contract 1.51 fix — see verifyCore.ts's
-// authenticateRequest doc for the full story): `verifyAccessToken` still
-// cannot apply it on its own (it has no transport to ask for a peer
-// certificate), but `authenticateRequest` — and so `axiamMiddleware`/
-// `axiamPlugin` — now DOES, automatically, via `certificateProofFromSocket`
-// reading the request's own raw socket. `verifyTokenBinding` stays exported
-// for a consumer writing their own guard on top of `Verifier` directly (or
+// Rule 9 in particular (contract 1.51 fix — see node/jwks.ts's
+// `verifyAccessToken` doc and verifyCore.ts's `authenticateRequest` doc for
+// the full story): `verifyAccessToken` now applies it itself, against an
+// optional third `proofs` argument that defaults to `{}` (no evidence, so a
+// bound token is refused). `authenticateRequest` — and so
+// `axiamMiddleware`/`axiamPlugin` — passes that argument straight through,
+// filled automatically from `certificateProofFromSocket` reading the
+// request's own raw socket. `verifyTokenBinding` stays exported for a
+// consumer writing their own guard on top of `Verifier` directly (or
 // supplying evidence this middleware cannot gather on its own, such as a
 // verified DPoP proof); `verifyCertificateBinding` remains for transports
 // that can only ever produce a certificate — it refuses a DPoP-bound token
