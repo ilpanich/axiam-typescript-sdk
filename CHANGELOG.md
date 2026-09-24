@@ -88,6 +88,15 @@ in the `axiam` repository, task C-2). Ported from the reference implementation,
   refused as though it named a different tenant. `src/rest/client.ts`'s new
   `uuidListIncludes` helper lower-cases both sides before comparing.
 
+- **`loginClientCredentials({ adoptAsCredential: true })` now resets the acting-tenant
+  gate to unknown** (CONTRACT.md §5.2 rule 1, CONTRACT 1.52 N5.5, C-12). Found finishing
+  the N5/N6 audit the coordinator asked for. `#adoptCredential` never touched
+  `session.principalScope`, so a session that had recorded an earlier login's
+  (possibly non-organization-level) report kept `actingTenant()` gating on that STALE
+  human principal after adopting an unrelated service-account credential, instead of
+  letting the server's `403` decide as the rule requires — matching how a WebAuthn
+  authentication, an SSO completion, and a device login already reset it.
+
 - **OPAQUE, WebAuthn, SSO/federation, and client-credentials adoption all now replace a
   previously-adopted device credential** (CONTRACT.md §6.1 rule 11, CONTRACT 1.52 N4.4,
   C-12). Found while auditing this SDK against every C-12 rule, not in the review's own

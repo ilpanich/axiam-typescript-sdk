@@ -2108,6 +2108,15 @@ export class OidcClient {
     // `deviceAccessToken` is set, regardless of what new credential was
     // just adopted here.
     this.#session.deviceAccessToken = undefined;
+    // CONTRACT 1.52 N5.5 (C-12): client-credentials adoption carries no
+    // LoginUserInfo, so it resets the §5.2 acting-tenant gate to unknown —
+    // the same as a WebAuthn authentication, an SSO completion, or a device
+    // login. Without this, a session that had recorded an earlier login's
+    // (possibly non-organization-level) principalScope kept gating
+    // actingTenant() on that STALE report after adopting an unrelated
+    // service-account credential, instead of letting the server's 403
+    // decide as N5.5 requires.
+    this.#session.principalScope = undefined;
     if (this.#adoptionInterceptorInstalled) {
       return;
     }

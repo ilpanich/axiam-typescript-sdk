@@ -313,6 +313,46 @@ describe('loginClientCredentials (§12.1)', () => {
     expect(session.deviceAccessToken).toBeUndefined();
   });
 
+  // CONTRACT 1.52 N5.5 (C-12): "Those that carry none reset the gate to
+  // unknown: WebAuthn authentication, the SSO completions, the device
+  // login, and client-credentials adoption." Before this fix,
+  // `#adoptCredential` never touched `session.principalScope`, so a client
+  // that had completed an ordinary login (recording, say,
+  // `organizationLevel: false`) and then adopted client-credentials as a
+  // secondary/service identity kept `actingTenant()` gating on the STALE
+  // human principal's report instead of treating the new credential's
+  // reach as unknown (server decides).
+  it('CONTRACT 1.52 N5.5 (C-12) — adopting client-credentials resets the acting-tenant gate to unknown', async () => {
+    const state = createMockState();
+    server.use(
+      discoveryHandler(state),
+      http.post(TOKEN_ENDPOINT, () => HttpResponse.json(tokenResponse({ access_token: 'm2m-access-token' }))),
+    );
+    const { session, oidc } = createClient({ clientSecret: CLIENT_SECRET });
+    // A stale report from an earlier, unrelated login on this session.
+    session.principalScope = { organizationLevel: false };
+
+    await oidc.loginClientCredentials({ adoptAsCredential: true });
+
+    expect(session.principalScope).toBeUndefined();
+  });
+
+  // I4 twin: adopting with no prior principalScope is unaffected — still
+  // undefined afterward, exactly as before this fix.
+  it('twin (I4): adopting client-credentials with no prior principalScope is unaffected', async () => {
+    const state = createMockState();
+    server.use(
+      discoveryHandler(state),
+      http.post(TOKEN_ENDPOINT, () => HttpResponse.json(tokenResponse({ access_token: 'm2m-access-token' }))),
+    );
+    const { session, oidc } = createClient({ clientSecret: CLIENT_SECRET });
+    expect(session.principalScope).toBeUndefined();
+
+    await oidc.loginClientCredentials({ adoptAsCredential: true });
+
+    expect(session.principalScope).toBeUndefined();
+  });
+
   it('does not touch the session credential unless adoption was requested', async () => {
     const state = createMockState();
     let protectedAuthHeader: string | null = null;
