@@ -52,7 +52,7 @@ browser bundle pulls in no Node-only code. §12.2 forbids splitting them across 
 the four operations contract 1.38 adds are on `OidcClient` too, with the nine that preceded
 them, even though three of them need no Node-only code at all.
 
-§27 is implemented **in full**, both halves: the 160-operation imperative surface *and*
+§27 is implemented **in full**, both halves: the 162-operation imperative surface *and*
 the §27.6 declarative manifest with its §27.7 `defineManifest` and decorator forms. The
 contract asks an SDK that ships only one half to say which; this one ships both.
 
