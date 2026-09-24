@@ -222,6 +222,86 @@ describe('§27.6 rules 3 and 4 — drift and pruning', () => {
     });
     expect(plan.actions.find((a) => a.target === 'resource')?.change).toBe('update');
   });
+
+  // CONTRACT 1.52 N6.5 (C-12): "Metadata drift is JSON value equality,
+  // independent of key order." `deepEqual` (engine.ts) compared via
+  // `JSON.stringify`, which is key-order-dependent — a manifest literal
+  // whose metadata object was written in a different key order than the
+  // server happens to return would drift on every plan()/apply() even
+  // though nothing about the value had changed.
+  it('CONTRACT 1.52 N6.5 (C-12) — metadata drift ignores key order', async () => {
+    const server = mockServer();
+    server.use(
+      http.get(`${BASE_URL}/api/v1/resources`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              ...resourceJson('documents'),
+              // The server's stored key order.
+              metadata: { owner: 'platform-team', tier: 'gold' },
+            },
+          ],
+          total: 1,
+          offset: 0,
+          limit: 200,
+        }),
+      ),
+      http.get(`${BASE_URL}/api/v1/resources/:id/scopes`, () => HttpResponse.json([])),
+    );
+    for (const route of ['permissions', 'roles', 'groups', 'users']) {
+      server.use(http.get(`${BASE_URL}/api/v1/${route}`, () => HttpResponse.json(EMPTY_PAGE)));
+    }
+
+    const plan = await managementClient().manifest.plan({
+      resources: [
+        {
+          key: 'docs',
+          name: 'documents',
+          resourceType: 'collection',
+          // Same content, opposite key order.
+          metadata: { tier: 'gold', owner: 'platform-team' },
+        },
+      ],
+    });
+    expect(plan.actions.find((a) => a.target === 'resource')?.change).toBe('no-change');
+  });
+
+  // I4 twin: genuinely different metadata — same keys, one value changed —
+  // must still be an `update`, key order aside. Guards against an
+  // over-broad fix (e.g. comparing only key sets, or always returning
+  // `true`) that would make real drift invisible.
+  it('twin (I4): genuinely different metadata is still an update, key order aside', async () => {
+    const server = mockServer();
+    server.use(
+      http.get(`${BASE_URL}/api/v1/resources`, () =>
+        HttpResponse.json({
+          items: [
+            { ...resourceJson('documents'), metadata: { owner: 'platform-team', tier: 'gold' } },
+          ],
+          total: 1,
+          offset: 0,
+          limit: 200,
+        }),
+      ),
+      http.get(`${BASE_URL}/api/v1/resources/:id/scopes`, () => HttpResponse.json([])),
+    );
+    for (const route of ['permissions', 'roles', 'groups', 'users']) {
+      server.use(http.get(`${BASE_URL}/api/v1/${route}`, () => HttpResponse.json(EMPTY_PAGE)));
+    }
+
+    const plan = await managementClient().manifest.plan({
+      resources: [
+        {
+          key: 'docs',
+          name: 'documents',
+          resourceType: 'collection',
+          // Different key order AND a genuinely different value (tier).
+          metadata: { tier: 'silver', owner: 'platform-team' },
+        },
+      ],
+    });
+    expect(plan.actions.find((a) => a.target === 'resource')?.change).toBe('update');
+  });
 });
 
 describe('§27.6 rules 6 and 7 — apply', () => {

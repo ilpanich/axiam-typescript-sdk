@@ -967,17 +967,32 @@ function bindingDrifted(desired: { resource?: string; inherit: boolean }, existi
 }
 
 /**
- * §27.6.1 item 1: JSON value equality of a resource's whole `metadata`
- * object — never a key-by-key merge. `JSON.stringify` on parsed JSON values
- * (never `undefined`, functions or symbols at any depth, since both sides
- * came off the wire or from a manifest literal) is a safe equality check
- * here precisely because object key order does not vary between two reads
- * of the same JSON value in this codebase's usage (it is never rebuilt
- * key-by-key in a different order); a general-purpose deep-equal would be
- * the more defensive choice for arbitrary caller-constructed objects, but
- * would add real cost to the hot path of a manifest with many resources for
- * a mismatch this narrow.
+ * §27.6.1 item 1 / CONTRACT 1.52 N6.5 (C-12): JSON value equality of a
+ * resource's whole `metadata` object — never a key-by-key merge, and
+ * **independent of key order**. A manifest literal is free to write its
+ * metadata object's keys in a different order than the server happens to
+ * return them in (there is no contract requiring a particular order, and
+ * nothing enforces one); comparing via `JSON.stringify`, as this function
+ * used to, drifted on every plan()/apply() for such a manifest even though
+ * the value had not changed. Recurses structurally instead: for objects, the
+ * same key SET with equal values regardless of order; for arrays, equal
+ * length with equal values at each index (array order is significant —
+ * `[1, 2]` and `[2, 1]` are different JSON values); everything else by
+ * `===`.
  */
 function deepEqual(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((v, i) => deepEqual(v, b[i]));
+  }
+  const aKeys = Object.keys(a as Record<string, unknown>);
+  const bKeys = Object.keys(b as Record<string, unknown>);
+  if (aKeys.length !== bKeys.length) return false;
+  return aKeys.every(
+    (key) =>
+      Object.prototype.hasOwnProperty.call(b, key) &&
+      deepEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
+  );
 }

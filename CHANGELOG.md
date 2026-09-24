@@ -78,6 +78,15 @@ in the `axiam` repository, task C-2). Ported from the reference implementation,
 
 ### Fixed
 
+- **Manifest metadata drift is independent of key order** (CONTRACT.md §27.6.1 item 1,
+  CONTRACT 1.52 N6.5, C-12). `deepEqual` (`src/management/manifest/engine.ts`) compared
+  a resource's `metadata` via `JSON.stringify`, which is key-order-dependent: a manifest
+  literal whose metadata object happened to be written in a different key order than the
+  server returned it in reported spurious drift (`plan()`/`apply()` sent an `update` for a
+  resource whose metadata had not actually changed). Now a real structural comparison —
+  same keys with equal values for objects (order-independent), same length with equal
+  values at each index for arrays (order-significant, as JSON array order always is).
+
 - **gRPC now sends the device credential after `authenticateDevice()` adoption, and never
   refreshes it** (CONTRACT.md §6.1 rules 6 and 11, CONTRACT 1.52 N4.3/N4.5, C-12). Two
   related defects in the gRPC transport, both about the same device-adopted session:

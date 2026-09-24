@@ -2363,9 +2363,9 @@ if (created.outcome.status === 'created' && created.outcome.serviceAccountSecret
 }
 ```
 
-- **`resources[].metadata`** drifts by JSON equality of the whole object, never a
-  key-by-key merge; an unstated `metadata` is silent, and a stated `{}` matches what the
-  server holds for none.
+- **`resources[].metadata`** drifts by JSON equality of the whole object, independent of
+  key order, never a key-by-key merge; an unstated `metadata` is silent, and a stated
+  `{}` matches what the server holds for none.
 - **A role binding takes either shape** — a plain key (as before 1.51) or
   `{ role, resource?, inherit? }`. `inherit` reaches the wire only as `false`. Changing a
   binding's resource or `inherit` is `unassign` then `assign` (there is no update
