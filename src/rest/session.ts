@@ -9,7 +9,7 @@
 // One login() drives all transports for a given session.
 
 import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
-import type { AxiamClientOptions, ClientIdentity, RefreshGuard } from '../core/index.js';
+import type { AxiamClientOptions, ClientIdentity, RefreshGuard, Sensitive } from '../core/index.js';
 import {
   CERT_PEM_MARKER,
   createRefreshGuard,
@@ -139,6 +139,28 @@ export class SharedSession {
    * tenant.
    */
   principalScope: { organizationLevel: boolean; reachableTenantIds?: string[] } | undefined;
+  /**
+   * CONTRACT.md §6.1 rules 6–10 (contract 1.51) — the access token
+   * `authenticateDevice()` adopted, when this session's credential is a
+   * device/mTLS one rather than a cookie session.
+   *
+   * `undefined` is the state every session starts in and the only one
+   * before contract 1.51: nothing about REST authentication changes for a
+   * client that never calls `authenticateDevice()`. Once set, the request
+   * interceptor installed in `createSession` sends it as
+   * `Authorization: Bearer <token>` and switches this request to the
+   * jar-free agent pair `noCredentialsConfig()` builds — the server reads
+   * the `axiam_access` cookie **before** the `Authorization` header (rule 3
+   * of the "what the plan did not anticipate" note), so a cookie left over
+   * from an earlier session would otherwise silently outrank this token and
+   * the request would run as that earlier session's principal. There is no
+   * refresh token behind a device token (rule 6), so `installRefreshInterceptor`
+   * checks this field too and never attempts one.
+   *
+   * Cleared by `logout()`, and by a subsequent `login()`/`verifyMfa()` that
+   * establishes an ordinary cookie session on the same client.
+   */
+  deviceAccessToken: Sensitive<string> | undefined;
   /**
    * Per-instance single-flight refresh guard (CR-02, D-13). Shared across
    * this session's REST and gRPC transports (rest/interceptors.ts,
@@ -505,5 +527,15 @@ export function createSession(options: AxiamClientOptions): SharedSession {
     return config;
   });
 
+  // The §6.1 device-token interceptor (contract 1.51) is installed by
+  // `installInterceptors` (rest/interceptors.ts) instead of here, alongside
+  // CSRF/refresh — NOT here, deliberately. This function's `session` is
+  // discarded by the Node persona once its `.axios`/`.tenantHeaderValue` are
+  // lifted into a wrapping `NodeSession` (see `createNodeSession`); an
+  // interceptor closing over it would keep reading a `deviceAccessToken`
+  // that `authenticateDevice()` actually sets on the *NodeSession*, and
+  // never see it. `installInterceptors` runs against whichever session
+  // `AxiamClient`'s constructor was actually given, which is always the
+  // right one.
   return session;
 }

@@ -340,6 +340,20 @@ export class AxiamClient {
   }
 
   /**
+   * `POST /api/v1/auth/device` (§6.1 rules 6–10, contract 1.51) — the mTLS
+   * device login: authenticate by the client certificate this client was
+   * built with (`clientCert`/`clientKey`) rather than a username/password.
+   *
+   * Reachable only when this client was constructed with a client
+   * certificate — see {@link authMethods.authenticateDevice} for the full
+   * contract (adoption, the missing refresh token, the client-side refusal
+   * without one).
+   */
+  authenticateDevice(): Promise<authMethods.DeviceToken> {
+    return authMethods.authenticateDevice(this);
+  }
+
+  /**
    * OPAQUE login (§23) — the password never leaves this process.
    *
    * Returns the same `LoginResult` as {@link login}, including the
