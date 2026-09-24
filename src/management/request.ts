@@ -66,6 +66,11 @@ export async function sendManagement<T>(client: AxiamClient, call: ManagementCal
         url: call.path,
         params,
         data: call.body,
+        // §5.2 rule 1: `X-Axiam-Tenant` when this handle acts on a tenant,
+        // absent — byte-for-byte what every call here sent before contract
+        // 1.51 — otherwise. §27.4 rule 3's {tenant_id} path default is a
+        // separate mechanism and is unaffected by this.
+        headers: client.actingTenantHeaders(),
       });
       done(response.status, 'success');
       return response.data;

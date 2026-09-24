@@ -45,19 +45,32 @@ const MAX_ENTRIES = 1024;
  * collision. `\u0000` marks an *absent* optional, which is why an absent scope
  * can never collide with a present one — a memo that let them collide would
  * answer a narrower question with a broader answer.
+ *
+ * `actingTenantId` (contract 1.51, CONTRACT.md §5.2 rule 1's C-12 note) joins
+ * the key too, for the same reason: since 1.51 one session can ask the same
+ * question of two tenants, and the server can answer differently for each.
+ * Without it, a memoized answer for tenant A would be returned for tenant B
+ * within the TTL — the memo caching an answer to a question it was never
+ * asked. Two absent values (a client that never called `actingTenant()`) are
+ * still the same key as before 1.51, so nothing already using this memo sees
+ * a behaviour change.
  */
-export function memoKey(check: {
-  action: string;
-  resourceId: string;
-  scope?: string;
-  subjectId?: string;
-}): string {
+export function memoKey(
+  check: {
+    action: string;
+    resourceId: string;
+    scope?: string;
+    subjectId?: string;
+  },
+  actingTenantId?: string,
+): string {
   const ABSENT = '\u0000';
   return [
     check.subjectId ?? ABSENT,
     check.resourceId,
     check.action,
     check.scope ?? ABSENT,
+    actingTenantId ?? ABSENT,
   ].join('\u001f');
 }
 

@@ -7,7 +7,7 @@
 // TTL").
 
 import { AuthError } from '../core/index.js';
-import { assertTenantClaim, type Verifier } from '../node/jwks.js';
+import { assertTenantClaim, verifyTokenBinding, type PresentedProofs, type Verifier } from '../node/jwks.js';
 import type { RevocationFeed } from '../node/revocationFeed.js';
 
 /**
@@ -108,18 +108,42 @@ export interface AxiamIdentity {
  * it applies the complete CONTRACT.md §10.1 minimum local-verification set:
  * rules 1/2/3/5/6/7 inside `verifyAccessToken` (EdDSA `alg` pinned before key
  * lookup, REQUIRED numeric `exp`, `nbf` when present, conditional `iss`/`aud`,
- * a named bounded clock skew) and rule 4 — the `tenant_id` assertion — both
+ * a named bounded clock skew), rule 4 — the `tenant_id` assertion — both
  * there and again here, so a caller-supplied `Verifier` implementation that
  * ignores its expectations still cannot get a cross-tenant token past the
- * middleware.
+ * middleware, and rule 9 — see `proofs` below.
+ *
+ * **`proofs` and rule 9 (contract 1.51 fix).** `verifyAccessToken` cannot
+ * apply rule 9 itself — it has no transport to ask for a peer certificate —
+ * and until this fix nothing else applied it either: `axiamMiddleware` and
+ * `axiamPlugin` called this function and injected the resulting identity
+ * with no rule-9 check anywhere in between. A `cnf`-bound token (every
+ * device token from `authenticateDevice()`, §6.1, carries one) therefore
+ * passed as an ordinary bearer credential through every route this SDK's own
+ * guards protect — the exact defect the CONTRACT.md §10.1 rule 9 preamble
+ * names ("the same defect recurred independently in two SDKs"), now found in
+ * a third.
+ *
+ * `proofs` defaults to `{}` — **no evidence** — so a `cnf`-bound token is
+ * refused by default, which is the fail-closed, spec-correct behaviour for a
+ * caller that has not supplied any: rule 9's table has no row where absent
+ * evidence accepts a bound token. `axiamMiddleware`/`axiamPlugin` pass
+ * `certificateProofFromSocket(req.socket)` automatically, so a resource
+ * server whose Node process terminates TLS itself accepts a
+ * certificate-bound token with no extra wiring; a deployment behind a proxy
+ * that forwards nothing still refuses one, exactly as §10.1 rule 9 detail 3
+ * requires. An unbound token is unaffected either way — this is the
+ * positive regression rule 9 exists to protect, and its own test asserts it
+ * explicitly.
  *
  * Throws `AuthError` on any verification failure (missing/invalid/expired
- * token, a token with no `exp`, a not-yet-valid `nbf`, or a malformed /
- * mismatched sub/tenant_id claim).
+ * token, a token with no `exp`, a not-yet-valid `nbf`, a malformed/mismatched
+ * sub/tenant_id claim, or an unsatisfiable `cnf`).
  */
 export async function authenticateRequest(
   session: VerifiableSession,
   token: string,
+  proofs: PresentedProofs = {},
 ): Promise<AxiamIdentity> {
   let claims;
   try {
@@ -142,6 +166,19 @@ export async function authenticateRequest(
   // may implement themselves — the middleware must not delegate a
   // fail-closed control to a type it does not own.
   assertTenantClaim(claims.tenant_id, session.tenantHeaderValue);
+
+  // §10.1 rule 9 (contract 1.51 fix, see the doc comment above): a token
+  // carrying `cnf` is not a bearer token, and MUST NOT be accepted as one
+  // without evidence it names. Runs after every other §10.1 rule has
+  // already decided — rule 9's own table only ever narrows an otherwise-
+  // valid token from "accept" to "reject", never the reverse.
+  try {
+    verifyTokenBinding(claims, proofs);
+  } catch (err) {
+    throw new AuthError(
+      err instanceof Error ? err.message : 'token carries an unsatisfiable cnf confirmation',
+    );
+  }
 
   // §10.4 rules 4 and 6. Runs LAST: every §10.1 rule has already decided, and
   // the feed can only turn an accept into a reject. A token with no `sid`

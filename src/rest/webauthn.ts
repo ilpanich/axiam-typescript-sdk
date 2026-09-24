@@ -14,7 +14,7 @@
 import type { AxiosRequestConfig } from 'axios';
 import { mapHttpStatusToError, NetworkError, Sensitive, sanitizeAxiosError } from '../core/index.js';
 import type { AxiamClient } from './client.js';
-import { userInfoFromWire } from './auth.js';
+import { recordPrincipalScope, userInfoFromWire } from './auth.js';
 import type { LoginResult, LoginSuccessResponseWire } from './types.js';
 import type {
   WebauthnAuthenticationResponse,
@@ -265,9 +265,15 @@ export async function webauthnSetupRegisterFinish(
   // call after this completion carries a valid X-CSRF-Token.
   await client.session.onAuthenticated?.();
 
+  const user = userInfoFromWire(wire.user);
+  // §5.2 rule 1 (C-12): this completes the login login() left interrupted,
+  // via LoginSuccessResponseWire — the same shape login()/verifyMfa() get —
+  // so a real organizationLevel/reachableTenantIds is available; record it.
+  recordPrincipalScope(client, user);
+
   return {
     status: 'authenticated',
-    user: userInfoFromWire(wire.user),
+    user,
     sessionId: wire.session_id,
     expiresIn: wire.expires_in,
   };
@@ -398,6 +404,12 @@ async function finishSignIn(
   );
 
   client.session.authenticated = true;
+  // §5.2 rule 1 (C-12): unlike the password/OPAQUE/MFA-setup paths, this
+  // wire shape (WebauthnLoginWire) carries no LoginUserInfo at all — there is
+  // genuinely nothing to read, so this session's principal reach is unknown
+  // rather than known-false. actingTenant() has nothing to gate on and sends
+  // the header regardless, letting the server's 403 decide.
+  client.session.principalScope = undefined;
   // Syncs the Node persona's csrfToken (and cached access token) out of the
   // jar. Load-bearing since the server started setting the cookie triple on
   // these two endpoints: without it the first state-changing call after a
@@ -541,7 +553,15 @@ async function post<T>(
   config?: AxiosRequestConfig,
 ): Promise<T> {
   try {
-    const response = await client.session.axios.post<T>(path, body, config);
+    // §5.2.2 rule 4: sent "as normal" on these self-service calls too, and
+    // the server decides which tenant they belong to. `config` (only set by
+    // the setup/register pair, for session.noCredentialsConfig()) never
+    // carries its own `headers`, so this never gets overridden by a later
+    // spread.
+    const response = await client.session.axios.post<T>(path, body, {
+      headers: client.actingTenantHeaders(),
+      ...config,
+    });
     return response.data;
   } catch (err) {
     const status = axiosStatus(err);

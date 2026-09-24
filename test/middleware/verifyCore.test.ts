@@ -91,4 +91,93 @@ describe('authenticateRequest', () => {
       'does not match configured tenant',
     );
   });
+
+  // -------------------------------------------------------------------------
+  // §10.1 rule 9 (contract 1.51 fix). Before this fix authenticateRequest
+  // never applied rule 9 at all — a cnf-bound token (every device token from
+  // authenticateDevice(), §6.1) was accepted as an ordinary bearer
+  // credential by axiamMiddleware/axiamPlugin, the exact defect the §10.1
+  // rule 9 preamble describes as recurring "independently in two SDKs".
+  // -------------------------------------------------------------------------
+
+  describe('§10.1 rule 9 — cnf (contract 1.51 fix)', () => {
+    it('a certificate-bound token is refused with no evidence (the default — no third argument)', async () => {
+      const key = await setup();
+      const token = await new SignJWT({
+        tenant_id: 'tenant-1',
+        cnf: { 'x5t#S256': 'thumbprint-abc' },
+      })
+        .setProtectedHeader({ alg: 'EdDSA', kid: KID })
+        .setIssuer('axiam')
+        .setSubject('user-1')
+        .setExpirationTime('1h')
+        .sign(key);
+
+      // No third argument — the exact call every route guard made before
+      // this fix, and the one this whole fix is about.
+      await expect(authenticateRequest(sessionFor(), token)).rejects.toBeInstanceOf(AuthError);
+    });
+
+    it('a certificate-bound token is accepted when the matching certificate thumbprint is supplied', async () => {
+      const key = await setup();
+      const token = await new SignJWT({
+        tenant_id: 'tenant-1',
+        cnf: { 'x5t#S256': 'thumbprint-abc' },
+      })
+        .setProtectedHeader({ alg: 'EdDSA', kid: KID })
+        .setIssuer('axiam')
+        .setSubject('user-1')
+        .setExpirationTime('1h')
+        .sign(key);
+
+      const identity = await authenticateRequest(sessionFor(), token, {
+        certificateThumbprint: 'thumbprint-abc',
+      });
+      expect(identity.userId).toBe('user-1');
+    });
+
+    it('a certificate-bound token is refused when the presented certificate differs', async () => {
+      const key = await setup();
+      const token = await new SignJWT({
+        tenant_id: 'tenant-1',
+        cnf: { 'x5t#S256': 'thumbprint-abc' },
+      })
+        .setProtectedHeader({ alg: 'EdDSA', kid: KID })
+        .setIssuer('axiam')
+        .setSubject('user-1')
+        .setExpirationTime('1h')
+        .sign(key);
+
+      await expect(
+        authenticateRequest(sessionFor(), token, { certificateThumbprint: 'a-different-thumbprint' }),
+      ).rejects.toBeInstanceOf(AuthError);
+    });
+
+    it('an empty cnf object is refused, never read as unbound', async () => {
+      const key = await setup();
+      const token = await new SignJWT({ tenant_id: 'tenant-1', cnf: {} })
+        .setProtectedHeader({ alg: 'EdDSA', kid: KID })
+        .setIssuer('axiam')
+        .setSubject('user-1')
+        .setExpirationTime('1h')
+        .sign(key);
+
+      await expect(authenticateRequest(sessionFor(), token)).rejects.toBeInstanceOf(AuthError);
+      await expect(
+        authenticateRequest(sessionFor(), token, { certificateThumbprint: 'anything' }),
+      ).rejects.toBeInstanceOf(AuthError);
+    });
+
+    it('the positive regression: an unbound token is still accepted with or without evidence present', async () => {
+      const key = await setup();
+      const token = await baseJwt().setSubject('user-1').sign(key); // no cnf at all
+
+      // No proofs.
+      await expect(authenticateRequest(sessionFor(), token)).resolves.toMatchObject({ userId: 'user-1' });
+      // Proofs present anyway — an unbound token does not care.
+      await expect(
+        authenticateRequest(sessionFor(), token, { certificateThumbprint: 'unrelated' }),
+      ).resolves.toMatchObject({ userId: 'user-1' });
+    });
+  });
 });

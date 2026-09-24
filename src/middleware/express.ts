@@ -33,6 +33,7 @@ import {
   type OidcLoginOptions,
   type OidcLoginOutcome,
 } from './oidcLoginCore.js';
+import { certificateProofFromSocket } from './peerCertificate.js';
 import { authenticateRequest, type AxiamIdentity, type VerifiableSession } from './verifyCore.js';
 
 /** An Express `Request` augmented with the AXIAM identity that `axiamMiddleware` injects after §10 verification. */
@@ -116,7 +117,14 @@ export function axiamMiddleware(session: VerifiableSession): RequestHandler {
     }
 
     try {
-      const identity = await authenticateRequest(session, credential.token);
+      // §10.1 rule 9: the one piece of transport evidence this middleware can
+      // gather on its own — the peer certificate the TLS layer verified for
+      // THIS connection, when Node itself terminated TLS. `req.socket` is
+      // `express`'s (Node's) raw socket; `{}` when it is not TLS-shaped or
+      // carries no certificate, which is exactly "no evidence" and refuses a
+      // cnf-bound token rather than accepting one (see verifyCore.ts).
+      const proofs = await certificateProofFromSocket(req.socket);
+      const identity = await authenticateRequest(session, credential.token, proofs);
       (req as AxiamRequest).axiamUser = identity;
       next();
     } catch (err) {

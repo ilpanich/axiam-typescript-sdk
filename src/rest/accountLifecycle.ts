@@ -9,7 +9,7 @@
 
 import { mapHttpStatusToError, NetworkError, Sensitive, sanitizeAxiosError } from '../core/index.js';
 import type { AxiamClient } from './client.js';
-import { userInfoFromWire } from './auth.js';
+import { recordPrincipalScope, userInfoFromWire } from './auth.js';
 import type { LoginResult, LoginSuccessResponseWire } from './types.js';
 
 const MFA_ENROLL = '/api/v1/auth/mfa/enroll';
@@ -191,9 +191,16 @@ export async function mfaSetupConfirm(
   client.session.authenticated = true;
   await client.session.onAuthenticated?.();
 
+  const user = userInfoFromWire(wire.user);
+  // §5.2 rule 1 (C-12): this completes the login login() left interrupted,
+  // and this SDK's userInfoFromWire already gives it a real
+  // organizationLevel/reachableTenantIds — record them, the same as the
+  // password/OPAQUE/WebAuthn paths.
+  recordPrincipalScope(client, user);
+
   return {
     status: 'authenticated',
-    user: userInfoFromWire(wire.user),
+    user,
     sessionId: wire.session_id,
     expiresIn: wire.expires_in,
   };
@@ -359,7 +366,13 @@ async function post<T>(
   operation: string,
 ): Promise<T> {
   try {
-    const response = await client.session.axios.post<T>(path, body);
+    // §5.2.2 rule 4: sent "as normal" on the self-service calls too, and the
+    // server decides which tenant a call about the caller's own id belongs
+    // to. `undefined` (a handle that never called actingTenant()) sends no
+    // header, byte-for-byte what every call here sent before contract 1.51.
+    const response = await client.session.axios.post<T>(path, body, {
+      headers: client.actingTenantHeaders(),
+    });
     return response.data;
   } catch (err) {
     throw toTaxonomyError(err, operation);

@@ -81,8 +81,13 @@ export function installRefreshInterceptor(axiosInstance: AxiosInstance, session:
       const status = error.response.status;
       const url = originalRequest.url ?? '';
       const isSkipRefresh = SKIP_REFRESH.some((skipUrl) => url.includes(skipUrl));
+      // §6.1 rule 6 (contract 1.51): a device token has no refresh token
+      // behind it. A later 401 on it is AuthError, never a refresh attempt —
+      // there is nothing the §9 guard could spend, and the recovery path is
+      // calling authenticateDevice() again (one TLS handshake), not this.
+      const isDeviceSession = session.deviceAccessToken !== undefined;
 
-      if (status === 401 && !originalRequest._retry && !isSkipRefresh && session.authenticated) {
+      if (status === 401 && !originalRequest._retry && !isSkipRefresh && session.authenticated && !isDeviceSession) {
         // CQ-F32: set _retry BEFORE the refresh call so a 401 on the replayed
         // request cannot trigger a second refresh cycle.
         originalRequest._retry = true;
@@ -109,7 +114,7 @@ export function installRefreshInterceptor(axiosInstance: AxiosInstance, session:
         }
       }
 
-      if (status === 401 && isSkipRefresh) {
+      if (status === 401 && (isSkipRefresh || isDeviceSession)) {
         // url + body are forwarded so the mapper can apply the
         // endpoint-qualified §2 row: a 401 from /oauth2/introspect or
         // /oauth2/revoke carrying an OAuth2ErrorResponse body becomes an
@@ -128,8 +133,52 @@ export function installRefreshInterceptor(axiosInstance: AxiosInstance, session:
   );
 }
 
-/** Install both the CSRF and reactive single-flight refresh interceptors. */
+/**
+ * Request interceptor: once `authenticateDevice()` has adopted a token
+ * (`session.deviceAccessToken`), every same-origin request carries it as
+ * `Authorization: Bearer` and rides the jar-free agent pair
+ * `noCredentialsConfig()` builds — TLS-configured (the client certificate
+ * stays on the connection), but with no cookie jar attached (CONTRACT.md
+ * §6.1 rules 6-10, contract 1.51).
+ *
+ * The server reads the `axiam_access` cookie BEFORE the `Authorization`
+ * header, so leaving the jar attached would let a cookie from an earlier
+ * session on this same client silently outrank this token and the request
+ * would run as that earlier session's principal — the exact hazard the
+ * reference Rust SDK's own re-vendor flagged ("what the plan did not
+ * anticipate", note 3). A session that never calls `authenticateDevice()`
+ * is byte-for-byte unaffected: `deviceAccessToken` stays `undefined` and
+ * this branch never runs.
+ *
+ * Installed by `installInterceptors` (bound to whichever `session`
+ * `AxiamClient`'s constructor was actually given — the Node persona's real
+ * `NodeSession`, not the transient `SharedSession` `createSession()`
+ * discards after lifting its `.axios`/`.tenantHeaderValue` into it) rather
+ * than inside `session.ts`'s `createSession`, so it always observes the
+ * `deviceAccessToken` `authenticateDevice()` actually sets.
+ */
+export function installDeviceTokenInterceptor(axiosInstance: AxiosInstance, session: SharedSession): void {
+  axiosInstance.interceptors.request.use((config) => {
+    const deviceToken = session.deviceAccessToken;
+    if (session.isForeignHost(config.url) || deviceToken === undefined) {
+      return config;
+    }
+    const noCred = session.noCredentialsConfig();
+    Object.assign(config, noCred);
+    config.headers = config.headers ?? {};
+    config.headers['Authorization'] = `Bearer ${deviceToken.expose()}`;
+    // Belt and braces alongside the agent swap above: an explicit empty
+    // Cookie header is what the reference Rust SDK relies on to make sure a
+    // stale session cookie cannot ride beside this token even if something
+    // downstream of noCredentialsConfig() still had one to offer.
+    config.headers['Cookie'] = '';
+    return config;
+  });
+}
+
+/** Install the CSRF, reactive single-flight refresh, and §6.1 device-token interceptors. */
 export function installInterceptors(axiosInstance: AxiosInstance, session: SharedSession): void {
   installCsrfInterceptor(axiosInstance, session);
   installRefreshInterceptor(axiosInstance, session);
+  installDeviceTokenInterceptor(axiosInstance, session);
 }

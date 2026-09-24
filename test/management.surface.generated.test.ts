@@ -261,7 +261,7 @@ describe('roles namespace', () => {
   });
   it('roles.list_users', async () => {
     await withServer(async (server, client) => {
-      mountJson(server, 'GET', `/api/v1/roles/${EXAMPLE_ID}/users`, 200, [{"user":{"created_at":"2026-08-26T00:00:00Z","email":"example","email_verified":true,"failed_login_attempts":1,"id":"11111111-1111-4111-8111-111111111111","is_locked":true,"metadata":{},"mfa_enabled":true,"status":"Active","tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z","username":"example"}}]);
+      mountJson(server, 'GET', `/api/v1/roles/${EXAMPLE_ID}/users`, 200, [{"inherit":true,"user":{"created_at":"2026-08-26T00:00:00Z","email":"example","email_verified":true,"failed_login_attempts":1,"id":"11111111-1111-4111-8111-111111111111","is_locked":true,"metadata":{},"mfa_enabled":true,"status":"Active","tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z","username":"example"}}]);
       await client.roles.listUsers(EXAMPLE_ID);
     });
   });
@@ -279,7 +279,7 @@ describe('roles namespace', () => {
   });
   it('roles.list_groups', async () => {
     await withServer(async (server, client) => {
-      mountJson(server, 'GET', `/api/v1/roles/${EXAMPLE_ID}/groups`, 200, [{"group":{"created_at":"2026-08-26T00:00:00Z","description":"example","id":"11111111-1111-4111-8111-111111111111","metadata":{},"name":"example","tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z"}}]);
+      mountJson(server, 'GET', `/api/v1/roles/${EXAMPLE_ID}/groups`, 200, [{"group":{"created_at":"2026-08-26T00:00:00Z","description":"example","id":"11111111-1111-4111-8111-111111111111","metadata":{},"name":"example","tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z"},"inherit":true}]);
       await client.roles.listGroups(EXAMPLE_ID);
     });
   });
@@ -315,7 +315,7 @@ describe('roles namespace', () => {
   });
   it('roles.list_service_accounts', async () => {
     await withServer(async (server, client) => {
-      mountJson(server, 'GET', `/api/v1/roles/${EXAMPLE_ID}/service-accounts`, 200, [{"service_account":{"client_id":"example","created_at":"2026-08-26T00:00:00Z","id":"11111111-1111-4111-8111-111111111111","name":"example","status":"Active","tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z"}}]);
+      mountJson(server, 'GET', `/api/v1/roles/${EXAMPLE_ID}/service-accounts`, 200, [{"inherit":true,"service_account":{"client_id":"example","created_at":"2026-08-26T00:00:00Z","id":"11111111-1111-4111-8111-111111111111","name":"example","status":"Active","tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z"}}]);
       await client.roles.listServiceAccounts(EXAMPLE_ID);
     });
   });

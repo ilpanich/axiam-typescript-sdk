@@ -17,11 +17,16 @@
 // buf-enabled CI run (RESEARCH.md D-20; environment note in this plan).
 
 import * as grpc from '@grpc/grpc-js';
-import type { AccessDecision, ClientIdentity } from '../core/index.js';
+import type { AccessDecision, ClientIdentity, Sensitive } from '../core/index.js';
 import { AuthError, resolveClientIdentity } from '../core/index.js';
+import type { CnfClaim } from '../node/jwks.js';
 import type { NodeSession } from '../node/session.js';
 import { authInterceptor } from './interceptor.js';
 import { callWithRefresh } from './callWithRefresh.js';
+
+function expose(token: Sensitive<string> | string): string {
+  return typeof token === 'string' ? token : token.expose();
+}
 
 // Re-exported (not re-declared) so `grpc/index.ts` can still export
 // `AccessDecision` from `./client.js` — see `core/authz.ts` for the single
@@ -222,6 +227,209 @@ function fromWireUserInfo(resp: WireGetUserInfoResponse): UserInfo {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Wire shapes (proto/axiam/v1/token.proto) — mirrored, not imported.
+// CONTRACT.md §1.1.1 / §10.3 (contract 1.51).
+// ---------------------------------------------------------------------------
+
+/** `axiam.v1.CnfClaim` — mirrors `proto/axiam/v1/token.proto`'s field names exactly. */
+export interface WireCnfClaim {
+  x5t_s256: string;
+  jkt: string;
+}
+
+export interface WireValidateTokenRequest {
+  access_token: string;
+}
+
+export interface WireValidateTokenResponse {
+  valid: boolean;
+  subject_id: string;
+  tenant_id: string;
+  org_id: string;
+  exp: number;
+  /** Present ONLY when the inspected token is sender-constrained (§10.3 rule 3: absence, not an empty message, means unbound). */
+  cnf?: WireCnfClaim;
+  token_type: string;
+}
+
+export interface WireIntrospectTokenRequest {
+  access_token: string;
+}
+
+/** `axiam.v1.RptPermission` — mirrors `proto/axiam/v1/token.proto`. */
+export interface WireRptPermission {
+  resource_id: string;
+  resource_scopes: string[];
+  exp: number;
+}
+
+export interface WireIntrospectTokenResponse {
+  active: boolean;
+  sub: string;
+  tenant_id: string;
+  org_id: string;
+  iss: string;
+  iat: number;
+  exp: number;
+  jti: string;
+  scope: string;
+  client_id: string;
+  token_type: string;
+  cnf?: WireCnfClaim;
+  permissions: WireRptPermission[];
+  ext_exchange_iss: string;
+}
+
+/**
+ * The subset of a ts-proto (`outputServices=grpc-js`) generated
+ * `TokenServiceClient` this module needs. As with {@link
+ * WireAuthorizationServiceClient}, the real generated client satisfies this
+ * shape exactly, so a buf-enabled build's generated `TokenServiceClient` from
+ * `../gen/...` is a drop-in replacement.
+ */
+export interface WireTokenServiceClient {
+  validateToken(
+    request: WireValidateTokenRequest,
+    metadata: grpc.Metadata,
+    callback: UnaryCallback<WireValidateTokenResponse>,
+  ): grpc.ClientUnaryCall;
+  introspectToken(
+    request: WireIntrospectTokenRequest,
+    metadata: grpc.Metadata,
+    callback: UnaryCallback<WireIntrospectTokenResponse>,
+  ): grpc.ClientUnaryCall;
+  close(): void;
+}
+
+/**
+ * Convert a wire `CnfClaim` into the public {@link CnfClaim} shape
+ * `node/jwks.ts`'s `verifyTokenBinding`/`verifyCertificateBinding` already
+ * consume (CONTRACT.md §10.3: "local verification and gRPC validation share
+ * one implementation" — this is the seam that makes it true rather than
+ * aspirational).
+ *
+ * `undefined` in -> `undefined` out: the whole `cnf` message was absent, the
+ * unbound case. Present in (even with both members `""`, proto3's rendering
+ * of "unset") -> a `CnfClaim` object out, **never dropped** — a present but
+ * empty confirmation is §10.3 rule 3's "names neither", which
+ * `verifyTokenBinding` must refuse, not silently read as absent. An empty
+ * proto3 string reads as absent *within* the object (`""` `x5t_s256` becomes
+ * no `'x5t#S256'` key), which is exactly what lets `verifyTokenBinding` see
+ * "present, names neither" when both are empty.
+ */
+function fromWireCnf(wire: WireCnfClaim | undefined): CnfClaim | undefined {
+  if (wire === undefined) return undefined;
+  const cnf: CnfClaim = {};
+  if (wire.x5t_s256) cnf['x5t#S256'] = wire.x5t_s256;
+  if (wire.jkt) cnf.jkt = wire.jkt;
+  return cnf;
+}
+
+/**
+ * `validateToken`'s result (CONTRACT.md §1.1.1 rule 3) — every field the
+ * `ValidateTokenResponse` message defines, camelCase per §1.
+ *
+ * `valid: true` means the signature, expiry and tenant check out — it does
+ * **not** mean the token is usable by whoever presented it (§10.3 rule 2).
+ * When {@link cnf} is present, verify possession against **this caller's
+ * own** connection before treating the token as usable — e.g.
+ * `verifyTokenBinding({ cnf: result.cnf }, presentedProofs)` from
+ * `node/jwks.ts` (or `middleware/index.ts`'s re-export of it), the same
+ * function the REST §10 guard applies. `token_type` alone does not tell you
+ * whether a token is bound (§10.3 rule 4 / §1.1.1 rule 5): a
+ * certificate-bound token is reported `"Bearer"`. Decide boundness from
+ * {@link cnf} alone.
+ */
+export interface TokenValidation {
+  /** Whether the signature, expiry and tenant check out. NOT "usable as presented" when `cnf` is set — see the type doc. */
+  valid: boolean;
+  /** Subject (user) UUID. Empty when `valid` is `false`. */
+  subjectId: string;
+  /** Tenant UUID. Empty when `valid` is `false` — including for a token from another tenant (§10.3 rule 6: not an error). */
+  tenantId: string;
+  /** Organization UUID. Empty when `valid` is `false`. */
+  orgId: string;
+  /** Expiry (Unix seconds). Zero when `valid` is `false`. */
+  exp: number;
+  /** RFC 7800 confirmation, when the token is sender-constrained. `undefined` means unbound. */
+  cnf?: CnfClaim;
+  /** `"Bearer"` or `"DPoP"` (RFC 9449 §5) — see the type doc; does not by itself say whether the token is bound. */
+  tokenType: string;
+}
+
+function fromWireValidation(wire: WireValidateTokenResponse): TokenValidation {
+  return {
+    valid: wire.valid,
+    subjectId: wire.subject_id,
+    tenantId: wire.tenant_id,
+    orgId: wire.org_id,
+    exp: wire.exp,
+    cnf: fromWireCnf(wire.cnf),
+    tokenType: wire.token_type,
+  };
+}
+
+/**
+ * `introspectToken`'s result (CONTRACT.md §1.1.1 rule 3, RFC 7662 §2.2) —
+ * every field `IntrospectTokenResponse` defines, camelCase per §1. See
+ * {@link TokenValidation}'s doc for the `cnf`/`tokenType` rules, which apply
+ * identically here.
+ */
+export interface TokenIntrospection {
+  /** Whether the token is active (valid and not expired). NOT "usable as presented" when `cnf` is set. */
+  active: boolean;
+  /** Subject (user) UUID. */
+  sub: string;
+  /** Tenant UUID. Empty for a token from another tenant (§10.3 rule 6: not an error). */
+  tenantId: string;
+  /** Organization UUID. */
+  orgId: string;
+  /** Issuer. */
+  iss: string;
+  /** Issued-at (Unix seconds). */
+  iat: number;
+  /** Expiry (Unix seconds). */
+  exp: number;
+  /** Unique token ID. */
+  jti: string;
+  /** Space-separated granted scopes (RFC 7662 §2.2). Empty when the token carries no scope claim. */
+  scope: string;
+  /** The client the token was issued to, when it was issued to one. */
+  clientId: string;
+  /** `"Bearer"` or `"DPoP"` — does not by itself say whether the token is bound; decide from `cnf`. */
+  tokenType: string;
+  /** RFC 7800 confirmation, when the token is sender-constrained. `undefined` means unbound. */
+  cnf?: CnfClaim;
+  /** UMA 2.0 (X2) permissions, present only on an RPT — a record of a decision already made. */
+  permissions: Array<{ resourceId: string; resourceScopes: string[]; exp: number }>;
+  /** X4 cross-domain provenance: the foreign issuer whose subject token bought this one, when there was one. */
+  extExchangeIss: string;
+}
+
+function fromWireIntrospection(wire: WireIntrospectTokenResponse): TokenIntrospection {
+  return {
+    active: wire.active,
+    sub: wire.sub,
+    tenantId: wire.tenant_id,
+    orgId: wire.org_id,
+    iss: wire.iss,
+    iat: wire.iat,
+    exp: wire.exp,
+    jti: wire.jti,
+    scope: wire.scope,
+    clientId: wire.client_id,
+    tokenType: wire.token_type,
+    cnf: fromWireCnf(wire.cnf),
+    permissions: wire.permissions.map((p) => ({
+      resourceId: p.resource_id,
+      resourceScopes: p.resource_scopes,
+      exp: p.exp,
+    })),
+    extExchangeIss: wire.ext_exchange_iss,
+  };
+}
+
 function promisifyUnary<TReq, TResp>(
   call: (req: TReq, metadata: grpc.Metadata, callback: UnaryCallback<TResp>) => grpc.ClientUnaryCall,
   request: TReq,
@@ -411,6 +619,65 @@ export type UserInfoServiceClientFactory = (
 ) => WireUserInfoServiceClient;
 
 /**
+ * Construct a real `TokenServiceClient` the same way {@link
+ * buildAuthorizationServiceClient} builds the AuthorizationService client —
+ * grpc-js's own `makeClientConstructor` primitive, with a JSON codec as a
+ * build-independent stand-in for the protobuf binary serializers a
+ * buf-enabled build would generate. Swap this factory for the generated
+ * `TokenServiceClient` from `../gen/...` once `src/gen` exists (D-20); it
+ * satisfies {@link WireTokenServiceClient} by construction (same .proto).
+ *
+ * Pools the same way {@link buildUserInfoServiceClient} does: a
+ * `TokenGrpcClient` built against the same `baseUrl`/credentials as a
+ * co-located `AuthzGrpcClient`/`UserInfoGrpcClient` shares the underlying
+ * connection.
+ */
+export function buildTokenServiceClient(
+  baseUrl: string,
+  credentials: grpc.ChannelCredentials,
+  interceptors: grpc.Interceptor[],
+): WireTokenServiceClient {
+  const validateReqCodec = jsonCodec<WireValidateTokenRequest>();
+  const validateRespCodec = jsonCodec<WireValidateTokenResponse>();
+  const introspectReqCodec = jsonCodec<WireIntrospectTokenRequest>();
+  const introspectRespCodec = jsonCodec<WireIntrospectTokenResponse>();
+
+  const ServiceClientConstructor = grpc.makeClientConstructor(
+    {
+      validateToken: {
+        path: '/axiam.v1.TokenService/ValidateToken',
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: validateReqCodec.serialize,
+        requestDeserialize: validateReqCodec.deserialize,
+        responseSerialize: validateRespCodec.serialize,
+        responseDeserialize: validateRespCodec.deserialize,
+      },
+      introspectToken: {
+        path: '/axiam.v1.TokenService/IntrospectToken',
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: introspectReqCodec.serialize,
+        requestDeserialize: introspectReqCodec.deserialize,
+        responseSerialize: introspectRespCodec.serialize,
+        responseDeserialize: introspectRespCodec.deserialize,
+      },
+    },
+    'axiam.v1.TokenService',
+  );
+
+  return new ServiceClientConstructor(grpcTarget(baseUrl), credentials, {
+    interceptors,
+  }) as unknown as WireTokenServiceClient;
+}
+
+export type TokenServiceClientFactory = (
+  baseUrl: string,
+  credentials: grpc.ChannelCredentials,
+  interceptors: grpc.Interceptor[],
+) => WireTokenServiceClient;
+
+/**
  * gRPC transport for `AuthorizationService` (`checkAccess`/`batchCheck`,
  * SC#2 Node half), reusing one long-lived client/channel per instance (D-10
  * — never reconstructed per-call) and injecting auth + tenant metadata via
@@ -531,6 +798,101 @@ export class UserInfoGrpcClient {
       promisifyUnary(this.#inner.getUserInfo.bind(this.#inner), {} as WireGetUserInfoRequest),
     );
     return fromWireUserInfo(response);
+  }
+
+  /** Close the underlying gRPC channel. */
+  close(): void {
+    this.#inner.close();
+  }
+}
+
+/**
+ * gRPC transport for `axiam.v1.TokenService` (`validateToken`/
+ * `introspectToken`, CONTRACT.md §1.1.1, §10.3, contract 1.51) — the public
+ * wrapper §10.3 requires so an SDK validating a token over gRPC has
+ * somewhere to read `cnf` from at all: before 1.51 five repositories
+ * generated the stubs and in none of them did a public method wrap them.
+ *
+ * Reuses the SAME channel/interceptor/refresh machinery as {@link
+ * AuthzGrpcClient}/{@link UserInfoGrpcClient}: one long-lived client/channel
+ * per instance (D-10), the shared auth + `x-tenant-id` interceptor
+ * (`authInterceptor(session)`), and this session's single-flight refresh
+ * guard via `callWithRefresh`. Built from the same {@link NodeSession}, it
+ * shares the pooled subchannel with a co-located client (no second
+ * connection).
+ */
+export class TokenGrpcClient {
+  readonly #session: NodeSession;
+  readonly #inner: WireTokenServiceClient;
+
+  constructor(
+    session: NodeSession,
+    options: {
+      baseUrl: string;
+      customCa?: string;
+      allowInsecure?: boolean;
+      /** PEM client-certificate chain for mutual TLS (§6.1); pair with `clientKey`. */
+      clientCert?: string;
+      /** PEM private key for mutual TLS (§6.1); pair with `clientCert`. Secret (§7). */
+      clientKey?: string;
+    },
+    clientFactory: TokenServiceClientFactory = buildTokenServiceClient,
+  ) {
+    this.#session = session;
+    // Validate + resolve the §6.1 identity and apply it to the gRPC channel —
+    // the SAME identity the REST/authz/userinfo transports use.
+    const identity = resolveClientIdentity(options);
+    const credentials = buildCredentials(
+      options.baseUrl,
+      options.customCa,
+      options.allowInsecure ?? false,
+      identity,
+    );
+    this.#inner = clientFactory(options.baseUrl, credentials, [authInterceptor(session)]);
+  }
+
+  /**
+   * `ValidateToken` over gRPC (§1.1.1, §10.3). `accessToken` is the token
+   * being **inspected** — secret material (`Sensitive<T>`, §7) and a
+   * **different** credential from this client's own session token, which
+   * authenticates the call itself through the interceptor exactly as
+   * `checkAccess`/`getUserInfo` do. There is no default: passing nothing
+   * cannot silently fall back to the caller's own token.
+   *
+   * Precondition (§1.1 rule 3, shared by every gRPC-only operation): with no
+   * caller access token this raises `AuthError` client-side, **without a
+   * wire call** — the interceptor's `UNAUTHENTICATED` would otherwise send
+   * the call to the §9 refresh guard with nothing to refresh.
+   *
+   * `UNAUTHENTICATED` on the call itself (the CALLER's credential, not the
+   * inspected token) triggers exactly one shared-guard refresh + one retry
+   * (§9.3), identical to {@link AuthzGrpcClient.checkAccess}.
+   */
+  async validateToken(accessToken: Sensitive<string> | string): Promise<TokenValidation> {
+    if (this.#session.tokenManager.cachedAccessToken() === null) {
+      throw new AuthError('validateToken requires a prior successful login() (no caller access token present)');
+    }
+    const wireRequest: WireValidateTokenRequest = { access_token: expose(accessToken) };
+    const response = await callWithRefresh(this.#session, () =>
+      promisifyUnary(this.#inner.validateToken.bind(this.#inner), wireRequest),
+    );
+    return fromWireValidation(response);
+  }
+
+  /**
+   * `IntrospectToken` over gRPC (§1.1.1, §10.3, RFC 7662). Same caller-token
+   * precondition, refresh behaviour and inspected-token/caller-token
+   * separation as {@link validateToken}; see its doc.
+   */
+  async introspectToken(accessToken: Sensitive<string> | string): Promise<TokenIntrospection> {
+    if (this.#session.tokenManager.cachedAccessToken() === null) {
+      throw new AuthError('introspectToken requires a prior successful login() (no caller access token present)');
+    }
+    const wireRequest: WireIntrospectTokenRequest = { access_token: expose(accessToken) };
+    const response = await callWithRefresh(this.#session, () =>
+      promisifyUnary(this.#inner.introspectToken.bind(this.#inner), wireRequest),
+    );
+    return fromWireIntrospection(response);
   }
 
   /** Close the underlying gRPC channel. */

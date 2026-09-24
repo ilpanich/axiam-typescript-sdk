@@ -5,7 +5,7 @@
 // exclusively via Set-Cookie — LoginResult deliberately carries no session
 // token field anywhere in the public API (T-17-07).
 
-import { AxiamError, mapHttpStatusToError, NetworkError, Sensitive, sanitizeAxiosError } from '../core/index.js';
+import { AuthError, AxiamError, mapHttpStatusToError, NetworkError, Sensitive, sanitizeAxiosError } from '../core/index.js';
 import type { AxiamClient } from './client.js';
 import type {
   AxiamUserInfo,
@@ -67,11 +67,41 @@ function loginSuccessToResult(wire: LoginSuccessResponseWire, client?: AxiamClie
   if (client && user.principalTenantId) {
     client.session.resolvedPrincipalTenantId = user.principalTenantId;
   }
+  if (client) recordPrincipalScope(client, user);
   return {
     status: 'authenticated',
     user,
     sessionId: wire.session_id,
     expiresIn: wire.expires_in,
+  };
+}
+
+/**
+ * Remember what a completed login reported about the principal's reach
+ * (CONTRACT.md §5.2 / §5.2.3, contract 1.51), so `AxiamClient.actingTenant()`
+ * can gate on it.
+ *
+ * Called for every session-establishing response that carries a
+ * `LoginUserInfo`: password login, `verifyMfa`, OPAQUE login, the two
+ * WebAuthn login ceremonies, and `mfaSetupConfirm`. All five decode the
+ * identical wire shape through {@link userInfoFromWire}, so all five report
+ * exactly what the server said — a deliberately more precise choice than
+ * treating them as "unknown" (see the C-12 note in the PR/CHANGELOG): this
+ * SDK's `userInfoFromWire` already gives every one of them a real
+ * `organizationLevel`/`reachableTenantIds`, so reading the real values is no
+ * more work than discarding them would be.
+ *
+ * NOT called by `authenticateDevice()` (§6.1): a device token is a
+ * service-account credential with no `LoginUserInfo` behind it, so that path
+ * explicitly resets this to `undefined` instead — "the server said nothing",
+ * on which `actingTenant()` has nothing to gate.
+ *
+ * @internal
+ */
+export function recordPrincipalScope(client: AxiamClient, user: AxiamUserInfo): void {
+  client.session.principalScope = {
+    organizationLevel: user.organizationLevel,
+    reachableTenantIds: user.reachableTenantIds,
   };
 }
 
@@ -132,6 +162,10 @@ export async function login(client: AxiamClient, email: string, password: string
   // change must drop them — otherwise a re-authentication as a different
   // principal inherits the previous one's decisions.
   client.decisionMemo.clear();
+  // §6.1 rules 6-10 (contract 1.51): a password login fully replaces
+  // whatever credential this client held, including a device token adopted
+  // by an earlier authenticateDevice() call on the same client.
+  client.session.deviceAccessToken = undefined;
   // The server resolves the workspace from the login body (org + tenant), not
   // the X-Tenant-ID header, so tenant/org context must travel here (§5).
   const body = client.session.buildLoginBody(email, password);
@@ -195,6 +229,7 @@ export async function verifyMfa(client: AxiamClient, mfaToken: string, code: str
   // change must drop them — otherwise a re-authentication as a different
   // principal inherits the previous one's decisions.
   client.decisionMemo.clear();
+  client.session.deviceAccessToken = undefined;
   const body: MfaVerifyRequestBody = { challenge_token: mfaToken, totp_code: code };
 
   try {
@@ -235,7 +270,9 @@ export async function refresh(client: AxiamClient): Promise<void> {
   // principal inherits the previous one's decisions.
   client.decisionMemo.clear();
   try {
-    await client.session.axios.post<RefreshSuccessResponseWire>(REFRESH_PATH, client.session.buildRefreshBody());
+    await client.session.axios.post<RefreshSuccessResponseWire>(REFRESH_PATH, client.session.buildRefreshBody(), {
+      headers: client.actingTenantHeaders(),
+    });
     // H8 fix (SDK bench harness validation): a successful refresh rotates
     // the `axiam_csrf` cookie (new random token, CONTRACT.md §3) the same
     // way login does, but — unlike login/verifyMfa just below, which both
@@ -280,7 +317,7 @@ export async function logout(client: AxiamClient): Promise<void> {
   // principal inherits the previous one's decisions.
   client.decisionMemo.clear();
   try {
-    await client.session.axios.post(LOGOUT_PATH, {});
+    await client.session.axios.post(LOGOUT_PATH, {}, { headers: client.actingTenantHeaders() });
   } catch (err) {
     // LOGOUT_PATH is a SKIP_REFRESH url — same pre-mapping as login/refresh.
     // The `finally` below still clears session state either way.
@@ -296,6 +333,126 @@ export async function logout(client: AxiamClient): Promise<void> {
   } finally {
     client.session.authenticated = false;
     client.session.csrfToken = undefined;
+    // §5.2 rule 1 (C-12): logout forgets what the previous session reported.
+    // A later re-login as a different principal must not have
+    // `actingTenant()` gate on the outgoing principal's reach.
+    client.session.principalScope = undefined;
+    // §6.1 rules 6-10 (contract 1.51): forget an adopted device token too.
+    client.session.deviceAccessToken = undefined;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// §6.1 rules 6-10 (contract 1.51) — authenticateDevice(), the mTLS device
+// login. `POST /api/v1/auth/device`, no request body.
+// ---------------------------------------------------------------------------
+
+const DEVICE_LOGIN_PATH = '/api/v1/auth/device';
+
+interface DeviceLoginResponseWire {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+}
+
+/** The outcome of {@link AxiamClient.authenticateDevice} — CONTRACT.md §6.1 rule 6. */
+export interface DeviceToken {
+  /** The minted access token. Secret material (§7) — never logged/serialized. */
+  accessToken: Sensitive<string>;
+  /** Always `"Bearer"`. */
+  tokenType: string;
+  /** Access-token lifetime in seconds from the time of this response (server default 900). */
+  expiresIn: number;
+}
+
+/**
+ * `POST /api/v1/auth/device` (§6.1 rules 6–10, contract 1.51) — authenticate
+ * an IoT device or service account by the mutual-TLS identity this client was
+ * built with.
+ *
+ * No request body; the server derives identity entirely from the client
+ * certificate presented during the TLS handshake. Adopts the returned token
+ * as this client's credential exactly as a completed `login()` is adopted —
+ * every subsequent same-origin REST request carries it as
+ * `Authorization: Bearer`.
+ *
+ * **There is no refresh token** (server decision, D-6 of the dogfooding
+ * remediation plan). A device re-authenticates by calling this operation
+ * again, which costs one TLS handshake; a later `401` on the adopted token is
+ * surfaced as `AuthError` without a refresh attempt (rule 6,
+ * `rest/interceptors.ts`'s reactive-refresh guard checks
+ * `session.deviceAccessToken` for exactly this).
+ *
+ * @throws {AuthError} client-side, with **zero wire calls**, when this client
+ * was not built with a client certificate (rule 7) — going to the wire would
+ * only earn the same `401` the server already knows it would give, turning a
+ * configuration mistake into an authentication failure. Also thrown (this
+ * time from the server's `401`) for an unknown, untrusted, expired, revoked
+ * or unbound certificate, and for a `Server`-type certificate (rule 8) — the
+ * message is the server's, surfaced verbatim.
+ * @throws {NetworkError} on a `429` (the route is rate-limited per client IP;
+ * §16 governs, and this is not an authentication failure, rule 8) or any
+ * other transport failure. Never retried — this call is not routed through
+ * §16's retry runner, the same way `login()` is not.
+ */
+export async function authenticateDevice(client: AxiamClient): Promise<DeviceToken> {
+  // §18.1 rule 4: use-after-close is an error, not a reconnect.
+  client.ensureOpen();
+  // Rule 7: reachable only on a client configured with a certificate. Elsewhere
+  // the call MUST fail client-side, with zero wire calls.
+  if (!client.session.presentsClientCertificate) {
+    throw new AuthError(
+      'authenticateDevice() requires a client configured with clientCert/clientKey ' +
+        '(CONTRACT.md §6.1 rule 7); this client has neither',
+    );
+  }
+  // §17.1 rule 9: this is a credential change, exactly as login() is.
+  client.decisionMemo.clear();
+  // A fresh call gets a fresh credential — this client's PREVIOUS device
+  // token (if any) must not linger and be sent alongside this attempt, or a
+  // failure below would leave a stale one still adopted.
+  client.session.deviceAccessToken = undefined;
+
+  try {
+    const response = await client.session.axios.post<DeviceLoginResponseWire>(
+      DEVICE_LOGIN_PATH,
+      undefined,
+      // "What the plan did not anticipate" note 3: this LOGIN call itself
+      // must not carry a stale cookie from an earlier session either — the
+      // server would read that cookie before deciding this is a device
+      // login. noCredentialsConfig() keeps the mTLS client certificate on
+      // the connection (it is TLS-configured, not TLS-disabled) while
+      // dropping the cookie jar.
+      client.session.noCredentialsConfig(),
+    );
+    const accessToken = new Sensitive(response.data.access_token);
+    client.session.deviceAccessToken = accessToken;
+    client.session.authenticated = true;
+    // §6.1: a device token carries no LoginUserInfo. actingTenant() has
+    // nothing to gate on and sends the header regardless (§5.2 rule 1).
+    client.session.principalScope = undefined;
+    return {
+      accessToken,
+      tokenType: response.data.token_type,
+      expiresIn: response.data.expires_in,
+    };
+  } catch (err) {
+    // Rule 8: every refusal is a 401, mapped to AuthError and surfaced
+    // verbatim — this IS the login, so it MUST NOT enter the §9 refresh
+    // guard (it never does: DEVICE_LOGIN_PATH is not a cookie-session 401,
+    // session.authenticated is still false at this point, and the call is
+    // not retried regardless). A 429 maps to NetworkError through the same
+    // §2 mapping every other REST call uses.
+    if (err instanceof AxiamError) throw err;
+    const status = extractAxiosStatus(err);
+    if (status !== undefined) {
+      throw mapHttpStatusToError(
+        status,
+        extractErrorMessage(extractAxiosData(err)) ?? 'authenticateDevice failed',
+        { cause: err },
+      );
+    }
+    throw new NetworkError('authenticateDevice request failed', sanitizeAxiosError(err));
   }
 }
 

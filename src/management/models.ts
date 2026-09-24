@@ -57,6 +57,25 @@ export function omitEmptyTenantScope<T>(body: T): T {
 }
 
 /**
+ * Read a role-side assignment listing's `inherit` (contract 1.51,
+ * §27.13 S-10 rule 3).
+ *
+ * `RoleUserAssignment`, `RoleGroupAssignment` and
+ * `RoleServiceAccountAssignment` declare `inherit` REQUIRED in
+ * openapi.json — true only for a server at contract 1.51 or later. This SDK
+ * still reads responses from older ones, where the field is simply absent,
+ * and the contract is explicit that absence there means `true` — the
+ * value every assignment written before the field existed has always had —
+ * never a decode failure and never `false`. Reading `undefined` as
+ * falsy (`!assignment.inherit`) gets this backwards, which is why every
+ * read of one of these listings goes through this function rather than the
+ * field directly.
+ */
+export function roleAssignmentInherits(assignment: { inherit?: boolean }): boolean {
+  return assignment.inherit ?? true;
+}
+
+/**
  * `ActorType` (generated from openapi.json).
  *
  * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
@@ -105,6 +124,20 @@ export interface ApiProviderConfig {
 export interface AssignRoleToGroupRequest {
   /** `group_id`. */
   group_id: string;
+  /**
+   * Whether the assignment also reaches the descendants of `resource_id`.
+   *
+   * Omitted — the default — or `true` is today's behaviour: a resource-scoped
+   * assignment applies at its resource and everywhere below it. `false`
+   * applies it at `resource_id` only, "here and no further", for allow and
+   * deny grants alike.
+   *
+   * Refused with 400 when `false` is sent with no `resource_id` (a tenant-wide
+   * assignment has no node to stop at) or for a role with `is_global: true` (a
+   * global role applies everywhere by definition). The flag is part of the
+   * assignment: to change it, unassign and assign again.
+   */
+  inherit?: boolean | null;
   /** `resource_id`. */
   resource_id?: string | null;
   /**
@@ -125,6 +158,20 @@ export interface AssignRoleToGroupRequest {
 
 /** `AssignRoleToServiceAccountRequest` (generated from openapi.json). */
 export interface AssignRoleToServiceAccountRequest {
+  /**
+   * Whether the assignment also reaches the descendants of `resource_id`.
+   *
+   * Omitted — the default — or `true` is today's behaviour: a resource-scoped
+   * assignment applies at its resource and everywhere below it. `false`
+   * applies it at `resource_id` only, "here and no further", for allow and
+   * deny grants alike.
+   *
+   * Refused with 400 when `false` is sent with no `resource_id` (a tenant-wide
+   * assignment has no node to stop at) or for a role with `is_global: true` (a
+   * global role applies everywhere by definition). The flag is part of the
+   * assignment: to change it, unassign and assign again.
+   */
+  inherit?: boolean | null;
   /** `resource_id`. */
   resource_id?: string | null;
   /** `service_account_id`. */
@@ -147,6 +194,20 @@ export interface AssignRoleToServiceAccountRequest {
 
 /** `AssignRoleToUserRequest` (generated from openapi.json). */
 export interface AssignRoleToUserRequest {
+  /**
+   * Whether the assignment also reaches the descendants of `resource_id`.
+   *
+   * Omitted — the default — or `true` is today's behaviour: a resource-scoped
+   * assignment applies at its resource and everywhere below it. `false`
+   * applies it at `resource_id` only, "here and no further", for allow and
+   * deny grants alike.
+   *
+   * Refused with 400 when `false` is sent with no `resource_id` (a tenant-wide
+   * assignment has no node to stop at) or for a role with `is_global: true` (a
+   * global role applies everywhere by definition). The flag is part of the
+   * assignment: to change it, unassign and assign again.
+   */
+  inherit?: boolean | null;
   /** `resource_id`. */
   resource_id?: string | null;
   /**
@@ -361,7 +422,13 @@ export interface CaCertificate {
   public_cert_pem: string;
   /** `status`. */
   status: CertificateStatus;
-  /** The certificate subject (e.g., `CN=ACME Corp Root CA`). */
+  /**
+   * The CA's common name, e.g. `ACME Corp Root CA`.
+   *
+   * The normalised value: a `CN=` prefix in the request is understood and
+   * stripped, so this always says what the certificate's subject DN says
+   * (DF-023).
+   */
   subject: string;
   /**
    * The tenant this CA signs for, when it is a tenant signing CA.
@@ -413,7 +480,13 @@ export interface Certificate {
   public_cert_pem: string;
   /** `status`. */
   status: CertificateStatus;
-  /** The certificate subject (e.g., `CN=device-001`). */
+  /**
+   * The certificate's common name, e.g. `device-001`.
+   *
+   * The normalised value: a `CN=` prefix in the request is understood and
+   * stripped, so this always says what the certificate's subject DN says
+   * (DF-023).
+   */
   subject: string;
   /** The tenant this certificate belongs to. */
   tenant_id: string;
@@ -425,6 +498,20 @@ export interface CertificatePolicy {
   default_cert_validity_days: number;
   /** `max_cert_validity_days`. */
   max_cert_validity_days: number;
+  /**
+   * The names a `Server` certificate may be issued for (S-7, DF-001): DNS
+   * suffixes (`.lakeside.internal`, strictly below), exact hosts
+   * (`lakeside.internal`) and IP prefixes (`10.0.0.0/8`, `fd00::/8`). See
+   * [`crate::models::server_names`] for the matching rules.
+   *
+   * **Empty by default, and empty refuses every `Server` request** (I1). A
+   * certificate for a name, signed under the organization root, is trusted by
+   * every relying party that trusts that root, so the list is written where
+   * the root is owned. A tenant override may only remove an entry or narrow
+   * one; when the baseline later shrinks, the tenant's effective list is the
+   * intersection of the two.
+   */
+  server_cert_allowed_names?: string[];
 }
 
 /**
@@ -460,6 +547,7 @@ export type CertificateType =
   | "User"
   | "Service"
   | "Device"
+  | "Server"
   // eslint-disable-next-line @typescript-eslint/ban-types
   | (string & {});
 
@@ -753,7 +841,13 @@ export interface CreateCaCertificateRequest {
   issue_from_root?: boolean;
   /** `key_algorithm`. */
   key_algorithm: KeyAlgorithm;
-  /** `subject`. */
+  /**
+   * The CA's common name, e.g. `ACME Corp Root CA`.
+   *
+   * A **common name**, not a distinguished name. A single `CN=` prefix is
+   * accepted and stripped; anything else containing `=` — `O=Acme, CN=ACME
+   * Corp Root CA` — is refused with `400`.
+   */
   subject: string;
   /** Validity duration in days. */
   validity_days: number;
@@ -771,6 +865,15 @@ export interface CreateCertificateRequest {
   metadata?: unknown;
   /** `subject`. */
   subject: string;
+  /**
+   * The names a `Server` certificate is issued for, as `[{"dns":
+   * "api.lakeside.internal"}, {"ip": "10.0.0.5"}]`. Required for `cert_type:
+   * Server` and refused for every other type. Each name, and the common name,
+   * must be admitted by the tenant's effective `server_cert_allowed_names`,
+   * which is empty — refusing every `Server` request — until an organization
+   * administrator lists names.
+   */
+  subject_alt_names?: SubjectAltName[] | null;
   /** Validity duration in days. */
   validity_days: number;
 }
@@ -923,7 +1026,12 @@ export interface CreateIntermediateCaRequest {
   key_algorithm: KeyAlgorithm;
   /** The organization CA that signs it. */
   parent_ca_id: string;
-  /** Subject for the signing CA, e.g. `CN=ACME R&D Signing CA`. */
+  /**
+   * The signing CA's common name, e.g. `ACME R&D Signing CA`.
+   *
+   * A **common name**, not a distinguished name. A single `CN=` prefix is
+   * accepted and stripped; anything else containing `=` is refused with `400`.
+   */
   subject: string;
   /** Validity duration in days, capped to the parent's own expiry. */
   validity_days: number;
@@ -1706,7 +1814,13 @@ export interface GeneratedCaCertificate {
   public_cert_pem: string;
   /** `status`. */
   status: CertificateStatus;
-  /** The certificate subject (e.g., `CN=ACME Corp Root CA`). */
+  /**
+   * The CA's common name, e.g. `ACME Corp Root CA`.
+   *
+   * The normalised value: a `CN=` prefix in the request is understood and
+   * stripped, so this always says what the certificate's subject DN says
+   * (DF-023).
+   */
   subject: string;
   /**
    * The tenant this CA signs for, when it is a tenant signing CA.
@@ -1802,7 +1916,13 @@ export interface GeneratedCertificate {
   public_cert_pem: string;
   /** `status`. */
   status: CertificateStatus;
-  /** The certificate subject (e.g., `CN=device-001`). */
+  /**
+   * The certificate's common name, e.g. `device-001`.
+   *
+   * The normalised value: a `CN=` prefix in the request is understood and
+   * stripped, so this always says what the certificate's subject DN says
+   * (DF-023).
+   */
   subject: string;
   /** The tenant this certificate belongs to. */
   tenant_id: string;
@@ -3157,6 +3277,13 @@ export interface Role {
  * to).
  */
 export interface RoleAssignment {
+  /**
+   * Whether the assignment reaches the descendants of `resource_id` as well as
+   * the resource itself (`true`, the default, and the value of every
+   * assignment written before the field existed) or applies at that resource
+   * only (`false`).
+   */
+  inherit?: boolean;
   /** `None` means the role was assigned globally (no resource scope). */
   resource_id?: string | null;
   /** `role`. */
@@ -3169,6 +3296,11 @@ export interface RoleAssignment {
 export interface RoleGroupAssignment {
   /** The assigned group. */
   group: Group;
+  /**
+   * Whether the assignment also reaches the descendants of `resource_id`
+   * (`true`, the default) or applies at that resource only (`false`).
+   */
+  inherit?: boolean;
   /** `None` means the role was assigned globally (no resource scope). */
   resource_id?: string | null;
   /**
@@ -3181,6 +3313,11 @@ export interface RoleGroupAssignment {
 
 /** A service account together with the resource scope of its assignment. */
 export interface RoleServiceAccountAssignment {
+  /**
+   * Whether the assignment also reaches the descendants of `resource_id`
+   * (`true`, the default) or applies at that resource only (`false`).
+   */
+  inherit?: boolean;
   /** `None` means the role was assigned globally (no resource scope). */
   resource_id?: string | null;
   /**
@@ -3198,6 +3335,11 @@ export interface RoleServiceAccountAssignment {
 
 /** A user together with the resource scope of their assignment of this role. */
 export interface RoleUserAssignment {
+  /**
+   * Whether the assignment also reaches the descendants of `resource_id`
+   * (`true`, the default) or applies at that resource only (`false`).
+   */
+  inherit?: boolean;
   /** `None` means the role was assigned globally (no resource scope). */
   resource_id?: string | null;
   /**
@@ -3555,6 +3697,11 @@ export interface SetOrgSettings {
   require_uppercase: boolean;
   /** `sensitive_scopes_enabled`. */
   sensitive_scopes_enabled?: boolean;
+  /**
+   * S-7 — defaulted to empty, so an API client written before the field lands
+   * on "no `Server` certificate is issued" (I1).
+   */
+  server_cert_allowed_names?: string[];
   /** `webauthn_user_verification`. */
   webauthn_user_verification?: string;
 }
@@ -3602,6 +3749,13 @@ export interface SignCertificateCsrRequest {
   issuer_ca_id: string;
   /** `metadata`. */
   metadata?: unknown;
+  /**
+   * See [`CreateCertificateRequest::subject_alt_names`]. Stated here and never
+   * in the CSR, which is still refused if it requests a `subjectAltName`.
+   * Under a CA whose key is held by `vault_pki` a `Server` request on this
+   * path is refused; use `POST /api/v1/certificates`.
+   */
+  subject_alt_names?: SubjectAltName[] | null;
   /** Validity duration in days. */
   validity_days: number;
 }
@@ -3658,6 +3812,27 @@ export interface SmtpConfig {
   /** `username`. */
   username: string;
 }
+
+/**
+ * A name to put in a `Server` certificate's `subjectAltName`.
+ *
+ * Stated explicitly in the request, never read from a CSR: a CSR asking for
+ * a `subjectAltName` extension is still refused. URI and e-mail names are
+ * not offered — nothing in AXIAM consumes them yet.
+ *
+ * Each variant is a plain object naming exactly one field; there is no
+ * shared discriminator. Build a literal (`{ dns: … }`) rather than a helper
+ * — there is nothing to construct beyond the object itself.
+ */
+export type SubjectAltName =
+  | {
+      /** A DNS name, e.g. `api.lakeside.internal` or `*.lakeside.internal`. */
+      dns: string;
+    }
+  | {
+      /** An IPv4 or IPv6 address, e.g. `10.0.0.5`. */
+      ip: string;
+    };
 
 /**
  * A tenant is an isolated context within an organization.
@@ -3792,6 +3967,12 @@ export interface TenantSettingsOverride {
   require_uppercase?: boolean | null;
   /** `sensitive_scopes_enabled`. */
   sensitive_scopes_enabled?: boolean | null;
+  /**
+   * S-7 — tighten-only: every entry must be covered by an organization entry.
+   * An empty list means this tenant issues no `Server` certificate at all,
+   * which is different from an absent field (inherit the organization's list).
+   */
+  server_cert_allowed_names?: string[] | null;
   /** `webauthn_user_verification`. */
   webauthn_user_verification?: string | null;
 }

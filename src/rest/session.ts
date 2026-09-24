@@ -9,13 +9,16 @@
 // One login() drives all transports for a given session.
 
 import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
-import type { AxiamClientOptions, ClientIdentity, RefreshGuard } from '../core/index.js';
+import type { AxiamClientOptions, ClientIdentity, RefreshGuard, Sensitive } from '../core/index.js';
 import {
   CERT_PEM_MARKER,
   createRefreshGuard,
+  DecisionMemo,
   DEFAULT_CONNECT_TIMEOUT_MS,
   DEFAULT_REQUEST_TIMEOUT_MS,
   resolveClientIdentity,
+  TelemetryDispatcher,
+  TelemetryReporter,
 } from '../core/index.js';
 
 const PEM_MARKER = CERT_PEM_MARKER;
@@ -85,6 +88,87 @@ export class SharedSession {
   /** Set true once a successful login/verifyMfa has completed. */
   authenticated = false;
   /**
+   * §17 decision memo (contract 1.51: moved here from `AxiamClient` so every
+   * handle sharing this session — the base client and any
+   * `actingTenant(id)`/`clearActingTenant()` clone of it — shares one memo
+   * rather than each getting an empty one of its own). Disabled unless
+   * `decisionMemoTtlMs` was configured.
+   */
+  readonly decisionMemo: DecisionMemo;
+  /**
+   * §19 telemetry dispatcher (moved here alongside `decisionMemo`, same
+   * reason). Empty unless a hook was installed.
+   */
+  readonly telemetry: TelemetryReporter;
+  /** §16.1 disable switch (moved here alongside `decisionMemo`). Defaults to enabled. */
+  readonly retryEnabled: boolean;
+  /**
+   * §18 shutdown flag (moved here from `AxiamClient`, contract 1.51): a
+   * handle and every clone of it sharing this session close together, exactly
+   * as the Rust reference's `Arc<AxiamClientInner>` closes every handle over
+   * it. Set once by `AxiamClient.close()`; read by `ensureOpen()`.
+   */
+  closed = false;
+  /**
+   * Whether {@link installInterceptors} has already run for this session's
+   * axios instance (contract 1.51). Guards `AxiamClient.actingTenant()` /
+   * `.clearActingTenant()`, which construct a second `AxiamClient` handle
+   * over this same session: without this flag that second construction would
+   * install the CSRF/refresh interceptors a second time, double-running them
+   * on every request. Checked and set only by `rest/client.ts`.
+   *
+   * @internal
+   */
+  interceptorsInstalled = false;
+  /**
+   * CONTRACT.md §5.2 / §5.2.3 (contract 1.51) — what the last completed login
+   * reported about the principal's reach, when it reported anything at all.
+   *
+   * `undefined` until a session-establishing response has carried a user
+   * object, and reset to `undefined` by `logout()` and by
+   * `authenticateDevice()` (§6.1: a device token is a service-account
+   * credential with no `LoginUserInfo` behind it). It is `undefined` on
+   * purpose rather than a defaulted `false` — "the server did not say"
+   * must not gate `AxiamClient.actingTenant()` as though the server had
+   * said "not organization-level" (§5.2 rule 1: a client holding no login
+   * result has nothing to gate on, so it sends the header and lets the
+   * server's `403` decide).
+   *
+   * Shared across every handle over this session, not per-handle — the
+   * principal did not change because a caller asked for a different acting
+   * tenant.
+   */
+  principalScope:
+    | {
+        /** What the login response's `organizationLevel` reported. */
+        organizationLevel: boolean;
+        /** What the login response's `reachableTenantIds` reported, if present. `undefined` means unrestricted. */
+        reachableTenantIds?: string[];
+      }
+    | undefined;
+  /**
+   * CONTRACT.md §6.1 rules 6–10 (contract 1.51) — the access token
+   * `authenticateDevice()` adopted, when this session's credential is a
+   * device/mTLS one rather than a cookie session.
+   *
+   * `undefined` is the state every session starts in and the only one
+   * before contract 1.51: nothing about REST authentication changes for a
+   * client that never calls `authenticateDevice()`. Once set, the request
+   * interceptor installed in `createSession` sends it as
+   * `Authorization: Bearer <token>` and switches this request to the
+   * jar-free agent pair `noCredentialsConfig()` builds — the server reads
+   * the `axiam_access` cookie **before** the `Authorization` header (rule 3
+   * of the "what the plan did not anticipate" note), so a cookie left over
+   * from an earlier session would otherwise silently outrank this token and
+   * the request would run as that earlier session's principal. There is no
+   * refresh token behind a device token (rule 6), so `installRefreshInterceptor`
+   * checks this field too and never attempts one.
+   *
+   * Cleared by `logout()`, and by a subsequent `login()`/`verifyMfa()` that
+   * establishes an ordinary cookie session on the same client.
+   */
+  deviceAccessToken: Sensitive<string> | undefined;
+  /**
    * Per-instance single-flight refresh guard (CR-02, D-13). Shared across
    * this session's REST and gRPC transports (rest/interceptors.ts,
    * grpc/callWithRefresh.ts both call `session.refreshGuard(...)`), but
@@ -117,6 +201,13 @@ export class SharedSession {
     this.resolvedTenantId = options.tenantId;
     this.resolvedOrgId = options.orgId;
     this.refreshGuard = createRefreshGuard();
+    // §17.1 rule 1: off unless the caller asked for it.
+    this.decisionMemo = new DecisionMemo(options.decisionMemoTtlMs ?? 0);
+    this.telemetry = new TelemetryReporter(new TelemetryDispatcher(options.telemetryHook));
+    // §19.2 rule 6: a clamped setting is reported, not swallowed. Emitted once,
+    // here, because construction is the only moment an operator can act on it.
+    this.decisionMemo.reportClamp(options.decisionMemoTtlMs ?? 0, this.telemetry.dispatcher);
+    this.retryEnabled = options.retryEnabled ?? true;
   }
 
   /**
@@ -443,5 +534,15 @@ export function createSession(options: AxiamClientOptions): SharedSession {
     return config;
   });
 
+  // The §6.1 device-token interceptor (contract 1.51) is installed by
+  // `installInterceptors` (rest/interceptors.ts) instead of here, alongside
+  // CSRF/refresh — NOT here, deliberately. This function's `session` is
+  // discarded by the Node persona once its `.axios`/`.tenantHeaderValue` are
+  // lifted into a wrapping `NodeSession` (see `createNodeSession`); an
+  // interceptor closing over it would keep reading a `deviceAccessToken`
+  // that `authenticateDevice()` actually sets on the *NodeSession*, and
+  // never see it. `installInterceptors` runs against whichever session
+  // `AxiamClient`'s constructor was actually given, which is always the
+  // right one.
   return session;
 }

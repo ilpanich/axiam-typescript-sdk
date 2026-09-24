@@ -42,6 +42,11 @@ export type {
   AxiamUserInfo,
   LoginResult,
 } from './types.js';
+// §6.1 rules 6-10 (contract 1.51) — authenticateDevice()'s result type.
+// Re-exported here (not just referenced from AxiamClient.authenticateDevice's
+// doc comment) for the same dangling-reference reason as the §17/§19 types
+// above.
+export type { DeviceToken } from './auth.js';
 
 // §24 WebAuthn / passkeys — the relying-party layer. Isomorphic: these eight
 // run in Node too, where the SDK is the relying party for a ceremony that
