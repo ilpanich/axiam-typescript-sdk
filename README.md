@@ -1493,11 +1493,21 @@ server silently ignores a value that fails to parse and answers for the
 caller's own tenant. Once a login result is held, `actingTenant()` also refuses
 client-side (`AuthzError`, zero wire calls) for a non-organization-level
 principal, and for a tenant outside `reachableTenantIds` when the login
-response narrowed it (§5.2.3). A login result is held after `login`,
+response narrowed it (§5.2.3) — compared as UUIDs (case- and
+formatting-insensitive), never as raw strings, so an upper-case `tenantId`
+still matches a `reachableTenantIds` entry the server reported in its own
+lower-case canonical form. A login result is held after `login`,
 `verifyMfa`, OPAQUE login and the MFA and WebAuthn setup completions, whose
 responses carry the user object. A WebAuthn authentication, any SSO/federation
 completion (`ssoComplete`, `ssoCompleteOauth2`, `ssoCompleteHandoff`) or the
 device login resets it, so the header is sent and the server decides.
+
+`client.logout()` does **not** clear an acting tenant a handle was built with —
+the handle's `#actingTenantId` is untouched, so a handle returned by
+`client.actingTenant(id)` still sends `X-Axiam-Tenant: id` on any call made
+through it after `logout()`, and the server's session-based rejection (no
+session, no wire call — §27.4 rule 1) is what stops the request, not this
+header. Only `clearActingTenant()` (or building a fresh handle) removes it.
 
 **REST-only.** The gRPC interceptor reads no acting-tenant metadata — a gRPC
 call through any handle still acts on the token's own tenant. `X-Tenant-ID` and
