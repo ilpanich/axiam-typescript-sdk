@@ -67,11 +67,41 @@ function loginSuccessToResult(wire: LoginSuccessResponseWire, client?: AxiamClie
   if (client && user.principalTenantId) {
     client.session.resolvedPrincipalTenantId = user.principalTenantId;
   }
+  if (client) recordPrincipalScope(client, user);
   return {
     status: 'authenticated',
     user,
     sessionId: wire.session_id,
     expiresIn: wire.expires_in,
+  };
+}
+
+/**
+ * Remember what a completed login reported about the principal's reach
+ * (CONTRACT.md §5.2 / §5.2.3, contract 1.51), so `AxiamClient.actingTenant()`
+ * can gate on it.
+ *
+ * Called for every session-establishing response that carries a
+ * `LoginUserInfo`: password login, `verifyMfa`, OPAQUE login, the two
+ * WebAuthn login ceremonies, and `mfaSetupConfirm`. All five decode the
+ * identical wire shape through {@link userInfoFromWire}, so all five report
+ * exactly what the server said — a deliberately more precise choice than
+ * treating them as "unknown" (see the C-12 note in the PR/CHANGELOG): this
+ * SDK's `userInfoFromWire` already gives every one of them a real
+ * `organizationLevel`/`reachableTenantIds`, so reading the real values is no
+ * more work than discarding them would be.
+ *
+ * NOT called by `authenticateDevice()` (§6.1): a device token is a
+ * service-account credential with no `LoginUserInfo` behind it, so that path
+ * explicitly resets this to `undefined` instead — "the server said nothing",
+ * on which `actingTenant()` has nothing to gate.
+ *
+ * @internal
+ */
+export function recordPrincipalScope(client: AxiamClient, user: AxiamUserInfo): void {
+  client.session.principalScope = {
+    organizationLevel: user.organizationLevel,
+    reachableTenantIds: user.reachableTenantIds,
   };
 }
 
@@ -235,7 +265,9 @@ export async function refresh(client: AxiamClient): Promise<void> {
   // principal inherits the previous one's decisions.
   client.decisionMemo.clear();
   try {
-    await client.session.axios.post<RefreshSuccessResponseWire>(REFRESH_PATH, client.session.buildRefreshBody());
+    await client.session.axios.post<RefreshSuccessResponseWire>(REFRESH_PATH, client.session.buildRefreshBody(), {
+      headers: client.actingTenantHeaders(),
+    });
     // H8 fix (SDK bench harness validation): a successful refresh rotates
     // the `axiam_csrf` cookie (new random token, CONTRACT.md §3) the same
     // way login does, but — unlike login/verifyMfa just below, which both
@@ -280,7 +312,7 @@ export async function logout(client: AxiamClient): Promise<void> {
   // principal inherits the previous one's decisions.
   client.decisionMemo.clear();
   try {
-    await client.session.axios.post(LOGOUT_PATH, {});
+    await client.session.axios.post(LOGOUT_PATH, {}, { headers: client.actingTenantHeaders() });
   } catch (err) {
     // LOGOUT_PATH is a SKIP_REFRESH url — same pre-mapping as login/refresh.
     // The `finally` below still clears session state either way.
@@ -296,6 +328,10 @@ export async function logout(client: AxiamClient): Promise<void> {
   } finally {
     client.session.authenticated = false;
     client.session.csrfToken = undefined;
+    // §5.2 rule 1 (C-12): logout forgets what the previous session reported.
+    // A later re-login as a different principal must not have
+    // `actingTenant()` gate on the outgoing principal's reach.
+    client.session.principalScope = undefined;
   }
 }
 

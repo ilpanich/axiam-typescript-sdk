@@ -50,8 +50,10 @@ export async function checkAccess(client: AxiamClient, check: AccessCheck): Prom
   client.ensureOpen();
 
   // §17: consult the decision memo first. Disabled by default, in which case
-  // this is one map lookup that always misses.
-  const key = memoKey(check);
+  // this is one map lookup that always misses. §5.2 rule 1 (C-12): the acting
+  // tenant joins the key, since a memoized answer for one tenant must not be
+  // served for another this same client acts on within the TTL.
+  const key = memoKey(check, client.actingTenantId);
   const memoized = client.decisionMemo.get(key);
   if (memoized) return memoized;
 
@@ -78,7 +80,9 @@ async function attemptCheck(
 ): Promise<AccessDecision> {
   const done = client.telemetry.startRequest('checkAccess', 'POST', CHECK_PATH, attempt);
   try {
-    const response = await client.session.axios.post<CheckAccessResponseWire>(CHECK_PATH, toWireBody(check));
+    const response = await client.session.axios.post<CheckAccessResponseWire>(CHECK_PATH, toWireBody(check), {
+      headers: client.actingTenantHeaders(),
+    });
     done(response.status, 'success');
     return fromWireDecision(response.data);
   } catch (err) {
@@ -106,7 +110,9 @@ export async function batchCheck(client: AxiamClient, checks: AccessCheck[]): Pr
   return withRetry(async (attempt) => {
     const done = client.telemetry.startRequest('batchCheck', 'POST', BATCH_CHECK_PATH, attempt);
     try {
-      const response = await client.session.axios.post<BatchCheckAccessResponseWire>(BATCH_CHECK_PATH, body);
+      const response = await client.session.axios.post<BatchCheckAccessResponseWire>(BATCH_CHECK_PATH, body, {
+        headers: client.actingTenantHeaders(),
+      });
       done(response.status, 'success');
       return response.data.results.map(fromWireDecision);
     } catch (err) {

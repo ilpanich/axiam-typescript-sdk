@@ -134,6 +134,23 @@ export interface AxiamClientOptions {
   connectTimeoutMs?: number;
   /** Request timeout in milliseconds. Defaults to DEFAULT_REQUEST_TIMEOUT_MS. */
   requestTimeoutMs?: number;
+  /**
+   * Act on another tenant of the caller's organization from construction —
+   * CONTRACT.md §5.2 rule 1 (contract 1.51). Every `/api/v1` REST request
+   * then also carries `X-Axiam-Tenant: <this value>`, distinct from the
+   * `X-Tenant-ID` header {@link tenantSlug}/{@link tenantId} controls, which
+   * is unaffected.
+   *
+   * Meaningful only for an **organization-level** principal; the server
+   * answers `403` for an ordinary tenant principal. Construction cannot gate
+   * on that — it precedes the login that would reveal it — so only the UUID
+   * shape is checked here, client-side, with no wire call; a client already
+   * holding a login result should prefer the on-client {@link
+   * AxiamClient.actingTenant}, which also gates on `organizationLevel` and
+   * `reachableTenantIds`. REST-only: the gRPC interceptor sends no
+   * acting-tenant metadata.
+   */
+  actingTenantId?: string;
 }
 
 export const DEFAULT_CONNECT_TIMEOUT_MS = 10_000;

@@ -19,7 +19,7 @@ import {
 } from '../core/opaque.js';
 import { login, mfaSetupRequired } from './auth.js';
 import type { AxiamClient } from './client.js';
-import { userInfoFromWire } from './auth.js';
+import { recordPrincipalScope, userInfoFromWire } from './auth.js';
 import type { LoginResult, LoginSuccessResponseWire, MfaRequiredResponseWire } from './types.js';
 
 const OPAQUE_REGISTER_START_PATH = '/api/v1/auth/opaque/register/start';
@@ -252,9 +252,14 @@ export async function loginOpaque(
   const wire = response.data as LoginSuccessResponseWire;
   client.session.authenticated = true;
   await client.session.onAuthenticated?.();
+  const user = userInfoFromWire(wire.user);
+  // §5.2 rule 1 (C-12): OPAQUE answers the identical LoginSuccessResponseWire
+  // login()/verifyMfa() do, so a real organizationLevel/reachableTenantIds is
+  // available here too; record it.
+  recordPrincipalScope(client, user);
   return {
     status: 'authenticated',
-    user: userInfoFromWire(wire.user),
+    user,
     sessionId: wire.session_id,
     expiresIn: wire.expires_in,
   };

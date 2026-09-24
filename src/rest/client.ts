@@ -7,10 +7,9 @@
 // auth.ts/authz.ts, which extend this class's prototype.
 
 import type { AxiamClientOptions } from '../core/index.js';
-import { NetworkError } from '../core/index.js';
-import { DecisionMemo } from '../core/decisionMemo.js';
-import { TelemetryDispatcher } from '../core/telemetry.js';
-import { TelemetryReporter } from '../core/telemetryReporter.js';
+import { AuthzError, NetworkError } from '../core/index.js';
+import type { DecisionMemo } from '../core/decisionMemo.js';
+import type { TelemetryReporter } from '../core/telemetryReporter.js';
 import type { RetryOptions } from './retry.js';
 import { createSession, SharedSession } from './session.js';
 import { installInterceptors } from './interceptors.js';
@@ -83,6 +82,18 @@ export class AxiamClient {
   readonly session: SharedSession;
 
   /**
+   * CONTRACT.md §5.2 rule 1 (contract 1.51) — the tenant **this handle** acts
+   * on. Held here rather than on `session` (which every handle over one login
+   * shares): a provisioning task acting on tenant A and another acting on
+   * tenant B can share one session without either rewriting the other's
+   * header between the moment it decides and the moment it sends. Set only
+   * by {@link actingTenant} / {@link AxiamClientOptions.actingTenantId};
+   * `undefined` means "send no `X-Axiam-Tenant`", byte-for-byte what every
+   * client sent before contract 1.51.
+   */
+  readonly #actingTenantId: string | undefined;
+
+  /**
    * @param options client configuration (§5/§6).
    * @param session optional pre-built session to adopt instead of the default
    *   browser `SharedSession`. This is the injection point for the Node
@@ -94,33 +105,162 @@ export class AxiamClient {
    *   NEVER statically imported from this browser-safe module, so a `/rest`
    *   browser bundle keeps pulling zero Node dependencies (SC#1).
    */
-  /** §17 decision memo. Disabled unless `decisionMemoTtlMs` was configured. */
-  readonly decisionMemo: DecisionMemo;
-
-  /** §19 telemetry dispatcher. Empty unless a hook was installed. */
-  readonly telemetry: TelemetryReporter;
-
-  /** §16.1 disable switch. Defaults to enabled. */
-  private readonly retryEnabled: boolean;
-
-  /** §18 shutdown flag. Set once by close(); read on every operation. */
-  private closed = false;
-
   constructor(options: AxiamClientOptions, session?: SharedSession) {
     this.session = session ?? createSession(options);
-    installInterceptors(this.session.axios, this.session);
-    // §17.1 rule 1: off unless the caller asked for it.
-    this.decisionMemo = new DecisionMemo(options.decisionMemoTtlMs ?? 0);
-    this.telemetry = new TelemetryReporter(new TelemetryDispatcher(options.telemetryHook));
-    // §19.2 rule 6: a clamped setting is reported, not swallowed. Emitted once,
-    // here, because construction is the only moment an operator can act on it.
-    this.decisionMemo.reportClamp(options.decisionMemoTtlMs ?? 0, this.telemetry.dispatcher);
-    this.retryEnabled = options.retryEnabled ?? true;
+    // Guarded (contract 1.51): `actingTenant()`/`clearActingTenant()` build a
+    // second `AxiamClient` over this same session (see `#cloneWithActingTenant`
+    // below) so that handle's own §5.2 gating and management-namespace getters
+    // are wired correctly by this same constructor — installing the CSRF/
+    // refresh interceptors a second time on one shared axios instance would
+    // double-run both on every request the second handle makes.
+    if (!this.session.interceptorsInstalled) {
+      installInterceptors(this.session.axios, this.session);
+      this.session.interceptorsInstalled = true;
+    }
+    // §5.2 rule 1: the value is a Uuid-shaped string, checked client-side —
+    // the server silently ignores a value that does not parse and answers for
+    // the caller's own tenant, so a helper that forwarded a non-UUID would
+    // report success about the wrong tenant. The builder/construction form
+    // cannot gate on organizationLevel: it precedes the login that would
+    // reveal it (§5.2 rule 1's gating note), so only the shape is checked
+    // here — see `actingTenant` for the on-client form, which does gate.
+    this.#actingTenantId = options.actingTenantId === undefined
+      ? undefined
+      : requireUuid(options.actingTenantId, 'AxiamClientOptions.actingTenantId');
     // §27.2 rule 1: acquiring a handle performs no I/O and is not meant to be
     // observable. Copying the *descriptors* keeps the generated getters lazy,
     // so constructing a client does not construct 24 namespace objects; a
     // plain `Object.assign` would invoke every getter here.
     Object.defineProperties(this, Object.getOwnPropertyDescriptors(managementNamespaces(this)));
+  }
+
+  /** §17 decision memo. Disabled unless `decisionMemoTtlMs` was configured. Shared by every handle over this session (contract 1.51: moved onto `session` so `actingTenant()`'s clone shares it too). */
+  get decisionMemo(): DecisionMemo {
+    return this.session.decisionMemo;
+  }
+
+  /** §19 telemetry dispatcher. Empty unless a hook was installed. Shared by every handle over this session. */
+  get telemetry(): TelemetryReporter {
+    return this.session.telemetry;
+  }
+
+  /**
+   * CONTRACT.md §5.2 rule 1 (contract 1.51) — act on another tenant of the
+   * caller's organization, without a second login.
+   *
+   * Returns a **new handle** over this same `session` (§9's refresh guard,
+   * §17's decision memo, the cookie jar/token manager — everything the
+   * session holds — stay shared); `this` is unchanged. That is deliberate: a
+   * provisioning task holding one login result but acting on several tenants
+   * builds one handle per tenant and can run them concurrently without either
+   * rewriting the other's `X-Axiam-Tenant` between deciding and sending.
+   *
+   * Meaningful only for an **organization-level** principal (§5.2): such a
+   * principal is already a principal of every tenant in its organization, so
+   * switching what it acts on needs no re-login. For an ordinary tenant
+   * principal the same header change gets a `403` from the server.
+   *
+   * **Gating** (§5.2 rule 1's "gate on what the SDK knows, and let the server
+   * decide the rest"):
+   * - `tenantId` MUST be a UUID — refused client-side (`NetworkError`, zero
+   *   wire calls) otherwise, the same §2 client-side error §27.4 rule 2 uses.
+   *   The server parses the header as a UUID and silently ignores a value
+   *   that does not, then answers for the caller's own tenant — a helper
+   *   that forwarded a non-UUID would report success about the wrong one.
+   * - When this session holds a completed login's reach (`session.principalScope`
+   *   is set — a password/MFA/OPAQUE/WebAuthn/MFA-setup login has reported
+   *   one), the switch is refused client-side (`AuthzError`, zero wire calls)
+   *   unless `organizationLevel` is `true`, and refused when `reachableTenantIds`
+   *   is present and does not name `tenantId` (§5.2.3 rule 4).
+   * - A session holding **no** login result — a service account from
+   *   `authenticateDevice()`, or a client an application injected a token
+   *   into directly — has nothing to gate on: the header is sent as asked,
+   *   and the server's `403` is the answer.
+   *
+   * **REST-only** (§5.2 rule 1). The gRPC interceptor reads no acting-tenant
+   * metadata — the server's gRPC interceptor takes the tenant from the
+   * bearer token's own claim, not from a header — so a gRPC call made through
+   * this handle still acts on the token's tenant whatever this says. The SDK
+   * does not invent a metadata key for it.
+   */
+  actingTenant(tenantId: string): AxiamClient {
+    requireUuid(tenantId, 'tenantId');
+    const scope = this.session.principalScope;
+    if (scope !== undefined) {
+      if (!scope.organizationLevel) {
+        throw new AuthzError(
+          'actingTenant() is meaningful only for an organization-level principal ' +
+            '(CONTRACT.md §5.2 rule 1); this session\'s login result reported organizationLevel: false',
+        );
+      }
+      if (scope.reachableTenantIds !== undefined && !scope.reachableTenantIds.includes(tenantId)) {
+        throw new AuthzError(
+          `actingTenant(${JSON.stringify(tenantId)}) is outside this principal's ` +
+            'reachableTenantIds (CONTRACT.md §5.2.3 rule 4)',
+        );
+      }
+    }
+    return this.#cloneWithActingTenant(tenantId);
+  }
+
+  /**
+   * Stop acting on another tenant — the inverse of {@link actingTenant}.
+   *
+   * Returns a new handle over the same session that sends no
+   * `X-Axiam-Tenant` header at all, exactly as a client that never called
+   * `actingTenant` does. `this` is unchanged.
+   */
+  clearActingTenant(): AxiamClient {
+    return this.#cloneWithActingTenant(undefined);
+  }
+
+  /**
+   * The `X-Axiam-Tenant` header this handle sends, or `undefined` when it
+   * acts on no other tenant — the common case, and the only one before
+   * contract 1.51.
+   *
+   * @internal — read by auth.ts/authz.ts/management/request.ts so the header
+   * reaches every call site §5.2 rule 1 names (management, check_access /
+   * batch_check, refresh, logout, and the self-service/WebAuthn posts) from
+   * one place rather than 1.51 re-deriving it at each of them.
+   */
+  actingTenantHeaders(): Record<string, string> | undefined {
+    return this.#actingTenantId === undefined
+      ? undefined
+      : { 'X-Axiam-Tenant': this.#actingTenantId };
+  }
+
+  /** @internal — the raw value, for the §17 memo key (contract 1.51: the key includes the acting tenant). */
+  get actingTenantId(): string | undefined {
+    return this.#actingTenantId;
+  }
+
+  /**
+   * Build the new handle {@link actingTenant}/{@link clearActingTenant}
+   * return, via the real constructor (never `Object.create` bypassing it —
+   * `#actingTenantId` is a genuine private class field, which only the
+   * constructor can install; an instance built any other way throws on the
+   * first access to it).
+   *
+   * Passes `this.session` itself as the pre-built session, so the clone
+   * shares it exactly as `createNodeClient` shares a `NodeSession` between
+   * the client it builds and every transport attached to it — §9's refresh
+   * guard, §17's decision memo, `session.principalScope`, the cookie jar and
+   * token manager (Node persona) all stay one shared object, not duplicated.
+   * The synthetic options object below carries only what the constructor
+   * still reads when a session is supplied (§5.2 rule 1's shape check on
+   * `actingTenantId`) — `session.interceptorsInstalled` (set `true` by the
+   * very first `AxiamClient` built over this session) stops the constructor
+   * from re-installing the CSRF/refresh interceptors a second time.
+   */
+  #cloneWithActingTenant(actingTenantId: string | undefined): AxiamClient {
+    const options: AxiamClientOptions = {
+      baseUrl: this.session.baseUrl,
+      tenantId: this.session.tenantId,
+      tenantSlug: this.session.tenantSlug,
+      ...(actingTenantId !== undefined ? { actingTenantId } : {}),
+    };
+    return new AxiamClient(options, this.session);
   }
 
   /**
@@ -161,7 +301,11 @@ export class AxiamClient {
    * silently reconnecting.
    */
   close(): void {
-    this.closed = true;
+    // §18 shutdown flag now lives on `session` (contract 1.51): every handle
+    // over one session — this client and any `actingTenant()`/
+    // `clearActingTenant()` clone of it — closes together, exactly as the
+    // Rust reference's `Arc<AxiamClientInner>` closes every handle over it.
+    this.session.closed = true;
     this.decisionMemo.clear();
   }
 
@@ -171,7 +315,7 @@ export class AxiamClient {
    * @internal
    */
   ensureOpen(): void {
-    if (this.closed) {
+    if (this.session.closed) {
       throw new NetworkError('client is closed: this AxiamClient was shut down with close()');
     }
   }
@@ -185,7 +329,7 @@ export class AxiamClient {
     return {
       idempotent: true,
       operation,
-      enabled: this.retryEnabled,
+      enabled: this.session.retryEnabled,
       telemetry: this.telemetry.dispatcher,
     };
   }
@@ -434,4 +578,24 @@ export class AxiamClient {
   confirmPasswordReset(confirmation: accountMethods.PasswordResetConfirmation): Promise<void> {
     return accountMethods.confirmPasswordReset(this, confirmation);
   }
+}
+
+/** Canonical 8-4-4-4-12 hex UUID shape. Shape only — no version/variant check, matching §27.4 rule 2's own check elsewhere in this SDK. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * CONTRACT.md §5.2 rule 1 — refuse a non-UUID acting-tenant value
+ * client-side, with zero wire calls, the same §2 client-side error §27.4
+ * rule 2 uses for a non-UUID path identifier. The server parses the header
+ * as a UUID and *silently ignores* a value that does not parse, then
+ * answers for the caller's own tenant — reporting success about the wrong
+ * one is worse than refusing up front.
+ */
+function requireUuid(value: string, paramName: string): string {
+  if (!UUID_RE.test(value)) {
+    throw new NetworkError(
+      `${paramName} must be a UUID (CONTRACT.md §5.2 rule 1 / §27.4 rule 2); got ${JSON.stringify(value)}`,
+    );
+  }
+  return value;
 }
