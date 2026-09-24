@@ -97,6 +97,14 @@ in the `axiam` repository, task C-2). Ported from the reference implementation,
   letting the server's `403` decide as the rule requires — matching how a WebAuthn
   authentication, an SSO completion, and a device login already reset it.
 
+- **A plain role binding with `inherit: false` and no `resource` is refused client-side**
+  (CONTRACT.md §27.6.1 item 2, CONTRACT 1.52 N6.2, C-12). Found finishing the N5/N6 audit.
+  `inherit` names which of a *resource's* descendants a binding reaches; with no resource
+  stated there is nothing for `inherit: false` to mean, yet `plan()`/`apply()` sent it
+  anyway. A stated `inherit: true` with no resource is unaffected — CONTRACT 1.52 N6.2's
+  other clause already treats it as a plain (tenant-wide) binding, planned exactly like an
+  omitted one.
+
 - **OPAQUE, WebAuthn, SSO/federation, and client-credentials adoption all now replace a
   previously-adopted device credential** (CONTRACT.md §6.1 rule 11, CONTRACT 1.52 N4.4,
   C-12). Found while auditing this SDK against every C-12 rule, not in the review's own

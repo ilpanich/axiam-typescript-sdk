@@ -282,6 +282,21 @@ export function validate(manifest: ManagementManifest): void {
             '(a global role ignores resource scope)',
         );
       }
+      // CONTRACT 1.52 N6.2 (C-12): "An object binding requires resource.
+      // inherit without a resource is refused client-side." `inherit`
+      // names which of a RESOURCE's descendants a binding reaches — with no
+      // resource stated there is nothing for `inherit: false` to mean. A
+      // stated `inherit: true` with no resource is NOT refused here: rule
+      // 2's other clause treats it as accepted and planned exactly like an
+      // omitted one (a plain, tenant-wide binding), so only the `false`
+      // value — inheritOf(binding) === false, i.e. explicitly stated,
+      // never the true/omitted default — triggers this.
+      if (resource === undefined && !inheritOf(binding)) {
+        problems.push(
+          `${kind} ${q(subjectKey)} binds role ${q(role)} with inherit: false and no resource — ` +
+            'inherit is meaningful only on a resource-scoped binding (CONTRACT.md §27.6.1 item 2)',
+        );
+      }
     }
   }
 

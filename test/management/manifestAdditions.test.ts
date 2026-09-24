@@ -369,6 +369,64 @@ describe('§27.6.1 item 2 — the two-shape role binding', () => {
     ).rejects.toThrow(/global role/);
   });
 
+  // CONTRACT 1.52 N6.2 (C-12): "An object binding requires resource. inherit
+  // without a resource is refused client-side." `inherit` names which of a
+  // RESOURCE's descendants a binding reaches — with no resource stated,
+  // there is nothing for `inherit: false` to mean, and the manifest engine
+  // sent it anyway: no wire request would fail, but the assignment reaching
+  // the server would silently mean "plain tenant-wide", not the caller's
+  // evident intent. `concierge` (unlike `admin` above) is NOT global, so
+  // this is a genuinely distinct refusal from the global-role check.
+  it('CONTRACT 1.52 N6.2 (C-12) — a plain binding with inherit: false and no resource is refused client-side', async () => {
+    let reached = 0;
+    const server = mockServer();
+    server.use(http.all(`${BASE_URL}/*`, () => { reached += 1; return HttpResponse.json(EMPTY_PAGE); }));
+
+    await expect(
+      managementClient().manifest.plan({
+        roles: [{ key: 'concierge', name: 'Concierge', description: 'Concierge' }],
+        users: [
+          {
+            key: 'ann',
+            username: 'ann',
+            email: 'ann@example.com',
+            initialPassword: new Sensitive('irrelevant-for-this-test'),
+            roles: [{ role: 'concierge', inherit: false }],
+          },
+        ],
+      }),
+    ).rejects.toThrow(/resource/);
+    expect(reached).toBe(0);
+  });
+
+  // I4 twin: a resource-scoped binding with inherit: false (the case this
+  // whole mechanism exists for) is unaffected — still planned, not refused.
+  it('twin (I4): a resource-scoped binding with inherit: false is still accepted', async () => {
+    const server = mockServer();
+    mountReads(server, {
+      roles: [roleJson()],
+      resources: [resourceJson(SITE1_ID, 'site-1', null)],
+    });
+    server.use(
+      http.post(`${BASE_URL}/api/v1/roles/:id/users`, () => new HttpResponse(null, { status: 204 })),
+    );
+
+    const plan = await managementClient().manifest.plan({
+      roles: [{ key: 'concierge', name: 'Concierge', description: 'Concierge' }],
+      resources: [{ key: 's1', name: 'site-1', resourceType: 'site' }],
+      users: [
+        {
+          key: 'ann',
+          username: 'ann',
+          email: 'ann@example.com',
+          initialPassword: new Sensitive('irrelevant-for-this-test'),
+          roles: [{ role: 'concierge', resource: 's1', inherit: false }],
+        },
+      ],
+    });
+    expect(plan.actions.find((a) => a.target === 'user-role')?.change).toBe('create');
+  });
+
   it('a plain binding over an existing resource-scoped assignment is an Update', async () => {
     const server = mockServer();
     mountReads(server, {
