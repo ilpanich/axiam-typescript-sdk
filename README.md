@@ -62,10 +62,10 @@ Express middleware and the Fastify plugin — with all three operations, the
 `resourceMetadataUrl` guard option and §28.9's five required tests. This SDK is §28.10's
 reference implementation: it lands first and the ten ports are read against it.
 
-§12.7, §14, §15, §22, §24, §25, §26, §27 and §28 are named rather than folded into the
-range because they landed after this SDK already claimed §1–§13: widening the range
-silently would turn a statement that was true when written into a different claim without
-anyone editing it.
+§12.7, §14, §15, §17, §19, §20, §21, §22, §23, §24, §25, §26, §27 and §28 are named rather
+than folded into the range because they landed after this SDK already claimed §1–§13:
+widening the range silently would turn a statement that was true when written into a
+different claim without anyone editing it.
 
 ### §10.1 minimum local-verification set
 
