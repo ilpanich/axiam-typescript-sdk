@@ -26,6 +26,15 @@ export const SKIP_REFRESH = [
   '/api/v1/auth/refresh',
   '/api/v1/auth/login',
   '/api/v1/auth/logout',
+  // CONTRACT.md §6.1 rule 11 / CONTRACT 1.52 N4.5 (C-12): "A `401` on the
+  // device POST itself ... is `AuthError`, with no refresh call ... even
+  // when the client holds an earlier session." Without this entry, a client
+  // that already completed a password login (`session.authenticated ===
+  // true`) and then called `authenticateDevice()` into a refusal had that
+  // 401 misread as an ordinary authenticated-session 401 — this IS the
+  // login, so it must never itself trigger a refresh-then-retry cycle,
+  // regardless of what session state came before it.
+  '/api/v1/auth/device',
   '/oauth2/token',
   '/oauth2/introspect',
   '/oauth2/revoke',

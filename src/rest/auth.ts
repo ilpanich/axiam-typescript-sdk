@@ -439,10 +439,12 @@ export async function authenticateDevice(client: AxiamClient): Promise<DeviceTok
   } catch (err) {
     // Rule 8: every refusal is a 401, mapped to AuthError and surfaced
     // verbatim — this IS the login, so it MUST NOT enter the §9 refresh
-    // guard (it never does: DEVICE_LOGIN_PATH is not a cookie-session 401,
-    // session.authenticated is still false at this point, and the call is
-    // not retried regardless). A 429 maps to NetworkError through the same
-    // §2 mapping every other REST call uses.
+    // guard. `DEVICE_LOGIN_PATH` is in `SKIP_REFRESH` (CONTRACT 1.52 N4.5,
+    // C-12) precisely so this holds even when `session.authenticated` is
+    // already true from an EARLIER cookie session on this same client — a
+    // case this comment used to (wrongly) say could not happen. A 429 maps
+    // to NetworkError through the same §2 mapping every other REST call
+    // uses.
     if (err instanceof AxiamError) throw err;
     const status = extractAxiosStatus(err);
     if (status !== undefined) {

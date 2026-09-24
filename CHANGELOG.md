@@ -111,6 +111,15 @@ in the `axiam` repository, task C-2). Ported from the reference implementation,
   potentially different inputs; its observable behaviour (accept with matching evidence, refuse
   without or with mismatching evidence, unbound tokens unaffected) is unchanged.
 
+- **`/api/v1/auth/device` is now in `SKIP_REFRESH`** (CONTRACT.md §6.1 rule 11, CONTRACT 1.52
+  N4.5, C-12). A client that had already completed a password login
+  (`session.authenticated === true`) and then called `authenticateDevice()` into a refused
+  device login had that `401` misread as an ordinary authenticated-session `401`: the
+  reactive `§9` refresh guard fired a spurious `POST /auth/refresh` and retried the device
+  POST itself instead of surfacing the server's refusal directly. The device login is now
+  never routed through the refresh guard regardless of what session state preceded it,
+  matching the already-correct no-prior-session case.
+
 ### Breaking
 
 - **`authenticateRequest` (`axiamMiddleware`/`axiamPlugin`, and everything built on them —

@@ -267,6 +267,70 @@ describe('§6.1 rule 8 — every refusal is a 401, mapped to AuthError, never re
   });
 });
 
+// CONTRACT 1.52 N4.5 (C-12): "A `401` on the device POST itself, even when
+// the client holds an earlier session, [is `AuthError`] ... It surfaces the
+// server's message, never the refresh guard's." `/api/v1/auth/device` was
+// missing from `SKIP_REFRESH` (rest/interceptors.ts), so a client that had
+// completed an earlier password login (`session.authenticated === true`)
+// and then called `authenticateDevice()` into a refused device login would
+// have that 401 misread as an ordinary authenticated-session 401: the
+// reactive refresh guard would fire a spurious `POST /auth/refresh` and
+// retry the device POST itself instead of surfacing the server's refusal
+// directly.
+describe('CONTRACT 1.52 N4.5 (C-12) — a 401 on the device POST itself is never a refresh trigger', () => {
+  it('with a prior cookie session held, a refused device login does not enter the refresh guard', async () => {
+    let refreshCalls = 0;
+    server.use(
+      http.post(`${BASE_URL}/api/v1/auth/login`, () =>
+        HttpResponse.json(
+          { user: { id: 'user-1', username: 'alice', email: 'alice@example.com' }, session_id: 'session-1', expires_in: 900 },
+          { status: 200 },
+        ),
+      ),
+      http.post(`${BASE_URL}/api/v1/auth/refresh`, () => {
+        refreshCalls += 1;
+        return HttpResponse.json({ expires_in: 900 });
+      }),
+      http.post(`${BASE_URL}/api/v1/auth/device`, () => {
+        deviceLoginCalls += 1;
+        return HttpResponse.json({ error: 'authentication_failed', message: 'unbound certificate' }, { status: 401 });
+      }),
+    );
+
+    const client = deviceClient();
+    // A prior password login on the same client — session.authenticated is
+    // true before authenticateDevice() is ever called.
+    await client.login('alice@example.com', 'password123');
+
+    await expect(client.authenticateDevice()).rejects.toThrow(AuthError);
+    // The device POST is issued exactly once: no refresh-then-retry cycle.
+    expect(deviceLoginCalls).toBe(1);
+    expect(refreshCalls).toBe(0);
+  });
+
+  // I4 twin: the already-conforming case (no prior session) must keep
+  // working exactly as it did — a fresh client with no login still gets a
+  // clean AuthError with zero refresh calls and exactly one device POST.
+  it('twin: with no prior session, a refused device login still does not refresh (I4)', async () => {
+    let refreshCalls = 0;
+    server.use(
+      http.post(`${BASE_URL}/api/v1/auth/refresh`, () => {
+        refreshCalls += 1;
+        return HttpResponse.json({ expires_in: 900 });
+      }),
+      http.post(`${BASE_URL}/api/v1/auth/device`, () => {
+        deviceLoginCalls += 1;
+        return HttpResponse.json({ error: 'authentication_failed', message: 'unbound certificate' }, { status: 401 });
+      }),
+    );
+
+    const client = deviceClient();
+    await expect(client.authenticateDevice()).rejects.toThrow(AuthError);
+    expect(deviceLoginCalls).toBe(1);
+    expect(refreshCalls).toBe(0);
+  });
+});
+
 describe('§6.1 rule 8 — a 429 is not an authentication failure and is not retried', () => {
   it('a rate-limited device login maps to NetworkError, called exactly once', async () => {
     server.use(
