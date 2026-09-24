@@ -100,7 +100,11 @@ export {
 // automatically (contract 1.51, §10.1 rule 9) — re-exported for a consumer
 // building a custom guard on `authenticateRequest` who wants the same
 // evidence without re-implementing the socket read.
-export { certificateProofFromSocket, type PeerCertificateSocket } from './peerCertificate.js';
+export {
+  certificateProofFromSocket,
+  type PeerCertificateSocket,
+  type PeerCertificateLike,
+} from './peerCertificate.js';
 // Same rationale for the §12 types the login glue's own signatures reference
 // (`OidcLoginOptions.client`/`.store`, `onSuccess`'s arguments): re-exported so
 // this entry point's generated docs resolve them without a dangling

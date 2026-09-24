@@ -355,7 +355,7 @@ interface DeviceLoginResponseWire {
   expires_in: number;
 }
 
-/** The outcome of {@link authenticateDevice} — CONTRACT.md §6.1 rule 6. */
+/** The outcome of {@link AxiamClient.authenticateDevice} — CONTRACT.md §6.1 rule 6. */
 export interface DeviceToken {
   /** The minted access token. Secret material (§7) — never logged/serialized. */
   accessToken: Sensitive<string>;

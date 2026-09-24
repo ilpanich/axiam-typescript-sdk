@@ -111,7 +111,16 @@ export interface RoleSpec {
  * manifest that has always written `roles: ['editor']` keeps compiling and
  * keeps meaning what it always meant, byte-for-byte, on the wire.
  */
-export type RoleBinding = string | { role: string; resource?: string; inherit?: boolean };
+export type RoleBinding =
+  | string
+  | {
+      /** The `key` of the {@link RoleSpec} being bound. */
+      role: string;
+      /** The `key` of the {@link ResourceSpec} to scope the binding to. Omitted means a plain (tenant-wide) binding. */
+      resource?: string;
+      /** Whether the binding reaches the resource's descendants. Defaults to `true`; sent on the wire only when `false` (§27.13 S-10 rule 1). */
+      inherit?: boolean;
+    };
 
 /** A group and the roles its members inherit. */
 export interface GroupSpec {

@@ -25,11 +25,26 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to **contract 1.50**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
+This SDK conforms to **contract 1.51**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
 §20, §21, §22, §23, §24, §25, §26, §27, §28 (including §6.1 mTLS client certificates, the
 §10.1 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
 `verifyWebhook` signature verifier). §12 is implemented in full at its 1.38 shape: all
 **thirteen** operations, including the four public "Sign in with X" entry points.
+
+### Contract 1.51 — the dogfooding remediation
+
+| Item | Status |
+|---|---|
+| §5.2 rule 1 — the acting tenant, `X-Axiam-Tenant` (`AxiamClientOptions.actingTenantId`, `client.actingTenant()`/`.clearActingTenant()`) | Shipped |
+| §6.1 rules 6–10 — `authenticateDevice()`, the mTLS device login | Shipped |
+| §1.1.1 / §10.3 — `TokenGrpcClient.validateToken`/`.introspectToken` | Shipped |
+| §10.1 rule 9 at the default middleware entry point | **Fixed a real defect** — see the §10.1 section below and the CHANGELOG's `[Unreleased]` Breaking entry |
+| §27.6.1 — manifest `resources[].metadata`, the two-shape role binding, `serviceAccounts` | Shipped |
+| §27.6.1 — manifest `webhooks` | **Declined** — named by the contract without being specified, and no consumer has asked for it |
+| §6.1 rule 7 as a typestate | **Declined** — the client-side `AuthError` the rule itself names as conforming is what this SDK ships; a typestate would make `AxiamClient` generic in every caller for the sake of one operation |
+
+See each linked section below for the full behaviour, and CHANGELOG.md's `[Unreleased]`
+section for the complete Added/Changed/Fixed/Breaking list.
 
 **§12's operations live on `OidcClient`, not on `AxiamClient`** — the separate host §12.2
 permits where a packaging constraint requires one, which here is CI's proof that a `/rest`
@@ -59,7 +74,15 @@ rule on every inbound token: EdDSA `alg` pinned before the JWKS is consulted, a 
 `exp` (`jose` only checks `exp` *if present*, so `requiredClaims: ['exp']` is passed
 explicitly), `nbf` honoured when present, `tenant_id` asserted against the session's
 configured tenant, `iss`/`aud` checked when configured, all under a named 60-second
-`CLOCK_SKEW_LEEWAY_SEC`.
+`CLOCK_SKEW_LEEWAY_SEC` — **and, since contract 1.51, rule 9**: a token carrying `cnf` is
+refused unless transport evidence backs it. `axiamMiddleware`/`axiamPlugin` derive that
+evidence automatically from the request's own raw socket (the peer certificate the TLS
+layer verified for *this* connection, when Node itself terminates TLS) via the new
+`certificateProofFromSocket`; a deployment behind a proxy that forwards nothing still
+refuses a bound token, correctly, rather than silently accepting it. **This closes a real
+defect**: before 1.51 `authenticateRequest` applied no rule-9 check at all, so a `cnf`-bound
+device token (every token `authenticateDevice()`, §6.1, mints) passed through as an
+ordinary bearer credential. See the CHANGELOG's `[Unreleased]` Breaking entry.
 
 Because the `/oauth2/jwks` trust anchor is **organization-wide**, the session guarding a
 resource server must be configured with the tenant **UUID** (`tenantId`), since that is
@@ -194,6 +217,46 @@ const client = new AxiamClient({
 - **Node only.** Browsers cannot present a client certificate from JavaScript, so the
   browser build validates the PEM shape then ignores `clientCert`/`clientKey` — exactly as
   it already ignores `customCa`.
+
+#### The mTLS device login, `authenticateDevice()` (§6.1 rules 6–10, contract 1.51)
+
+A client built with `clientCert`/`clientKey` above authenticates by presenting that
+certificate, rather than a username and password:
+
+```ts
+const device = new AxiamClient({
+  baseUrl: 'https://iam.example.com',
+  tenantSlug: 'acme',
+  clientCert: readFileSync('device.crt', 'utf8'),
+  clientKey: readFileSync('device.key', 'utf8'),
+});
+
+const token = await device.authenticateDevice(); // POST /api/v1/auth/device, no body
+// token.accessToken: Sensitive<string>, token.tokenType === 'Bearer', token.expiresIn
+await device.management.serviceAccounts.list(); // adopted: carries Authorization: Bearer
+```
+
+- **Reachable only on a client built with a certificate.** Calling it on one that was not
+  fails client-side with `AuthError` and **zero wire calls** — the server would answer
+  `401` in any case, so going to the wire earns nothing.
+- **Adopted like a `login()` result.** Every subsequent same-origin request carries the
+  token as `Authorization: Bearer`, and withholds any cookie a previous session on the same
+  client left behind — the server reads the `axiam_access` cookie *before* the
+  `Authorization` header, so a stale one would otherwise silently win.
+- **There is no refresh token.** A device re-authenticates by calling
+  `authenticateDevice()` again — one TLS handshake. A later `401` on the adopted token
+  surfaces as `AuthError` without a refresh attempt.
+- **Every refusal is a `401`** — unknown, untrusted, expired, revoked or unbound
+  certificate, or a `Server`-type certificate — mapped to `AuthError` verbatim. The route is
+  rate-limited per client IP; a `429` maps to `NetworkError`, not `AuthError`, and is never
+  retried.
+- **The token is certificate-bound** (`cnf.x5t#S256`) — see the §10.1 rule 9 section below
+  for what that means for anything that verifies it.
+
+`examples/device_login.rs`-style RFC 8628 device-code polling
+(`axiam-sdk/node`'s `deviceLogin`/`deviceAuthorize`, CONTRACT.md §14) is a completely
+different flow — a *human* completes it on a second screen. This is the machine-only mTLS
+login; the two are unrelated beyond sharing the word "device".
 
 #### RFC 8705 §5 `mtls_endpoint_aliases` (contract 1.40, CONTRACT.md §21.3 rule 2)
 
@@ -371,6 +434,42 @@ userInfoClient.close();
 Calling `getUserInfo()` with no token present raises `AuthError` client-side, without a wire
 call (CONTRACT.md §1.1). A `UNAUTHENTICATED` response drives exactly one refresh + one retry,
 identical to `checkAccess`.
+
+#### gRPC token validation (`TokenGrpcClient`, CONTRACT.md §1.1.1, §10.3, contract 1.51)
+
+`validateToken`/`introspectToken` wrap `axiam.v1.TokenService`, the operations §10.3
+requires so an SDK validating a token over gRPC has somewhere to read `cnf` from at all.
+Same channel/interceptor/refresh machinery as `AuthzGrpcClient`/`UserInfoGrpcClient`:
+
+```typescript
+import { TokenGrpcClient, createNodeSession } from 'axiam-sdk/grpc';
+import { verifyTokenBinding } from 'axiam-sdk/node';
+
+const session = createNodeSession({ baseUrl: 'https://iam.example.com', tenantSlug: 'acme' });
+// ... after a successful login() on an AxiamClient sharing this session ...
+const tokenClient = new TokenGrpcClient(session, { baseUrl: 'https://iam.example.com' });
+
+const result = await tokenClient.validateToken(inspectedToken); // Sensitive<string> | string
+if (result.valid) {
+  // §10.3 rule 2: valid: true is NOT "usable as presented" — verify possession
+  // against THIS caller's own connection before treating it as usable.
+  verifyTokenBinding({ cnf: result.cnf }, { certificateThumbprint: peerCertThumbprint });
+}
+
+tokenClient.close();
+```
+
+- **Two tokens, kept apart.** The caller's own token authenticates the call, through the
+  interceptor, exactly as `checkAccess`/`getUserInfo` do. The token being inspected travels
+  in the request message and is a required argument — it can never silently fall back to
+  the caller's own.
+- **`cnf` converts to the same `CnfClaim` the REST §10 middleware uses** —
+  `result.cnf`/`introspectToken`'s result feed directly into `verifyTokenBinding`/
+  `verifyCertificateBinding`, so gRPC validation and local REST verification cannot
+  disagree about whether a token is a bearer token (§10.3 rule 1).
+- **Boundness comes from `cnf` alone, never `token_type`** — a certificate-bound token is
+  reported `"Bearer"` too.
+- With no caller token, both calls raise `AuthError` client-side, with zero wire calls.
 
 ### Node — AMQP consumer (`axiam-sdk/amqp`)
 
@@ -1340,6 +1439,41 @@ produces a `403` — so a UI that offers the switch to everyone has turned a
 distinction the server made into a failure the user discovers. `false` against a
 server older than contract 1.31, which is the safe reading of absent.
 
+#### Acting on another tenant (§5.2 rule 1, contract 1.51)
+
+An organization-level principal switches which tenant it acts on with
+`client.actingTenant(tenantId)` — no re-login, since it already is a principal
+of every tenant in its organization:
+
+```ts
+const acting = client.actingTenant('99999999-9999-4999-8999-999999999999');
+await acting.management.groups.list();   // carries X-Axiam-Tenant
+await client.management.groups.list();   // unaffected — the original handle
+```
+
+`actingTenant()` returns a **new handle** over the same session (§9's refresh
+guard, §17's decision memo, the cookie jar all stay shared); `client` itself is
+unchanged. That is what lets a provisioning task hold one login result while
+acting on several tenants concurrently, without two calls racing to rewrite one
+shared header. `client.clearActingTenant()` returns a handle that sends none —
+the inverse. The same option is available at construction,
+`new AxiamClient({ ..., actingTenantId })`, for a client built to act on another
+tenant from the start; the construction-time form cannot gate on
+`organizationLevel` (it precedes the login that would reveal it), so `403` from
+the server is the answer there.
+
+`tenantId` must be a UUID — checked client-side, with no wire call, because the
+server silently ignores a value that fails to parse and answers for the
+caller's own tenant. Once a login result is held, `actingTenant()` also refuses
+client-side (`AuthzError`, zero wire calls) for a non-organization-level
+principal, and for a tenant outside `reachableTenantIds` when the login
+response narrowed it (§5.2.3).
+
+**REST-only.** The gRPC interceptor reads no acting-tenant metadata — a gRPC
+call through any handle still acts on the token's own tenant. `X-Tenant-ID` and
+a management route's `{tenant_id}` path default (§27.4 rule 3) are unaffected
+either way; the acting tenant is a different mechanism from both.
+
 #### Signing one in (§5.2.1)
 
 The reserved tenant has a fixed slug, `organization`, the same in every
@@ -2176,6 +2310,53 @@ actions that would reconcile the tenant.
   which, execution stops rather than continuing blindly, and there is no `rollback` —
   because this SDK could not honour one.
 
+#### Metadata, resource-scoped bindings, and service accounts (§27.6.1, contract 1.51)
+
+```ts
+const desired = defineManifest({
+  resources: [
+    { key: 'site1', name: 'site-1', resourceType: 'site', metadata: { owner: 'ops' } },
+  ],
+  roles: [{ key: 'concierge', name: 'Concierge', description: 'Concierge' }],
+  users: [
+    {
+      key: 'ann', username: 'ann', email: 'ann@example.com',
+      initialPassword: new Sensitive(pw),
+      // A role key is still plain — this keeps compiling and meaning what it
+      // always meant. The scoped shape is a resource-scoped object instead.
+      roles: [{ role: 'concierge', resource: 'site1', inherit: false }],
+    },
+  ],
+  serviceAccounts: [
+    { key: 'fleet', name: 'device-fleet', roles: ['concierge'] },
+  ],
+});
+
+const report = await client.manifest.apply(desired);
+const created = report.steps.find((s) => s.action.target === 'service-account')!;
+if (created.outcome.status === 'created' && created.outcome.serviceAccountSecret) {
+  // The ONLY place this manifest ever surfaces a service account's secret —
+  // apply() never rotates one to reconcile anything. Store it now.
+  saveSecret(created.outcome.serviceAccountSecret.expose());
+}
+```
+
+- **`resources[].metadata`** drifts by JSON equality of the whole object, never a
+  key-by-key merge; an unstated `metadata` is silent, and a stated `{}` matches what the
+  server holds for none.
+- **A role binding takes either shape** — a plain key (as before 1.51) or
+  `{ role, resource?, inherit? }`. `inherit` reaches the wire only as `false`. Changing a
+  binding's resource or `inherit` is `unassign` then `assign` (there is no update
+  endpoint); the server's existing `tenant_scope` carries across unchanged, and a failed
+  re-assign restores the previous binding, reporting both outcomes as a `'rebind-failed'`
+  step. One role bound twice to one subject — plain and scoped combined — is refused
+  before any request; so is a global role bound here with `inherit: false`.
+- **`serviceAccounts`** reconciles by `name`, which the server does not enforce as unique —
+  `plan()` fails client-side, before any write, if more than one existing account matches.
+  Only `description` is reconciled by `Update`.
+- **Declines.** `webhooks` is not a manifest namespace in this SDK — the contract names it
+  without specifying it, and no consumer has asked for it.
+
 Codebases that already declare their domain with classes get decorators instead:
 
 ```ts
@@ -2193,6 +2374,8 @@ const shape = collectManifest(Documents, ReadDocument, Editor);
 TypeScript has two decorator dialects and this SDK's own `tsconfig.json` deliberately
 enables neither — so these are dual-protocol plain functions that work under both, and
 under neither: `AxiamResource(spec)(Documents)` is exactly what the `@` syntax desugars to.
+
+`@AxiamServiceAccount({ key, name, roles })` (contract 1.51) joins the set the same way.
 
 ### Examples
 

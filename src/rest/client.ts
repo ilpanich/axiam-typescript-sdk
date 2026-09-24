@@ -14,6 +14,7 @@ import type { RetryOptions } from './retry.js';
 import { createSession, SharedSession } from './session.js';
 import { installInterceptors } from './interceptors.js';
 import * as authMethods from './auth.js';
+import type { DeviceToken } from './auth.js';
 import * as opaqueMethods from './opaque.js';
 import * as authzMethods from './authz.js';
 import * as webauthnMethods from './webauthn.js';
@@ -343,13 +344,21 @@ export class AxiamClient {
    * `POST /api/v1/auth/device` (§6.1 rules 6–10, contract 1.51) — the mTLS
    * device login: authenticate by the client certificate this client was
    * built with (`clientCert`/`clientKey`) rather than a username/password.
+   * No request body; identity comes entirely from the TLS handshake.
    *
-   * Reachable only when this client was constructed with a client
-   * certificate — see {@link authMethods.authenticateDevice} for the full
-   * contract (adoption, the missing refresh token, the client-side refusal
-   * without one).
+   * **Reachable only when this client was constructed with a client
+   * certificate.** Elsewhere it fails client-side with `AuthError`, with
+   * zero wire calls — going to the wire would only earn the `401` the
+   * server already knows it would give.
+   *
+   * Adopts the returned {@link DeviceToken} as this client's credential
+   * exactly as a completed `login()` is adopted: every subsequent
+   * same-origin REST request carries it as `Authorization: Bearer`. **There
+   * is no refresh token** — a device re-authenticates by calling this
+   * operation again, and a later `401` on the adopted token surfaces as
+   * `AuthError` without a refresh attempt.
    */
-  authenticateDevice(): Promise<authMethods.DeviceToken> {
+  authenticateDevice(): Promise<DeviceToken> {
     return authMethods.authenticateDevice(this);
   }
 

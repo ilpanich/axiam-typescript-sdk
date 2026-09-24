@@ -138,7 +138,14 @@ export class SharedSession {
    * principal did not change because a caller asked for a different acting
    * tenant.
    */
-  principalScope: { organizationLevel: boolean; reachableTenantIds?: string[] } | undefined;
+  principalScope:
+    | {
+        /** What the login response's `organizationLevel` reported. */
+        organizationLevel: boolean;
+        /** What the login response's `reachableTenantIds` reported, if present. `undefined` means unrestricted. */
+        reachableTenantIds?: string[];
+      }
+    | undefined;
   /**
    * CONTRACT.md §6.1 rules 6–10 (contract 1.51) — the access token
    * `authenticateDevice()` adopted, when this session's credential is a

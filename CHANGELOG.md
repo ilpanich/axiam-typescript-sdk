@@ -7,6 +7,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Contract 1.51 — the dogfooding remediation (`claude_dev/dogfooding-findings-fix-plan.md`
+in the `axiam` repository, task C-2). Ported from the reference implementation,
+`ilpanich/axiam-rust-sdk#115`.
+
+### Added
+
+- **The acting tenant, `X-Axiam-Tenant`** (CONTRACT.md §5.2 rule 1). `AxiamClientOptions.actingTenantId`
+  at construction, and `client.actingTenant(tenantId)` / `client.clearActingTenant()` on an
+  existing client — both return a **new handle** over the same session (the §9 refresh guard,
+  the §17 decision memo, the cookie jar all stay shared), so two tasks can act on two
+  tenants concurrently without either rewriting the other's header. Sent on management
+  calls, `checkAccess`/`batchCheck`, `refresh`, `logout`, and the self-service/WebAuthn
+  posts; omitted everywhere a client never calls it — byte-for-byte what every call sent
+  before this release. Refused client-side (`NetworkError`, zero wire calls) for a
+  non-UUID value, and (`AuthzError`, zero wire calls) once a login result shows the
+  principal is not organization-level, or names a tenant outside `reachableTenantIds`.
+  REST-only — the gRPC interceptor is unaffected. The §17 decision memo is now keyed on
+  the acting tenant too, so two handles sharing one memo cannot answer one tenant's
+  question with another's cached decision.
+- **`authenticateDevice()`, the mTLS device login** (CONTRACT.md §6.1 rules 6–10).
+  `POST /api/v1/auth/device`, no body; returns `DeviceToken { accessToken, tokenType,
+  expiresIn }` and adopts it as the client's bearer credential — every subsequent
+  same-origin request carries it as `Authorization: Bearer`, and withholds any cookie an
+  earlier session on the same client left behind. Reachable only on a client built with a
+  `clientCert`/`clientKey`; elsewhere it fails client-side with `AuthError` and zero wire
+  calls. There is no refresh token: a later `401` on the adopted token surfaces as
+  `AuthError` without a refresh attempt, and a `429` (the route is rate-limited) maps to
+  `NetworkError`, not `AuthError`, and is never retried.
+- **`TokenGrpcClient.validateToken`/`.introspectToken`** (CONTRACT.md §1.1.1, §10.3), on
+  `axiam-sdk/grpc`. Wraps `axiam.v1.TokenService`; the caller's own token authenticates
+  the call through the existing interceptor, and the token being inspected travels as a
+  required message argument that can never silently default to the caller's own. Every
+  response field is modelled, including `cnf`, `scope`, `clientId`, `permissions` and
+  `extExchangeIss`. `cnf` converts to the same `CnfClaim` shape the REST §10 middleware
+  already consumes (`verifyTokenBinding`/`verifyCertificateBinding`), so gRPC validation
+  and local REST verification cannot disagree about whether a token is a bearer token.
+- **The declarative manifest, three additions** (CONTRACT.md §27.6.1): `resources[].metadata`
+  (JSON-equality drift, never a merge); a role binding's resource-scoped shape,
+  `{ role, resource?, inherit? }`, alongside the existing plain-key form, with `inherit`
+  sent only when `false`; and a new `serviceAccounts` manifest section, reconciled by
+  `name` (which the server does not enforce as unique — `plan()` fails client-side before
+  any write when a name is ambiguous). A binding `Update` is `unassign` then `assign`
+  (there is no update endpoint); the server's `tenant_scope` carries across unchanged, and
+  a failed re-assign restores the previous binding, reported as a new `'rebind-failed'`
+  step outcome carrying both results. A `service_accounts` `Create` step's outcome carries
+  the one-time `client_secret` (`StepOutcome.serviceAccountSecret`) — `apply()` never
+  calls `rotate_secret` to reconcile anything, so this is the only place a
+  manifest-created account's secret is ever surfaced. `@AxiamServiceAccount` joins the
+  existing decorator set.
+- `scripts/gen-management.mjs`: an externally-tagged `oneOf` (`SubjectAltName`'s
+  `{"dns": …} | {"ip": …}` shape) is now recognised and emitted as a proper union type,
+  rather than falling through to an interface with no fields at all; and `inherit` on the
+  three role-side listings (`RoleUserAssignment`, `RoleGroupAssignment`,
+  `RoleServiceAccountAssignment`) is generated as optional despite being `required` in
+  `openapi.json`, with a new `roleAssignmentInherits()` helper (`assignment.inherit ??
+  true`) as the one place this SDK reads it — an older server's response simply omits the
+  field, and absence means `true`, never a decode failure and never `false`.
+
+### Changed
+
+- Re-vendored `CONTRACT.md`, `openapi.json` and `management-registry.json` from `axiam`
+  commit `56fbe44` (contract 1.51); `proto/` was already identical. `CertificateType`
+  gains `"Server"` (already decoded openly — no SDK change needed); `subject_alt_names` on
+  `certificates.generate`/`.signCsr`; `server_cert_allowed_names` on the settings DTOs.
+- `AxiamClient`'s `decisionMemo`, `telemetry` and the §16.1 retry switch now live on
+  `SharedSession` rather than on `AxiamClient` itself, so that `actingTenant()`'s new
+  handle shares one memo/dispatcher instead of getting an empty one of its own — pure
+  internal refactor, `client.decisionMemo`/`client.telemetry` read identically.
+
+### Fixed
+
+- **`memoKey()`** (§17) now takes the acting tenant as an optional parameter; without it a
+  memoized decision for one acting tenant would have been returned for another within the
+  TTL once `actingTenant()` existed to make that possible.
+
+### Breaking
+
+- **`authenticateRequest` (`axiamMiddleware`/`axiamPlugin`, and everything built on them —
+  `requireAuth`/`requireAccess`/`requireRole`, the NestJS `AxiamGuard`) now enforces
+  CONTRACT.md §10.1 rule 9.** This is a real defect fix, not a policy tightening: the
+  documented §10 guard entry point never applied rule 9 at all before this release, so a
+  `cnf`-bound token — every device token `authenticateDevice()` mints — was accepted as an
+  ordinary bearer credential by every route this SDK's own guards protect. A resource
+  server whose application previously relied on that now gets a `401` for such a token
+  unless it presents the client certificate on the same Node process (which
+  `axiamMiddleware`/`axiamPlugin` now detect automatically from the request's own raw
+  socket, via the new `certificateProofFromSocket`) or stops sending a token that was
+  never meant to be used bearer-style there. An unbound (ordinary) token is completely
+  unaffected. `authenticateRequest` gains an optional third `proofs` parameter for a
+  caller building a custom guard directly on it.
+
 ## [1.0.0-beta16] - 2026-09-19
 
 ### Added

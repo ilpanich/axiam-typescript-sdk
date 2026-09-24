@@ -23,8 +23,16 @@ import { certificateThumbprintS256 } from '../node/jwks.js';
  * plain one); `getPeerCertificate` is TLSSocket's method.
  */
 export interface PeerCertificateSocket {
+  /** `tls.TLSSocket`'s own "this is a TLS socket" marker — always `true` there, absent on a plain `net.Socket`. */
   encrypted?: boolean;
-  getPeerCertificate?: (detailed?: boolean) => { raw?: Uint8Array } | undefined;
+  /** `tls.TLSSocket.getPeerCertificate`. Returns the DER-encoded peer certificate, when `detailed` is `true` and one was presented. */
+  getPeerCertificate?: (detailed?: boolean) => PeerCertificateLike | undefined;
+}
+
+/** The one field this module reads off `tls.TLSSocket.getPeerCertificate()`'s return value. */
+export interface PeerCertificateLike {
+  /** The DER-encoded certificate bytes, when a certificate was presented. */
+  raw?: Uint8Array;
 }
 
 /**
@@ -63,7 +71,7 @@ export async function certificateProofFromSocket(
   if (socket.encrypted !== true || typeof socket.getPeerCertificate !== 'function') {
     return {};
   }
-  let cert: { raw?: Uint8Array } | undefined;
+  let cert: PeerCertificateLike | undefined;
   try {
     cert = socket.getPeerCertificate(true);
   } catch {
