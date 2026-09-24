@@ -194,7 +194,7 @@ export class AxiamClient {
             '(CONTRACT.md §5.2 rule 1); this session\'s login result reported organizationLevel: false',
         );
       }
-      if (scope.reachableTenantIds !== undefined && !scope.reachableTenantIds.includes(tenantId)) {
+      if (scope.reachableTenantIds !== undefined && !uuidListIncludes(scope.reachableTenantIds, tenantId)) {
         throw new AuthzError(
           `actingTenant(${JSON.stringify(tenantId)}) is outside this principal's ` +
             'reachableTenantIds (CONTRACT.md §5.2.3 rule 4)',
@@ -621,4 +621,21 @@ function requireUuid(value: string, paramName: string): string {
     );
   }
   return value;
+}
+
+/**
+ * CONTRACT.md §5.2.3 rule 4 / CONTRACT 1.52 N5.6 (C-12): "Tenant ids compare
+ * as UUIDs, never as strings. Case and formatting MUST NOT decide reach."
+ * `requireUuid`'s `UUID_RE` is deliberately case-insensitive — `actingTenant`
+ * accepts an upper-case UUID — so membership in `reachableTenantIds` (the
+ * server's own, lower-case canonical spellings) must be judged the same way,
+ * or a value `requireUuid` itself accepted as "a UUID naming this tenant"
+ * could still be refused as though it named a different one. Lower-casing
+ * both sides is the canonical-form normalisation the rule asks for; every
+ * value compared here has already passed `UUID_RE`, so there is no other
+ * formatting (surrounding braces, missing hyphens, …) left to normalise.
+ */
+function uuidListIncludes(ids: readonly string[], target: string): boolean {
+  const canonical = target.toLowerCase();
+  return ids.some((id) => id.toLowerCase() === canonical);
 }

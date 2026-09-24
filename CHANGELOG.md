@@ -78,6 +78,16 @@ in the `axiam` repository, task C-2). Ported from the reference implementation,
 
 ### Fixed
 
+- **`actingTenant()` compares `reachableTenantIds` as UUIDs, not as raw strings**
+  (CONTRACT.md §5.2.3 rule 4, CONTRACT 1.52 N5.6, C-12). Send-back after C-12: found by a
+  coordinator review of `78f33d9`, identical to a defect PHP and Swift also carried.
+  `requireUuid`'s `UUID_RE` is deliberately case-insensitive — `actingTenant()` accepts an
+  upper-case `tenantId` — but the reach check, `scope.reachableTenantIds.includes(tenantId)`,
+  was a plain, case-SENSITIVE `Array.prototype.includes`. An upper-case UUID naming a
+  tenant the server's own (lower-case canonical) `reachable_tenant_ids` already listed was
+  refused as though it named a different tenant. `src/rest/client.ts`'s new
+  `uuidListIncludes` helper lower-cases both sides before comparing.
+
 - **OPAQUE, WebAuthn, SSO/federation, and client-credentials adoption all now replace a
   previously-adopted device credential** (CONTRACT.md §6.1 rule 11, CONTRACT 1.52 N4.4,
   C-12). Found while auditing this SDK against every C-12 rule, not in the review's own

@@ -204,6 +204,51 @@ describe('§5.2 rule 1 — gating on the reported principal scope', () => {
     expect(captured).toHaveLength(before);
   });
 
+  // CONTRACT 1.52 N5.6 (C-12): "Tenant ids compare as UUIDs, never as
+  // strings. Case and formatting MUST NOT decide reach." `requireUuid`'s
+  // `UUID_RE` is case-insensitive (accepts an upper-case tenantId), but
+  // `reachableTenantIds.includes(tenantId)` was a plain, case-SENSITIVE
+  // string comparison — an upper-case UUID naming a tenant the server's
+  // lower-case `reachable_tenant_ids` already lists was refused as if it
+  // named a different tenant. THIRD_TENANT (not OTHER_TENANT, which is
+  // all-digit and so unaffected by `.toUpperCase()`) is used because it
+  // actually contains hex letters ('a'), the only case that exposes this.
+  it('CONTRACT 1.52 N5.6 (C-12) — an upper-case UUID matches a lower-case reachableTenantIds entry', async () => {
+    const client = new AxiamClient({ baseUrl: BASE_URL, tenantSlug: 'organization' });
+    server.use(
+      http.post(`${BASE_URL}/api/v1/auth/login`, () => {
+        return HttpResponse.json(
+          // The server's canonical (lower-case) form.
+          { user: orgAdminUser({ reachable_tenant_ids: [THIRD_TENANT] }), session_id: 'session-1', expires_in: 900 },
+          { status: 200 },
+        );
+      }),
+    );
+    await client.login('root@example.com', anyPassword());
+
+    // Same tenant, upper-case spelling — must still be within reach.
+    expect(() => client.actingTenant(THIRD_TENANT.toUpperCase())).not.toThrow();
+  });
+
+  // I4 twin: a genuinely different tenant, even spelled in a matching case,
+  // is still refused — guards against an over-broad fix (e.g. skipping the
+  // membership check entirely) that would let ANY UUID through.
+  it('twin (I4): a genuinely out-of-reach UUID is still refused regardless of case', async () => {
+    const client = new AxiamClient({ baseUrl: BASE_URL, tenantSlug: 'organization' });
+    server.use(
+      http.post(`${BASE_URL}/api/v1/auth/login`, () => {
+        return HttpResponse.json(
+          { user: orgAdminUser({ reachable_tenant_ids: [THIRD_TENANT] }), session_id: 'session-1', expires_in: 900 },
+          { status: 200 },
+        );
+      }),
+    );
+    await client.login('root@example.com', anyPassword());
+
+    expect(() => client.actingTenant(OTHER_TENANT.toUpperCase())).toThrow(AuthzError);
+    expect(() => client.actingTenant(OTHER_TENANT)).toThrow(AuthzError);
+  });
+
   it('without a login result, the header is sent and the server decides', () => {
     // A client with no completed login — an injected-token / device-token
     // scenario. session.principalScope is undefined: nothing to gate on.
