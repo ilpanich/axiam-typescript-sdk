@@ -3,7 +3,8 @@
  */
 
 import { NetworkError } from '../../core/errors.js';
-import type { ManagementManifest } from './spec.js';
+import type { Sensitive } from '../../core/sensitive.js';
+import { inheritOf, resourceKeyOf, roleKeyOf, type ManagementManifest, type RoleBinding } from './spec.js';
 
 /** What reconciling one spec would do. */
 export type Change = 'create' | 'update' | 'no-change';
@@ -19,7 +20,9 @@ export type Target =
   | 'group-role'
   | 'user'
   | 'user-role'
-  | 'group-member';
+  | 'group-member'
+  | 'service-account'
+  | 'service-account-role';
 
 /** One step of a plan. */
 export interface PlannedAction {
@@ -74,6 +77,16 @@ export type StepOutcome =
   | {
       /** The step ran and the thing now exists. */
       status: 'created';
+      /**
+       * §27.5 rule 5 (contract 1.51): the one-time `client_secret` a
+       * `service_accounts` `Create` action returned. `undefined` for every
+       * other kind of `created` step. **This is the only place this secret
+       * is ever surfaced** — `apply` never calls `rotate_secret` to
+       * reconcile anything, so a caller who discards this value has
+       * destroyed the credential just as surely as discarding
+       * `service_accounts.create`'s own return value would.
+       */
+      serviceAccountSecret?: Sensitive<string>;
     }
   | {
       /** The step ran and the thing was updated. */
@@ -92,6 +105,23 @@ export type StepOutcome =
   | {
       /** Never attempted, because an earlier step failed. */
       status: 'not-attempted';
+    }
+  | {
+      /**
+       * §27.6.1 item 2 (contract 1.51): a role-binding `Update` is
+       * `unassign` then `assign`, and the `assign` half failed — the
+       * subject now holds neither the old binding nor the new one, unless
+       * `restoreSucceeded`. The SDK attempted to re-assign the previous
+       * binding (same resource, same `inherit`) and reports both outcomes,
+       * rather than leaving the caller to discover the gap on their own.
+       */
+      status: 'rebind-failed';
+      /** The error the `assign` half gave. */
+      message: string;
+      /** Whether re-assigning the PREVIOUS binding succeeded. */
+      restoreSucceeded: boolean;
+      /** The error the restore attempt gave, if `restoreSucceeded` is `false`. */
+      restoreMessage?: string;
     };
 
 /** One planned step paired with what became of it. */
@@ -126,10 +156,25 @@ export interface ApplyReport {
   steps: AppliedStep[];
 }
 
-/** The failing step, if the apply stopped early. */
+/**
+ * The failing step, if the apply stopped early.
+ *
+ * A `rebind-failed` step counts too (contract 1.51): the subject's role
+ * binding did not end up in either the old or the new shape unless the
+ * restore succeeded, which is exactly the "stops at the first failure"
+ * condition §27.6 rule 7 describes, even though the step's own outcome is
+ * not literally `'failed'`.
+ */
 export function failure(report: ApplyReport): ManifestFailure | undefined {
-  const found = report.steps.find((s) => s.outcome.status === 'failed');
-  return found ? { action: found.action, message: (found.outcome as { message: string }).message } : undefined;
+  const found = report.steps.find(
+    (s) => s.outcome.status === 'failed' || s.outcome.status === 'rebind-failed',
+  );
+  if (!found) return undefined;
+  const message =
+    found.outcome.status === 'rebind-failed'
+      ? `${found.outcome.message}${found.outcome.restoreSucceeded ? ' (previous binding restored)' : ` (restore also failed: ${found.outcome.restoreMessage ?? 'unknown error'})`}`
+      : (found.outcome as { message: string }).message;
+  return { action: found.action, message };
 }
 
 /** Whether every step that was meant to run did. */
@@ -161,11 +206,13 @@ export function validate(manifest: ManagementManifest): void {
   const roles = manifest.roles ?? [];
   const groups = manifest.groups ?? [];
   const users = manifest.users ?? [];
+  const serviceAccounts = manifest.serviceAccounts ?? [];
 
   const resourceKeys = new Set(resources.map((r) => r.key));
   const scopeKeys = new Set(resources.flatMap((r) => (r.scopes ?? []).map((s) => s.key)));
   const permissionKeys = new Set(permissions.map((p) => p.key));
   const roleKeys = new Set(roles.map((r) => r.key));
+  const roleIsGlobal = new Map(roles.map((r) => [r.key, r.isGlobal ?? false] as const));
   const groupKeys = new Set(groups.map((g) => g.key));
 
   duplicates('resource', resources.map((r) => r.key), problems);
@@ -174,6 +221,7 @@ export function validate(manifest: ManagementManifest): void {
   duplicates('role', roles.map((r) => r.key), problems);
   duplicates('group', groups.map((g) => g.key), problems);
   duplicates('user', users.map((u) => u.key), problems);
+  duplicates('service account', serviceAccounts.map((s) => s.key), problems);
 
   for (const resource of resources) {
     if (resource.parent && !resourceKeys.has(resource.parent)) {
@@ -196,24 +244,60 @@ export function validate(manifest: ManagementManifest): void {
       }
     }
   }
-  for (const group of groups) {
-    for (const role of group.roles ?? []) {
+
+  /**
+   * §27.6.1 item 2: validate one subject's `roles[]` — every binding names a
+   * declared role and (when scoped) a declared resource, the subject holds
+   * each role at most once across BOTH shapes combined (the server keys
+   * assignments on `(subject, role)` with no resource component — a
+   * manifest that binds one role to one subject twice, plain-and-scoped
+   * included, describes a state the server cannot hold), and a global role
+   * is never bound here with `inherit: false` (the server refuses it with
+   * `400`; §27.6.1's MAY to check it client-side).
+   */
+  function checkRoleBindings(kind: string, subjectKey: string, bindings: RoleBinding[]): void {
+    const seenRoles = new Set<string>();
+    for (const binding of bindings) {
+      const role = roleKeyOf(binding);
+      const resource = resourceKeyOf(binding);
       if (!roleKeys.has(role)) {
-        problems.push(`group ${q(group.key)} is assigned role ${q(role)}, which no role declares`);
+        problems.push(`${kind} ${q(subjectKey)} is assigned role ${q(role)}, which no role declares`);
+        continue;
+      }
+      if (resource !== undefined && !resourceKeys.has(resource)) {
+        problems.push(
+          `${kind} ${q(subjectKey)}'s binding of role ${q(role)} names resource ${q(resource)}, which no resource declares`,
+        );
+      }
+      if (seenRoles.has(role)) {
+        problems.push(
+          `${kind} ${q(subjectKey)} is assigned role ${q(role)} more than once (plain and/or resource-scoped) — ` +
+            'the server holds at most one assignment per (subject, role)',
+        );
+      }
+      seenRoles.add(role);
+      if (!inheritOf(binding) && roleIsGlobal.get(role) === true) {
+        problems.push(
+          `${kind} ${q(subjectKey)} binds global role ${q(role)} with inherit: false, which the server refuses ` +
+            '(a global role ignores resource scope)',
+        );
       }
     }
   }
+
+  for (const group of groups) {
+    checkRoleBindings('group', group.key, group.roles ?? []);
+  }
   for (const user of users) {
-    for (const role of user.roles ?? []) {
-      if (!roleKeys.has(role)) {
-        problems.push(`user ${q(user.key)} is assigned role ${q(role)}, which no role declares`);
-      }
-    }
+    checkRoleBindings('user', user.key, user.roles ?? []);
     for (const group of user.groups ?? []) {
       if (!groupKeys.has(group)) {
         problems.push(`user ${q(user.key)} is in group ${q(group)}, which no group declares`);
       }
     }
+  }
+  for (const serviceAccount of serviceAccounts) {
+    checkRoleBindings('service account', serviceAccount.key, serviceAccount.roles ?? []);
   }
 
   try {

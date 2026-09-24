@@ -22,6 +22,7 @@ import type {
   ResourceSpec,
   RoleSpec,
   ScopeSpec,
+  ServiceAccountSpec,
   UserSpec,
 } from './spec.js';
 import { validate } from './plan.js';
@@ -69,6 +70,7 @@ interface Bucket {
   grants: GrantSpec[];
   group?: GroupSpec;
   user?: UserSpec;
+  serviceAccount?: ServiceAccountSpec;
 }
 
 /**
@@ -187,6 +189,13 @@ export function AxiamUser(spec: UserSpec): ClassDeco {
   });
 }
 
+/** Declare a service account (CONTRACT.md §27.6.1 item 3, contract 1.51). */
+export function AxiamServiceAccount(spec: ServiceAccountSpec): ClassDeco {
+  return classDecorator((b) => {
+    b.serviceAccount = spec;
+  });
+}
+
 /**
  * Assemble a manifest from decorated classes.
  *
@@ -209,6 +218,7 @@ export function collectManifest(...classes: object[]): ManagementManifest {
   const roles: RoleSpec[] = [];
   const groups: GroupSpec[] = [];
   const users: UserSpec[] = [];
+  const serviceAccounts: ServiceAccountSpec[] = [];
 
   for (const cls of classes) {
     const b = buckets.get(cls);
@@ -234,9 +244,10 @@ export function collectManifest(...classes: object[]): ManagementManifest {
     if (b.role) roles.push({ ...b.role, grants: [...(b.role.grants ?? []), ...b.grants] });
     if (b.group) groups.push(b.group);
     if (b.user) users.push(b.user);
+    if (b.serviceAccount) serviceAccounts.push(b.serviceAccount);
   }
 
-  const manifest: ManagementManifest = { resources, permissions, roles, groups, users };
+  const manifest: ManagementManifest = { resources, permissions, roles, groups, users, serviceAccounts };
   validate(manifest);
   return manifest;
 }
