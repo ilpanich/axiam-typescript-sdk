@@ -78,6 +78,20 @@ in the `axiam` repository, task C-2). Ported from the reference implementation,
 
 ### Fixed
 
+- **gRPC now sends the device credential after `authenticateDevice()` adoption, and never
+  refreshes it** (CONTRACT.md §6.1 rules 6 and 11, CONTRACT 1.52 N4.3/N4.5, C-12). Two
+  related defects in the gRPC transport, both about the same device-adopted session:
+  - `authInterceptor` (`src/grpc/interceptor.ts`) always sent
+    `tokenManager.cachedAccessToken()` — the cookie-jar-synced token — never
+    `session.deviceAccessToken`. A caller that adopted a device credential over REST and
+    then made a gRPC call rode whatever cookie session happened to be cached from before
+    the device login (or no credential at all), rather than the one it had just adopted.
+    `session.deviceAccessToken` now takes priority.
+  - `callWithRefresh` (`src/grpc/callWithRefresh.ts`) refreshed unconditionally on gRPC
+    `UNAUTHENTICATED`. A device credential has no refresh token behind it (§6.1 rule 6);
+    `UNAUTHENTICATED` on one now surfaces `AuthError` immediately, with no refresh call,
+    mirroring the `isDeviceSession` check `rest/interceptors.ts` already applied on REST.
+
 - **An SSO/federation completion resets the acting-tenant gate** (CONTRACT.md §5.2 rule 1,
   C-12 question 5). `OidcClient.ssoComplete`, `.ssoCompleteOauth2` and `.ssoCompleteHandoff`
   establish a new session, possibly as a different principal, and carry no `LoginUserInfo`,

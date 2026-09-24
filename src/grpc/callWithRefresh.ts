@@ -10,6 +10,15 @@
 // cached-token fast-path via `syncFromJar()`, then retries the call exactly
 // once. A second UNAUTHENTICATED (or any other error) maps through
 // `mapGrpcStatusToError` and rethrows — no further retry (§9.3).
+//
+// CONTRACT 1.52 N4.5 (C-12): "Never refreshed, on either transport. A ...
+// gRPC UNAUTHENTICATED on the device credential is AuthError, with no
+// refresh call." There is no refresh token behind a device credential
+// (§6.1 rule 6) — refreshing here would spend a call against an endpoint
+// that has nothing to give back, and the retry would fail exactly the same
+// way. `session.deviceAccessToken` is checked before entering the guard,
+// mirroring `rest/interceptors.ts`'s `isDeviceSession` check on the REST
+// side.
 
 import { GrpcStatus, mapGrpcStatusToError, type AxiamError } from '../core/index.js';
 import type { NodeSession } from '../node/session.js';
@@ -33,7 +42,8 @@ export async function callWithRefresh<T>(session: NodeSession, fn: () => Promise
   try {
     return await fn();
   } catch (err) {
-    if (isGrpcServiceError(err) && err.code === GrpcStatus.UNAUTHENTICATED) {
+    const isDeviceSession = session.deviceAccessToken !== undefined;
+    if (isGrpcServiceError(err) && err.code === GrpcStatus.UNAUTHENTICATED && !isDeviceSession) {
       await session.refreshGuard(session.doRefresh);
       await session.tokenManager.syncFromJar();
       try {
