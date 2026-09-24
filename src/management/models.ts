@@ -24,6 +24,7 @@
  *   secret an ordinary string.
  */
 import { Sensitive } from '../core/sensitive.js';
+import { NetworkError } from '../core/errors.js';
 
 /**
  * Drops a `tenant_scope` that names no tenants.
@@ -3833,6 +3834,39 @@ export type SubjectAltName =
       /** An IPv4 or IPv6 address, e.g. `10.0.0.5`. */
       ip: string;
     };
+
+/**
+ * Refuse a `SubjectAltName` naming neither or both of 'dns', 'ip'
+ * (CONTRACT.md §27.13, CONTRACT 1.52 N3, C-12). `SubjectAltName` is
+ * externally tagged — a plain object with no shared discriminator — so the
+ * TypeScript union above does not itself stop a dynamically-built value from
+ * holding neither key or both; TypeScript's excess-property check only fires
+ * on an object LITERAL assigned directly, never on a value built up
+ * field-by-field or passed through a variable. The server accepts exactly
+ * one key; a value with zero or two is refused client-side, before any
+ * request (§27.4 rule 2's error), rather than silently dropped or sent
+ * malformed.
+ */
+export function assertValidSubjectAltName(value: SubjectAltName): void {
+  const present = ['dns', 'ip'].filter(
+    (k) => (value as unknown as Record<string, unknown>)[k] !== undefined,
+  );
+  if (present.length !== 1) {
+    throw new NetworkError(
+      `SubjectAltName must have exactly one of dns, ip (CONTRACT.md §27.4 rule 2); got ${JSON.stringify(value)}`,
+    );
+  }
+}
+
+/**
+ * Runs {@link assertValidSubjectAltName} over every element of a
+ * possibly-absent `SubjectAltName[]` (CONTRACT 1.52 N3, C-12). A
+ * `null`/`undefined` list is left alone — there is nothing to validate.
+ */
+export function assertValidSubjectAltNameList(values: SubjectAltName[] | null | undefined): void {
+  if (!values) return;
+  for (const value of values) assertValidSubjectAltName(value);
+}
 
 /**
  * A tenant is an isolated context within an organization.

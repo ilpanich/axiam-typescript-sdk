@@ -70,6 +70,7 @@ export class CertificatesApi {
    * issued exactly once, including the ones that look idempotent.
    */
   async generate(body: models.CreateCertificateRequest): Promise<models.GeneratedCertificate> {
+    models.assertValidSubjectAltNameList(body.subject_alt_names);
     const wire = await sendManagement<models.GeneratedCertificateWire>(this.#client, {
       operation: 'certificates.generate',
       method: 'POST',
@@ -87,6 +88,7 @@ export class CertificatesApi {
    * issued exactly once, including the ones that look idempotent.
    */
   async signCsr(body: models.SignCertificateCsrRequest): Promise<models.Certificate> {
+    models.assertValidSubjectAltNameList(body.subject_alt_names);
     const wire = await sendManagement<models.Certificate>(this.#client, {
       operation: 'certificates.sign_csr',
       method: 'POST',

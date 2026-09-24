@@ -61,6 +61,20 @@ const FORCE_OPTIONAL = {
   RoleServiceAccountAssignment: new Set(['inherit']),
 };
 
+// CONTRACT.md §27.13 / CONTRACT 1.52 N3 (C-12): populated by `emitModels()`
+// (which runs, and therefore fills this in, before any `emitOperation()`
+// call) with one entry per externally-tagged union it emits —
+// `SubjectAltName`'s `{"dns": …} | {"ip": …}` shape today, and whatever
+// else `externallyTagged()` recognizes in a future spec. Keyed by the raw
+// schema name (`SubjectAltName`), value is `{ rname, keys }` — the emitted
+// TypeScript name and the arms' single-field keys. `emitOperation()` reads
+// this to find request-body array fields typed as one of these unions and
+// wrap them in a runtime "exactly one key present" guard: a TypeScript
+// union type does not itself stop a dynamically-built value from holding
+// neither key or both (excess-property checks only fire on object
+// literals), and the server accepts neither shape.
+const EXTERNALLY_TAGGED = new Map();
+
 // ---------------------------------------------------------------------------
 // Naming
 // ---------------------------------------------------------------------------
@@ -277,6 +291,40 @@ function emitExternallyTagged(rname, schema, arms) {
     lines.push(`    }${tail}`);
   });
   lines.push('');
+
+  const keys = arms.map((a) => a.key);
+  const keyList = keys.map((k) => `'${k}'`).join(', ');
+  lines.push(
+    ...doc(
+      `Refuse a \`${rname}\` naming neither or both of ${keyList} (CONTRACT.md §27.13, ` +
+        `CONTRACT 1.52 N3, C-12). \`${rname}\` is externally tagged — a plain object with ` +
+        `no shared discriminator — so the TypeScript union above does not itself stop a ` +
+        `dynamically-built value from holding neither key or both; TypeScript's excess` +
+        `-property check only fires on an object LITERAL assigned directly, never on a ` +
+        `value built up field-by-field or passed through a variable. The server accepts ` +
+        `exactly one key; a value with zero or two is refused client-side, before any ` +
+        `request (§27.4 rule 2's error), rather than silently dropped or sent malformed.`,
+    ),
+  );
+  lines.push(`export function assertValid${rname}(value: ${rname}): void {`);
+  lines.push(`  const present = [${keyList}].filter(`);
+  lines.push(`    (k) => (value as unknown as Record<string, unknown>)[k] !== undefined,`);
+  lines.push('  );');
+  lines.push('  if (present.length !== 1) {');
+  lines.push('    throw new NetworkError(');
+  lines.push(
+    `      \`${rname} must have exactly one of ${keys.join(', ')} (CONTRACT.md §27.4 rule 2); got \${JSON.stringify(value)}\`,`,
+  );
+  lines.push('    );');
+  lines.push('  }');
+  lines.push('}');
+  lines.push('');
+  lines.push(...doc(`Runs {@link assertValid${rname}} over every element of a possibly-absent \`${rname}[]\` (CONTRACT 1.52 N3, C-12). A \`null\`/\`undefined\` list is left alone — there is nothing to validate.`));
+  lines.push(`export function assertValid${rname}List(values: ${rname}[] | null | undefined): void {`);
+  lines.push('  if (!values) return;');
+  lines.push(`  for (const value of values) assertValid${rname}(value);`);
+  lines.push('}');
+  lines.push('');
   return lines.join('\n');
 }
 
@@ -377,6 +425,7 @@ function emitModels() {
  *   secret an ordinary string.
  */
 import { Sensitive } from '../core/sensitive.js';
+import { NetworkError } from '../core/errors.js';
 
 /**
  * Drops a \`tenant_scope\` that names no tenants.
@@ -445,6 +494,7 @@ export function roleAssignmentInherits(assignment: { inherit?: boolean }): boole
     }
     const tagged = externallyTagged(schema);
     if (tagged) {
+      EXTERNALLY_TAGGED.set(name, { rname, keys: tagged.map((a) => a.key) });
       out.push(emitExternallyTagged(rname, schema, tagged));
       continue;
     }
@@ -841,6 +891,19 @@ function emitOperation(namespace, opname, op, secrets) {
     // on the 152 operations that have no such field.
     if (SCHEMAS[schema]?.properties?.tenant_scope) {
       bodyExpr = `models.omitEmptyTenantScope(${bodyExpr})`;
+    }
+    // CONTRACT.md §27.13 / CONTRACT 1.52 N3 (C-12): refuse client-side,
+    // before any request, a request-body array field typed as an
+    // externally-tagged union (SubjectAltName's `{dns}|{ip}` shape) whose
+    // element names neither or both of its keys. See EXTERNALLY_TAGGED's
+    // doc comment for why the type alone cannot stop this.
+    for (const [prop, propSchema] of Object.entries(SCHEMAS[schema]?.properties ?? {})) {
+      const types = Array.isArray(propSchema?.type) ? propSchema.type : [propSchema?.type];
+      const itemsRef = types.includes('array') ? propSchema?.items?.$ref : undefined;
+      const target = itemsRef ? EXTERNALLY_TAGGED.get(itemsRef.split('/').pop()) : undefined;
+      if (target) {
+        prelude.push(`    models.assertValid${target.rname}List(body.${prop});`);
+      }
     }
   } else if (op.request_body === 'untyped') {
     args.push('body: unknown');
