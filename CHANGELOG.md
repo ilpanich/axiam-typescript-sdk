@@ -7,11 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-beta17] - 2026-09-25
 Contract 1.51 — the dogfooding remediation (`claude_dev/dogfooding-findings-fix-plan.md`
 in the `axiam` repository, task C-2). Ported from the reference implementation,
 `ilpanich/axiam-rust-sdk#115`.
 
 ### Added
+
+- Metadata, two-shape role bindings, service accounts (CONTRACT §27.6.1, contract 1.51)
+
+- ValidateToken/introspectToken (CONTRACT §1.1.1, §10.3, contract 1.51)
+
+- AuthenticateDevice(), the mTLS device login (CONTRACT §6.1 rules 6-10)
+
+- Acting tenant, X-Axiam-Tenant (CONTRACT §5.2 rule 1, contract 1.51)
+
+- Re-vendor contract 1.51 and regenerate the §27 surface
 
 - **The acting tenant, `X-Axiam-Tenant`** (CONTRACT.md §5.2 rule 1). `AxiamClientOptions.actingTenantId`
   at construction, and `client.actingTenant(tenantId)` / `client.clearActingTenant()` on an
@@ -26,6 +37,7 @@ in the `axiam` repository, task C-2). Ported from the reference implementation,
   REST-only — the gRPC interceptor is unaffected. The §17 decision memo is now keyed on
   the acting tenant too, so two handles sharing one memo cannot answer one tenant's
   question with another's cached decision.
+
 - **`authenticateDevice()`, the mTLS device login** (CONTRACT.md §6.1 rules 6–10).
   `POST /api/v1/auth/device`, no body; returns `DeviceToken { accessToken, tokenType,
   expiresIn }` and adopts it as the client's bearer credential — every subsequent
@@ -35,6 +47,7 @@ in the `axiam` repository, task C-2). Ported from the reference implementation,
   calls. There is no refresh token: a later `401` on the adopted token surfaces as
   `AuthError` without a refresh attempt, and a `429` (the route is rate-limited) maps to
   `NetworkError`, not `AuthError`, and is never retried.
+
 - **`TokenGrpcClient.validateToken`/`.introspectToken`** (CONTRACT.md §1.1.1, §10.3), on
   `axiam-sdk/grpc`. Wraps `axiam.v1.TokenService`; the caller's own token authenticates
   the call through the existing interceptor, and the token being inspected travels as a
@@ -43,6 +56,7 @@ in the `axiam` repository, task C-2). Ported from the reference implementation,
   `extExchangeIss`. `cnf` converts to the same `CnfClaim` shape the REST §10 middleware
   already consumes (`verifyTokenBinding`/`verifyCertificateBinding`), so gRPC validation
   and local REST verification cannot disagree about whether a token is a bearer token.
+
 - **The declarative manifest, three additions** (CONTRACT.md §27.6.1): `resources[].metadata`
   (JSON-equality drift, never a merge); a role binding's resource-scoped shape,
   `{ role, resource?, inherit? }`, alongside the existing plain-key form, with `inherit`
@@ -56,6 +70,7 @@ in the `axiam` repository, task C-2). Ported from the reference implementation,
   calls `rotate_secret` to reconcile anything, so this is the only place a
   manifest-created account's secret is ever surfaced. `@AxiamServiceAccount` joins the
   existing decorator set.
+
 - `scripts/gen-management.mjs`: an externally-tagged `oneOf` (`SubjectAltName`'s
   `{"dns": …} | {"ip": …}` shape) is now recognised and emitted as a proper union type,
   rather than falling through to an interface with no fields at all; and `inherit` on the
@@ -67,21 +82,63 @@ in the `axiam` repository, task C-2). Ported from the reference implementation,
 
 ### Changed
 
+- Re-vendor CONTRACT.md at contract 1.52
+
+- Document reach's UUID comparison and that logout() keeps the acting tenant
+
+- README's "named rather than folded" list omits five landed sections
+
+- The §27 imperative surface is 162 operations
+
+- README conformance at contract 1.51, CHANGELOG, docs-gate fixes
+
+- Update CodeQL initialization action version
+
+- Bump github/codeql-action/analyze from 4.38.0 to 4.38.1
+
+- Bump the minor-patch group with 9 updates
+
 - **CONTRACT.md re-vendored at contract 1.52.** Copied byte for byte from axiam `80bc7aa`
   (sha256 `c7954eec…`), the merge of the C-12 cross-SDK conformance review
   (ilpanich/axiam#500). 1.52 changes no wire behaviour: it writes rules N1–N6, which
   this SDK's C-12 fixes (#119) already implement. The README's conformance line
   moves to 1.52.
+
 - Re-vendored `CONTRACT.md`, `openapi.json` and `management-registry.json` from `axiam`
   commit `56fbe44` (contract 1.51); `proto/` was already identical. `CertificateType`
   gains `"Server"` (already decoded openly — no SDK change needed); `subject_alt_names` on
   `certificates.generate`/`.signCsr`; `server_cert_allowed_names` on the settings DTOs.
+
 - `AxiamClient`'s `decisionMemo`, `telemetry` and the §16.1 retry switch now live on
   `SharedSession` rather than on `AxiamClient` itself, so that `actingTenant()`'s new
   handle shares one memo/dispatcher instead of getting an empty one of its own — pure
   internal refactor, `client.decisionMemo`/`client.telemetry` read identically.
 
 ### Fixed
+
+- A plain binding with inherit: false and no resource is refused client-side
+
+- Client-credentials adoption resets the acting-tenant gate to unknown
+
+- ActingTenant() compares reachableTenantIds as UUIDs, not raw strings
+
+- OPAQUE, WebAuthn, SSO and client-credentials adoption replace the device credential
+
+- A refused device re-authentication no longer drops the held credential
+
+- SubjectAltName refuses neither/both of its keys, client-side
+
+- Manifest metadata drift ignores key order
+
+- GRPC sends the device credential after adoption, and never refreshes it
+
+- A 401 on the device POST never enters the refresh guard, even with a prior session
+
+- VerifyAccessToken now applies CONTRACT.md §10.1 rule 9 itself
+
+- A federation completion resets the §5.2 gate and the decision memo
+
+- AuthenticateRequest enforces §10.1 rule 9 (contract 1.51)
 
 - **`actingTenant()` compares `reachableTenantIds` as UUIDs, not as raw strings**
   (CONTRACT.md §5.2.3 rule 4, CONTRACT 1.52 N5.6, C-12). Send-back after C-12: found by a
