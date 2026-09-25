@@ -17,17 +17,28 @@ import type { Interceptor } from '@grpc/grpc-js';
 import type { NodeSession } from '../node/session.js';
 
 /**
- * Injects `authorization: Bearer <token>` (when a cached token is present)
- * and `x-tenant-id` metadata on every outgoing RPC (CONTRACT.md §5). Never
- * logs the token — `expose()` is only called at this metadata-insertion
- * boundary.
+ * Injects `authorization: Bearer <token>` (when a token is available) and
+ * `x-tenant-id` metadata on every outgoing RPC (CONTRACT.md §5). Never logs
+ * the token — `expose()` is only called at this metadata-insertion boundary.
+ *
+ * CONTRACT 1.52 N4.3 (C-12): once `authenticateDevice()` has adopted a
+ * device credential onto this session, "the token is the credential of
+ * every request the client makes afterwards: authz, management,
+ * self-service, WebAuthn, logout, and gRPC." `session.deviceAccessToken`
+ * therefore takes priority over the cookie-jar-synced
+ * `tokenManager.cachedAccessToken()` fast-path — reading it is exactly as
+ * non-blocking as reading the cache (both are plain in-memory
+ * `Sensitive<string>` reads, Pitfall 3 unaffected). Without this, a
+ * device-adopted gRPC caller would silently ride whatever cookie session
+ * happened to be cached from before the device login (or none at all),
+ * rather than the credential it just adopted.
  */
 export function authInterceptor(session: NodeSession): Interceptor {
   return (options, nextCall) => {
     return new grpc.InterceptingCall(nextCall(options), {
       start(metadata, listener, next) {
-        // Non-blocking cached-token read — NEVER await here (Pitfall 3).
-        const token = session.tokenManager.cachedAccessToken();
+        // Non-blocking token read — NEVER await here (Pitfall 3).
+        const token = session.deviceAccessToken ?? session.tokenManager.cachedAccessToken();
         if (token) {
           metadata.add('authorization', `Bearer ${token.expose()}`);
         }

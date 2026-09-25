@@ -14,7 +14,7 @@ import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AxiamClient } from '../../src/rest/client.js';
-import { AuthError, NetworkError } from '../../src/core/index.js';
+import { AuthError, NetworkError, Sensitive } from '../../src/core/index.js';
 import {
   __resetOpaqueModuleForTests,
   __setOpaqueModuleForTests,
@@ -131,6 +131,55 @@ describe('loginOpaque', () => {
     }
     // And no stray `password` key from the shared login-body builder.
     expect(bodies[0]).not.toHaveProperty('password');
+  });
+
+  // CONTRACT 1.52 N4.4 (C-12): "Any later session-establishing call
+  // replaces it [the device credential] ... OPAQUE ..." Before this fix,
+  // loginOpaque() never touched `session.deviceAccessToken`, so a client
+  // that had previously called authenticateDevice() and then signed in
+  // with OPAQUE kept riding the STALE device credential on every later
+  // request — installDeviceTokenInterceptor sends it unconditionally
+  // whenever `deviceAccessToken` is set, silently overriding the brand-new
+  // cookie session.
+  it('CONTRACT 1.52 N4.4 (C-12) — replaces a previously-adopted device credential', async () => {
+    server.use(
+      loginStartOk(),
+      http.post(LOGIN_FINISH, () =>
+        HttpResponse.json({
+          user: { id: 'u1', username: 'alice', email: 'alice@example.com' },
+          session_id: 's1',
+          expires_in: 900,
+        }),
+      ),
+    );
+
+    const c = client();
+    c.session.deviceAccessToken = new Sensitive('stale-device-token');
+
+    const result = await c.loginOpaque('alice', PASSWORD);
+
+    expect(result.status).toBe('authenticated');
+    expect(c.session.deviceAccessToken).toBeUndefined();
+  });
+
+  // I4 twin: a client with no device credential is unaffected.
+  it('twin (I4): a client with no device credential is unaffected', async () => {
+    server.use(
+      loginStartOk(),
+      http.post(LOGIN_FINISH, () =>
+        HttpResponse.json({
+          user: { id: 'u1', username: 'alice', email: 'alice@example.com' },
+          session_id: 's1',
+          expires_in: 900,
+        }),
+      ),
+    );
+
+    const c = client();
+    expect(c.session.deviceAccessToken).toBeUndefined();
+
+    await c.loginOpaque('alice', PASSWORD);
+    expect(c.session.deviceAccessToken).toBeUndefined();
   });
 
   it('returns the same mfa_required shape the password path returns', async () => {

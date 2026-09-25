@@ -2099,6 +2099,24 @@ export class OidcClient {
    */
   #adoptCredential(accessToken: Sensitive<string>): void {
     this.#adoptedCredential = accessToken;
+    // CONTRACT 1.52 N4.4 (C-12): client-credentials adoption is one of the
+    // session-establishing calls that REPLACES a previously-adopted device
+    // credential. Without this, a client that had called
+    // authenticateDevice() and then adopted client-credentials kept riding
+    // the stale device token on every later same-origin request —
+    // installDeviceTokenInterceptor sends it unconditionally whenever
+    // `deviceAccessToken` is set, regardless of what new credential was
+    // just adopted here.
+    this.#session.deviceAccessToken = undefined;
+    // CONTRACT 1.52 N5.5 (C-12): client-credentials adoption carries no
+    // LoginUserInfo, so it resets the §5.2 acting-tenant gate to unknown —
+    // the same as a WebAuthn authentication, an SSO completion, or a device
+    // login. Without this, a session that had recorded an earlier login's
+    // (possibly non-organization-level) principalScope kept gating
+    // actingTenant() on that STALE report after adopting an unrelated
+    // service-account credential, instead of letting the server's 403
+    // decide as N5.5 requires.
+    this.#session.principalScope = undefined;
     if (this.#adoptionInterceptorInstalled) {
       return;
     }
@@ -2158,6 +2176,23 @@ export class OidcClient {
   #forgetPreviousPrincipal(): void {
     this.#session.principalScope = undefined;
     this.#session.decisionMemo.clear();
+    // CONTRACT 1.52 N4.4 (C-12): an SSO/federation completion is one of the
+    // session-establishing calls that REPLACES a previously-adopted device
+    // credential. Without this, a client that had called
+    // authenticateDevice() and then completed a federation sign-in kept
+    // riding the stale device token on every later request —
+    // installDeviceTokenInterceptor sends it unconditionally whenever
+    // `deviceAccessToken` is set, regardless of what new session was just
+    // established.
+    // CONTRACT 1.52 N4.4 (C-12): an SSO/federation completion is one of the
+    // session-establishing calls that REPLACES a previously-adopted device
+    // credential. Without this, a client that had called
+    // authenticateDevice() and then completed a federation sign-in kept
+    // riding the stale device token on every later request —
+    // installDeviceTokenInterceptor sends it unconditionally whenever
+    // `deviceAccessToken` is set, regardless of what new session was just
+    // established.
+    this.#session.deviceAccessToken = undefined;
   }
 
   async #completeFederationSession(

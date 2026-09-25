@@ -251,6 +251,14 @@ export async function loginOpaque(
 
   const wire = response.data as LoginSuccessResponseWire;
   client.session.authenticated = true;
+  // CONTRACT 1.52 N4.4 (C-12): an OPAQUE login is one of the
+  // session-establishing calls that REPLACES a previously-adopted device
+  // credential. Without this, a client that had called authenticateDevice()
+  // and then signed in with OPAQUE kept riding the stale device token on
+  // every later request — installDeviceTokenInterceptor sends it
+  // unconditionally whenever `deviceAccessToken` is set, regardless of what
+  // new session was just established.
+  client.session.deviceAccessToken = undefined;
   await client.session.onAuthenticated?.();
   const user = userInfoFromWire(wire.user);
   // §5.2 rule 1 (C-12): OPAQUE answers the identical LoginSuccessResponseWire

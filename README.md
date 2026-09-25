@@ -62,10 +62,10 @@ Express middleware and the Fastify plugin — with all three operations, the
 `resourceMetadataUrl` guard option and §28.9's five required tests. This SDK is §28.10's
 reference implementation: it lands first and the ten ports are read against it.
 
-§12.7, §14, §15, §22, §24, §25, §26, §27 and §28 are named rather than folded into the
-range because they landed after this SDK already claimed §1–§13: widening the range
-silently would turn a statement that was true when written into a different claim without
-anyone editing it.
+§12.7, §14, §15, §17, §19, §20, §21, §22, §23, §24, §25, §26, §27 and §28 are named rather
+than folded into the range because they landed after this SDK already claimed §1–§13:
+widening the range silently would turn a statement that was true when written into a
+different claim without anyone editing it.
 
 ### §10.1 minimum local-verification set
 
@@ -263,7 +263,15 @@ await device.management.serviceAccounts.list(); // adopted: carries Authorizatio
   `Authorization` header, so a stale one would otherwise silently win.
 - **There is no refresh token.** A device re-authenticates by calling
   `authenticateDevice()` again — one TLS handshake. A later `401` on the adopted token
-  surfaces as `AuthError` without a refresh attempt.
+  surfaces as `AuthError` without a refresh attempt, on REST and gRPC alike — gRPC calls
+  send the device token too (not the cookie-jar-synced one) once it is adopted.
+- **Held until replaced.** `logout()` clears it; `refresh()` does not. Any later
+  session-establishing call replaces it with its own session: `login()`, `verifyMfa()`,
+  `loginOpaque()`, a WebAuthn authentication, an SSO/federation completion,
+  `loginClientCredentials({ adoptAsCredential: true })`, or another `authenticateDevice()`
+  call. A **refused** re-authentication over `authenticateDevice()` leaves the previously
+  adopted device credential exactly as it was — it does not fail into "no credential at
+  all".
 - **Every refusal is a `401`** — unknown, untrusted, expired, revoked or unbound
   certificate, or a `Server`-type certificate — mapped to `AuthError` verbatim. The route is
   rate-limited per client IP; a `429` maps to `NetworkError`, not `AuthError`, and is never
@@ -1485,11 +1493,21 @@ server silently ignores a value that fails to parse and answers for the
 caller's own tenant. Once a login result is held, `actingTenant()` also refuses
 client-side (`AuthzError`, zero wire calls) for a non-organization-level
 principal, and for a tenant outside `reachableTenantIds` when the login
-response narrowed it (§5.2.3). A login result is held after `login`,
+response narrowed it (§5.2.3) — compared as UUIDs (case- and
+formatting-insensitive), never as raw strings, so an upper-case `tenantId`
+still matches a `reachableTenantIds` entry the server reported in its own
+lower-case canonical form. A login result is held after `login`,
 `verifyMfa`, OPAQUE login and the MFA and WebAuthn setup completions, whose
 responses carry the user object. A WebAuthn authentication, any SSO/federation
 completion (`ssoComplete`, `ssoCompleteOauth2`, `ssoCompleteHandoff`) or the
 device login resets it, so the header is sent and the server decides.
+
+`client.logout()` does **not** clear an acting tenant a handle was built with —
+the handle's `#actingTenantId` is untouched, so a handle returned by
+`client.actingTenant(id)` still sends `X-Axiam-Tenant: id` on any call made
+through it after `logout()`, and the server's session-based rejection (no
+session, no wire call — §27.4 rule 1) is what stops the request, not this
+header. Only `clearActingTenant()` (or building a fresh handle) removes it.
 
 **REST-only.** The gRPC interceptor reads no acting-tenant metadata — a gRPC
 call through any handle still acts on the token's own tenant. `X-Tenant-ID` and
@@ -2363,9 +2381,9 @@ if (created.outcome.status === 'created' && created.outcome.serviceAccountSecret
 }
 ```
 
-- **`resources[].metadata`** drifts by JSON equality of the whole object, never a
-  key-by-key merge; an unstated `metadata` is silent, and a stated `{}` matches what the
-  server holds for none.
+- **`resources[].metadata`** drifts by JSON equality of the whole object, independent of
+  key order, never a key-by-key merge; an unstated `metadata` is silent, and a stated
+  `{}` matches what the server holds for none.
 - **A role binding takes either shape** — a plain key (as before 1.51) or
   `{ role, resource?, inherit? }`. `inherit` reaches the wire only as `false`. Changing a
   binding's resource or `inherit` is `unassign` then `assign` (there is no update
