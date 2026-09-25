@@ -1,5 +1,5 @@
-<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>VerifiableSession | AXIAM TypeScript SDK - v1.0.0-beta16</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
-<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK - v1.0.0-beta16</a>
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>VerifiableSession | AXIAM TypeScript SDK - v1.0.0-beta17</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK - v1.0.0-beta17</a>
 <div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
 <ul role="listbox" id="tsd-search-results"></ul>
 <div id="tsd-search-status" aria-live="polite" aria-atomic="true">
@@ -19,14 +19,14 @@ not tenant-scoped (node/jwks.ts) — <code>tenantHeaderValue</code> is what lets
 DIFFERENT tenant in the same org (CONTRACT.md §10.1 rule 4).</p>
 </div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">VerifiableSession</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#expectedaudience">expectedAudience</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#expectedissuer">expectedIssuer</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#jwksverifier">jwksVerifier</a><span class="tsd-signature-symbol">:</span> <a href="middleware.Verifier.html" class="tsd-signature-type tsd-kind-interface">Verifier</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#resourcemetadataurl">resourceMetadataUrl</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#revocationfeed">revocationFeed</a><span class="tsd-signature-symbol">?:</span> <a href="../classes/middleware.RevocationFeed.html" class="tsd-signature-type tsd-kind-class">RevocationFeed</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#tenantheadervalue">tenantHeaderValue</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div>
-<section class="tsd-panel tsd-hierarchy" data-refl="3549">
+<section class="tsd-panel tsd-hierarchy" data-refl="3699">
 <h4>Hierarchy (<a href="../hierarchy.html#middleware.VerifiableSession">View Summary</a>)</h4>
 <ul class="tsd-hierarchy">
 <li class="tsd-hierarchy-item"><span class="tsd-hierarchy-target">VerifiableSession</span>
 <ul class="tsd-hierarchy">
 <li class="tsd-hierarchy-item"><a href="middleware.AuthzVerifiableSession.html" class="tsd-signature-type tsd-kind-interface">AuthzVerifiableSession</a></li></ul></li></ul></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/middleware/verifyCore.ts#L20">src/middleware/verifyCore.ts:20</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ee31776793609900c5dbe92d2d8451fae01a754a/src/middleware/verifyCore.ts#L20">src/middleware/verifyCore.ts:20</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -52,7 +52,7 @@ default. A resource server guarding user-facing routes SHOULD set
 <code>&quot;axiam:user&quot;</code>. Populated from <code>AxiamClientOptions.expectedAudience</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/middleware/verifyCore.ts#L48">src/middleware/verifyCore.ts:48</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ee31776793609900c5dbe92d2d8451fae01a754a/src/middleware/verifyCore.ts#L48">src/middleware/verifyCore.ts:48</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="expectedissuer"><code class="tsd-tag">Optional</code><span>expected<wbr/>Issuer</span><a href="#expectedissuer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">expectedIssuer</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
@@ -62,14 +62,14 @@ hardcodes an issuer. When set, a token whose <code>iss</code> differs is rejecte
 Populated from <code>AxiamClientOptions.expectedIssuer</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/middleware/verifyCore.ts#L42">src/middleware/verifyCore.ts:42</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ee31776793609900c5dbe92d2d8451fae01a754a/src/middleware/verifyCore.ts#L42">src/middleware/verifyCore.ts:42</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="jwksverifier"><span>jwks<wbr/>Verifier</span><a href="#jwksverifier" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">jwksVerifier</span><span class="tsd-signature-symbol">:</span> <a href="middleware.Verifier.html" class="tsd-signature-type tsd-kind-interface">Verifier</a></div>
 <div class="tsd-comment tsd-typography"><p>Local JWKS verifier (D-11) — validates the token's EdDSA signature against the org-wide cached JWKS, offline on a cache hit.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/middleware/verifyCore.ts#L22">src/middleware/verifyCore.ts:22</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ee31776793609900c5dbe92d2d8451fae01a754a/src/middleware/verifyCore.ts#L22">src/middleware/verifyCore.ts:22</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="resourcemetadataurl"><code class="tsd-tag">Optional</code><span>resource<wbr/>Metadata<wbr/>Url</span><a href="#resourcemetadataurl" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">resourceMetadataUrl</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
@@ -95,7 +95,7 @@ retyping the string — retyping is how the guard and the document come to
 disagree.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/middleware/verifyCore.ts#L75">src/middleware/verifyCore.ts:75</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ee31776793609900c5dbe92d2d8451fae01a754a/src/middleware/verifyCore.ts#L75">src/middleware/verifyCore.ts:75</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="revocationfeed"><code class="tsd-tag">Optional</code><span>revocation<wbr/>Feed</span><a href="#revocationfeed" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">revocationFeed</span><span class="tsd-signature-symbol">?:</span> <a href="../classes/middleware.RevocationFeed.html" class="tsd-signature-type tsd-kind-class">RevocationFeed</a></div>
@@ -108,7 +108,7 @@ expires, which is the §10.2 posture this narrows rather than replaces.</p>
 never matched against it.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/middleware/verifyCore.ts#L87">src/middleware/verifyCore.ts:87</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ee31776793609900c5dbe92d2d8451fae01a754a/src/middleware/verifyCore.ts#L87">src/middleware/verifyCore.ts:87</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="tenantheadervalue"><span>tenant<wbr/>Header<wbr/>Value</span><a href="#tenantheadervalue" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">tenantHeaderValue</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
@@ -125,7 +125,7 @@ session can never match and therefore rejects every request; that is
 fail-closed by design, not a silent pass.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/middleware/verifyCore.ts#L35">src/middleware/verifyCore.ts:35</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ee31776793609900c5dbe92d2d8451fae01a754a/src/middleware/verifyCore.ts#L35">src/middleware/verifyCore.ts:35</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -144,7 +144,7 @@ fail-closed by design, not a silent pass.</p>
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Properties</summary>
 <div><a href="#expectedaudience"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>expected<wbr/>Audience</span></a><a href="#expectedissuer"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>expected<wbr/>Issuer</span></a><a href="#jwksverifier"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>jwks<wbr/>Verifier</span></a><a href="#resourcemetadataurl"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>resource<wbr/>Metadata<wbr/>Url</span></a><a href="#revocationfeed"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>revocation<wbr/>Feed</span></a><a href="#tenantheadervalue"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>tenant<wbr/>Header<wbr/>Value</span></a></div></details></div></details></div>
 <div class="site-menu">
-<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK - v1.0.0-beta16</a>
+<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK - v1.0.0-beta17</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
 <li>Loading...</li></ul></nav></div></div></div><footer>
 <p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>

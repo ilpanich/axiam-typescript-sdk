@@ -1,5 +1,5 @@
-<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>Verifier | AXIAM TypeScript SDK - v1.0.0-beta16</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
-<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK - v1.0.0-beta16</a>
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>Verifier | AXIAM TypeScript SDK - v1.0.0-beta17</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK - v1.0.0-beta17</a>
 <div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
 <ul role="listbox" id="tsd-search-results"></ul>
 <div id="tsd-search-status" aria-live="polite" aria-atomic="true">
@@ -14,9 +14,9 @@
 <section class="tsd-panel tsd-comment">
 <div class="tsd-comment tsd-typography"><p>Verifies an AXIAM access token's EdDSA signature against the org-wide remote JWKS.</p>
 </div></section>
-<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">Verifier</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-call-signature" href="#verifyaccesstoken-1">verifyAccessToken</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">token</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">expectations</span><span class="tsd-signature-symbol">:</span> <a href="middleware.AccessTokenExpectations.html" class="tsd-signature-type tsd-kind-interface">AccessTokenExpectations</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="middleware.AxiamClaims.html" class="tsd-signature-type tsd-kind-interface">AxiamClaims</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#verifysignatureonlyunchecked-1">verifySignatureOnlyUnchecked</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">token</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="middleware.AxiamClaims.html" class="tsd-signature-type tsd-kind-interface">AxiamClaims</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
+<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">Verifier</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-call-signature" href="#verifyaccesstoken-1">verifyAccessToken</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">token</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">expectations</span><span class="tsd-signature-symbol">:</span> <a href="middleware.AccessTokenExpectations.html" class="tsd-signature-type tsd-kind-interface">AccessTokenExpectations</a><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">proofs</span><span class="tsd-signature-symbol">?:</span> <a href="middleware.PresentedProofs.html" class="tsd-signature-type tsd-kind-interface">PresentedProofs</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="middleware.AxiamClaims.html" class="tsd-signature-type tsd-kind-interface">AxiamClaims</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#verifysignatureonlyunchecked-1">verifySignatureOnlyUnchecked</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">token</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="middleware.AxiamClaims.html" class="tsd-signature-type tsd-kind-interface">AxiamClaims</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/node/jwks.ts#L346">src/node/jwks.ts:346</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ee31776793609900c5dbe92d2d8451fae01a754a/src/node/jwks.ts#L350">src/node/jwks.ts:350</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -34,7 +34,7 @@
 <h3 class="tsd-anchor-link" id="verifyaccesstoken"><span>verify<wbr/>Access<wbr/>Token</span><a href="#verifyaccesstoken" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
 <li class="">
-<div class="tsd-signature tsd-anchor-link" id="verifyaccesstoken-1"><span class="tsd-kind-call-signature">verifyAccessToken</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">token</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">expectations</span><span class="tsd-signature-symbol">:</span> <a href="middleware.AccessTokenExpectations.html" class="tsd-signature-type tsd-kind-interface">AccessTokenExpectations</a><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="middleware.AxiamClaims.html" class="tsd-signature-type tsd-kind-interface">AxiamClaims</a><span class="tsd-signature-symbol">&gt;</span><a href="#verifyaccesstoken-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-signature tsd-anchor-link" id="verifyaccesstoken-1"><span class="tsd-kind-call-signature">verifyAccessToken</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">token</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">expectations</span><span class="tsd-signature-symbol">:</span> <a href="middleware.AccessTokenExpectations.html" class="tsd-signature-type tsd-kind-interface">AccessTokenExpectations</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">proofs</span><span class="tsd-signature-symbol">?:</span> <a href="middleware.PresentedProofs.html" class="tsd-signature-type tsd-kind-interface">PresentedProofs</a><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="middleware.AxiamClaims.html" class="tsd-signature-type tsd-kind-interface">AxiamClaims</a><span class="tsd-signature-symbol">&gt;</span><a href="#verifyaccesstoken-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Verify <code>token</code> against the <strong>complete</strong> CONTRACT.md §10.1 minimum
 local-verification set and return its claims.</p>
@@ -82,8 +82,28 @@ local-verification set and return its claims.</p>
 <td>clock skew</td>
 <td><a href="../variables/middleware.CLOCK_SKEW_LEEWAY_SEC.html" class="tsd-kind-variable">CLOCK_SKEW_LEEWAY_SEC</a>, passed as <code>clockTolerance</code>.</td>
 </tr>
+<tr>
+<td>9</td>
+<td><code>cnf</code></td>
+<td>(contract 1.51 fix) <code>proofs</code> defaults to <code>{}</code> — no evidence — so a token carrying <code>cnf</code> is refused unless the caller supplies matching evidence. Enforced by handing the verified claims and <code>proofs</code> to <a href="../functions/middleware.verifyTokenBinding.html" class="tsd-kind-function">verifyTokenBinding</a>, the same function <a href="../functions/middleware.verifyCertificateBinding.html" class="tsd-kind-function">verifyCertificateBinding</a>, <code>authenticateRequest</code> and a hand-rolled guard share, so local verification never disagrees with itself about whether a token is a bearer token. An unbound token is unaffected whether or not <code>proofs</code> is supplied.</td>
+</tr>
 </tbody>
 </table>
+<p><strong><code>proofs</code> and which entry point to call.</strong> This method is the SDK's
+documented §10 guard entry point (see <a href="#verifysignatureonlyunchecked" class="tsd-kind-method">verifySignatureOnlyUnchecked</a>),
+and until the contract 1.51 fix it applied rules 1–8 only: it had no
+transport to ask for a certificate, so it silently treated every
+<code>cnf</code>-bound token as an ordinary bearer credential — precisely the
+SEC-071/SEC-080 downgrade §10.1 rule 9 exists to close, and exactly what
+every device token <code>authenticateDevice()</code> (§6.1) mints. <code>proofs</code> is now
+how a caller supplies that evidence: a certificate thumbprint the
+transport verified for this connection, a DPoP key thumbprint from a
+proof the caller has <strong>itself</strong> verified per §21.7, or both. Omitting it
+(or passing <code>{}</code>) is exactly <a href="#verifysignatureonlyunchecked" class="tsd-kind-method">verifySignatureOnlyUnchecked</a>'s
+opposite number for rule 9 — refuse rather than guess — and is the
+correct default for a caller with no transport evidence to offer; an
+unbound token is accepted either way, which is what keeps every existing
+bearer-only deployment working unchanged.</p>
 <p>Rejects with the underlying error on any failed rule; the §10 middleware
 wraps that into an <code>AuthError</code>.</p>
 </div>
@@ -91,10 +111,11 @@ wraps that into an <code>AuthError</code>.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">token</span>: <span class="tsd-signature-type">string</span></span></li>
-<li><span><span class="tsd-kind-parameter">expectations</span>: <a href="middleware.AccessTokenExpectations.html" class="tsd-signature-type tsd-kind-interface">AccessTokenExpectations</a></span></li></ul></div>
+<li><span><span class="tsd-kind-parameter">expectations</span>: <a href="middleware.AccessTokenExpectations.html" class="tsd-signature-type tsd-kind-interface">AccessTokenExpectations</a></span></li>
+<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">proofs</span>: <a href="middleware.PresentedProofs.html" class="tsd-signature-type tsd-kind-interface">PresentedProofs</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="middleware.AxiamClaims.html" class="tsd-signature-type tsd-kind-interface">AxiamClaims</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/node/jwks.ts#L364">src/node/jwks.ts:364</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ee31776793609900c5dbe92d2d8451fae01a754a/src/node/jwks.ts#L385">src/node/jwks.ts:385</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="verifysignatureonlyunchecked"><span>verify<wbr/>Signature<wbr/>Only<wbr/>Unchecked</span><a href="#verifysignatureonlyunchecked" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -111,17 +132,19 @@ wraps that into an <code>AuthError</code>.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="middleware.AxiamClaims.html" class="tsd-signature-type tsd-kind-interface">AxiamClaims</a><span class="tsd-signature-symbol">&gt;</span></h4>
 <div class="tsd-comment tsd-typography">
 <div class="tsd-tag-remarks">
-<h4 class="tsd-anchor-link" id="remarks">Remarks<a href="#remarks" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p><strong>This is not a guard.</strong> It performs no <code>exp</code>, <code>nbf</code>, <code>tenant_id</code>, <code>iss</code>
-or <code>aud</code> check whatsoever: an expired token, a not-yet-valid token, and a
-token minted for a <em>different tenant</em> in the same organization all pass.
-It exists only for integrators deliberately implementing their own
-policy on top of the signature — the <code>Unchecked</code> suffix is there to make
-that omission obvious at the call site. Anything guarding a route MUST
-use <a href="#verifyaccesstoken" class="tsd-kind-method">Verifier.verifyAccessToken</a> (or, better, the §10 middleware
-built on it).</p>
+<h4 class="tsd-anchor-link" id="remarks">Remarks<a href="#remarks" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p><strong>This is not a guard.</strong> It performs no <code>exp</code>, <code>nbf</code>, <code>tenant_id</code>, <code>iss</code>,
+<code>aud</code> or <code>cnf</code> (rule 9) check whatsoever: an expired token, a
+not-yet-valid token, a token minted for a <em>different tenant</em> in the same
+organization, and a certificate- or DPoP-bound token presented with no
+evidence at all, all pass. It exists only for integrators deliberately
+implementing their own policy on top of the signature — the <code>Unchecked</code>
+suffix is there to make that omission obvious at the call site. Anything
+guarding a route MUST use <a href="#verifyaccesstoken" class="tsd-kind-method">Verifier.verifyAccessToken</a>, passing
+<code>proofs</code> when it may see a certificate- or DPoP-bound token (or, better,
+the §10 middleware built on it, which does this automatically).</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/381c2c92c3e81aba81c9274696a70af43f05f5db/src/node/jwks.ts#L380">src/node/jwks.ts:380</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ee31776793609900c5dbe92d2d8451fae01a754a/src/node/jwks.ts#L407">src/node/jwks.ts:407</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -140,7 +163,7 @@ built on it).</p>
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Methods</summary>
 <div><a href="#verifyaccesstoken"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>verify<wbr/>Access<wbr/>Token</span></a><a href="#verifysignatureonlyunchecked"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>verify<wbr/>Signature<wbr/>Only<wbr/>Unchecked</span></a></div></details></div></details></div>
 <div class="site-menu">
-<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK - v1.0.0-beta16</a>
+<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK - v1.0.0-beta17</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
 <li>Loading...</li></ul></nav></div></div></div><footer>
 <p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>
