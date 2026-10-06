@@ -34,7 +34,7 @@ const RESOURCE_ID = '99999999-8888-7777-6666-555555555555';
 
 const server = createServer();
 beforeAll(() => {
-  server.listen({ onUnhandledRequest: 'error' });
+  server.listen({ onUnhandledFrame: 'error' });
 });
 afterEach(() => {
   server.resetHandlers();
@@ -274,7 +274,7 @@ describe('the Protection API', () => {
 
   // §20.2 rule 8: an update replaces the scope list. If the SDK ever
   // read-modify-wrote, the missing GET handler would fail this test (the mock
-  // server is configured with onUnhandledRequest: 'error') rather than let it
+  // server is configured with onUnhandledFrame: 'error') rather than let it
   // pass quietly.
   it('sends exactly the scopes given on an update, with no read first', async () => {
     let sent: { resource_scopes?: string[] } | undefined;

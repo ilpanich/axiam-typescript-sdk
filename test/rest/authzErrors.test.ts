@@ -12,7 +12,7 @@ const CHECK = `${BASE_URL}/api/v1/authz/check`;
 const BATCH = `${BASE_URL}/api/v1/authz/check/batch`;
 
 const server = setupServer();
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 

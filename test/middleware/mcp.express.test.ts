@@ -41,7 +41,7 @@ const TENANT = 'tenant-1';
 // `bypass` rather than `error`: the JWKS fetch is mocked here, and the test's
 // own requests go to a real loopback server that msw must let through.
 const server = setupServer();
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'bypass' }));
 afterAll(() => server.close());
 
 let signingKey: CryptoKey;

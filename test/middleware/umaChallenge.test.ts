@@ -36,7 +36,7 @@ const RESOURCE_ID = '99999999-8888-7777-6666-555555555555';
 const AXIAM_USER = { userId: 'user-1', tenantId: 'tenant-1', roles: [] };
 
 const server = setupServer();
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 

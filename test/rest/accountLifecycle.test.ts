@@ -86,7 +86,7 @@ const server = setupServer(
   http.post(`${BASE_URL}/api/v1/authz/check`, () => HttpResponse.json({ allowed: true })),
 );
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 beforeEach(() => {

@@ -82,7 +82,7 @@ export function mountJson(
 /**
  * Run `fn` against a fresh handler set and an authenticated client.
  *
- * `onUnhandledRequest: 'error'` is load-bearing: without it a request to a
+ * `onUnhandledFrame: 'error'` is load-bearing: without it a request to a
  * path the test forgot to mount passes through to the real network and the
  * assertion becomes a timeout in CI rather than a message.
  */
@@ -90,7 +90,7 @@ export async function withServer(
   fn: (target: typeof server, client: AxiamClient) => Promise<void>,
 ): Promise<void> {
   if (!listening) {
-    server.listen({ onUnhandledRequest: 'error' });
+    server.listen({ onUnhandledFrame: 'error' });
     listening = true;
   }
   await fn(server, managementClient());
@@ -99,7 +99,7 @@ export async function withServer(
 /** The shared msw server, for tests that mount their own handlers. */
 export function mockServer(): typeof server {
   if (!listening) {
-    server.listen({ onUnhandledRequest: 'error' });
+    server.listen({ onUnhandledFrame: 'error' });
     listening = true;
   }
   return server;

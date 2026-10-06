@@ -29,7 +29,7 @@ const ID_TOKEN = 'the-users-id-token';
 
 const server = createServer();
 beforeAll(() => {
-  server.listen({ onUnhandledRequest: 'error' });
+  server.listen({ onUnhandledFrame: 'error' });
 });
 afterEach(() => {
   server.resetHandlers();

@@ -42,7 +42,7 @@ const stateA = makeState(1);
 const stateB = makeState(1);
 const server = setupServer(...handlersFor(BASE_URL_A, stateA), ...handlersFor(BASE_URL_B, stateB));
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => {
   server.resetHandlers();
 });

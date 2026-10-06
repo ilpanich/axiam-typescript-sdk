@@ -44,7 +44,7 @@ function client(): AxiamClient {
 const server = setupServer();
 let lastCheckBody: Record<string, unknown> | undefined;
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => {
   server.resetHandlers();
   lastCheckBody = undefined;

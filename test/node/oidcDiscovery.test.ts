@@ -19,7 +19,7 @@ import { DISCOVERY_PATH } from '../../src/node/oidc.js';
 describe('oidcDiscover (§12.1, §12.3 rule 6)', () => {
   const server = createServer();
 
-  beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+  beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
   afterEach(() => {
     server.resetHandlers();
     vi.restoreAllMocks();
@@ -170,7 +170,7 @@ describe('normalizeOrigin — the discovery cache key (§12.3 rule 6)', () => {
 describe('RFC 8414 capability members (contract 1.42, §21.5)', () => {
   const server = createServer();
 
-  beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+  beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
   afterEach(() => server.resetHandlers());
   afterAll(() => server.close());
 

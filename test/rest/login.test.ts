@@ -47,7 +47,7 @@ const server = setupServer(
   }),
 );
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
@@ -134,7 +134,7 @@ describe('§5.2 organizationLevel', () => {
         ),
       ),
     );
-    local.listen({ onUnhandledRequest: 'error' });
+    local.listen({ onUnhandledFrame: 'error' });
     try {
       const client = new AxiamClient({ baseUrl: BASE_URL, tenantSlug: 'acme' });
       const result = await client.login('alice@example.com', 'password123');

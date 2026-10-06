@@ -51,7 +51,7 @@ const NONCE = 'the-request-nonce';
 const CODE = 'authorization-code-value';
 
 const server = createServer();
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
