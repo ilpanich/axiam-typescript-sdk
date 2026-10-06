@@ -41,7 +41,7 @@ const BASE_URL = 'https://axiam-mcp-fastify.test';
 const TENANT = 'tenant-1';
 
 const server = setupServer();
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterAll(() => server.close());
 
 let signingKey: CryptoKey;

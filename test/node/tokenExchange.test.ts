@@ -24,7 +24,7 @@ const ISSUED_TOKEN = 'issued-narrow-token';
 
 const server = createServer();
 beforeAll(() => {
-  server.listen({ onUnhandledRequest: 'error' });
+  server.listen({ onUnhandledFrame: 'error' });
 });
 afterEach(() => {
   server.resetHandlers();

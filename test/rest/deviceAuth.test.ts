@@ -14,15 +14,14 @@ import { NodeSession } from '../../src/node/session.js';
 import { ACCESS_COOKIE, wrapAxios } from '../../src/node/cookieJar.js';
 import { TokenManager } from '../../src/node/tokenManager.js';
 import { createVerifier } from '../../src/node/jwks.js';
+import { testClientIdentity } from '../clientIdentity.js';
 
 const BASE_URL = 'https://axiam-device.test';
 
-// Marker-only PEM placeholders — same fixtures as test/core/clientCertConfig.test.ts.
-// msw intercepts before any real TLS handshake, so no real key material is needed.
-const PEM_BEGIN = '-----BEGIN ';
-const PEM_END = '-----END ';
-const CERT_PEM = `${PEM_BEGIN}CERTIFICATE-----\nplaceholder-not-a-real-certificate\n${PEM_END}CERTIFICATE-----`;
-const KEY_PEM = `${PEM_BEGIN}PRIVATE KEY-----\nplaceholder-marker-validation-only\n${PEM_END}PRIVATE KEY-----`;
+// A real (throwaway, run-time generated) client identity: msw 3 intercepts
+// below the https.Agent, so the agent parses the PEMs into a TLS secure
+// context even though no handshake ever reaches a server.
+const { cert: CERT_PEM, key: KEY_PEM } = testClientIdentity();
 
 function deviceClient(overrides: Record<string, unknown> = {}): AxiamClient {
   return new AxiamClient({
@@ -67,7 +66,7 @@ const server = setupServer(
   }),
 );
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => {
   server.resetHandlers();
   captured = [];

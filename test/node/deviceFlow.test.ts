@@ -38,7 +38,7 @@ const USER_CODE = 'WDJB-MJHT';
 
 const server = createServer();
 beforeAll(() => {
-  server.listen({ onUnhandledRequest: 'error' });
+  server.listen({ onUnhandledFrame: 'error' });
 });
 afterEach(() => {
   server.resetHandlers();

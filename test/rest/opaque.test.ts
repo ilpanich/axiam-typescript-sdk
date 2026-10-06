@@ -30,7 +30,7 @@ const PASSWORD = 'correct horse battery staple';
 
 const server = setupServer();
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => {
   server.resetHandlers();
   __resetOpaqueModuleForTests();

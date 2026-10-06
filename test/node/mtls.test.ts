@@ -1,7 +1,7 @@
 // §6.1 mutual-TLS end-to-end (Node only): a real TLS socket, so msw (which
-// intercepts at the fetch/XHR layer) cannot cover this. We stand up a Node
-// https server that REQUIRES a client certificate (requestCert +
-// rejectUnauthorized) and prove that:
+// mocks the socket and never performs a TLS handshake) cannot cover this. We
+// stand up a Node https server that REQUIRES a client certificate
+// (requestCert + rejectUnauthorized) and prove that:
 //   - an AxiamClient configured with customCa (server trust) + clientCert/
 //     clientKey (client identity) completes a request (200), and
 //   - the same client WITHOUT a client certificate fails the handshake and

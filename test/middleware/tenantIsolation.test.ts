@@ -36,7 +36,7 @@ async function signedToken(privateKey: CryptoKey, kid: string): Promise<string> 
 describe('tenant isolation in middleware verify core (CR-03)', () => {
   const server = setupServer();
 
-  beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+  beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
   afterEach(() => server.resetHandlers());
   afterAll(() => server.close());
 

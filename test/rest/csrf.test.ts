@@ -8,6 +8,7 @@ import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { setupServer } from 'msw/node';
 import { AxiamClient } from '../../src/rest/client.js';
+import { corsHeaders, corsPreflight } from '../jsdomCors.js';
 
 const BASE_URL = 'https://axiam.test';
 
@@ -22,17 +23,18 @@ function headersToRecord(headers: Headers): Record<string, string> {
 }
 
 const server = setupServer(
+  corsPreflight,
   http.post(`${BASE_URL}/api/v1/echo`, ({ request }) => {
     capturedHeaders = headersToRecord(request.headers);
-    return HttpResponse.json({ ok: true }, { status: 200 });
+    return HttpResponse.json({ ok: true }, { status: 200, headers: corsHeaders(request) });
   }),
   http.get(`${BASE_URL}/api/v1/echo`, ({ request }) => {
     capturedHeaders = headersToRecord(request.headers);
-    return HttpResponse.json({ ok: true }, { status: 200 });
+    return HttpResponse.json({ ok: true }, { status: 200, headers: corsHeaders(request) });
   }),
 );
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 

@@ -66,7 +66,7 @@ async function setup(options: { idToken?: string; keys?: SigningKey[] } = {}): P
 
 const server = createServer();
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 

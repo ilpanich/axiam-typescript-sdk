@@ -18,7 +18,7 @@ const SSO_REDIRECT_URI = 'https://app.example.com/after-login';
 
 const server = createServer();
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 

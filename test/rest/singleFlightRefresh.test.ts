@@ -13,7 +13,7 @@ import { BASE_URL, createCounterState, createMswServer } from './mswServer.js';
 const state = createCounterState(5);
 const server = createMswServer(state);
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => {
   server.resetHandlers();
   resetRefreshGuard();

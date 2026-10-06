@@ -34,7 +34,7 @@ function fakeTlsSocket(der: Uint8Array) {
 
 describe('§10.1 rule 9 end-to-end — axiamMiddleware (Express)', () => {
   const server = setupServer();
-  beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+  beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
   afterEach(() => server.resetHandlers());
   afterAll(() => server.close());
 
@@ -123,7 +123,7 @@ describe('§10.1 rule 9 end-to-end — axiamMiddleware (Express)', () => {
 
 describe('§10.1 rule 9 end-to-end — axiamPlugin (Fastify)', () => {
   const server = setupServer();
-  beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+  beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
   afterEach(() => server.resetHandlers());
   afterAll(() => server.close());
 

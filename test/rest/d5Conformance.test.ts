@@ -27,7 +27,7 @@ const CHECK_URL = `${BASE_URL}/api/v1/authz/check`;
 const RESOURCE = '11111111-2222-3333-4444-555555555555';
 
 const server = setupServer();
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => {
   server.resetHandlers();
   vi.useRealTimers();
@@ -320,7 +320,7 @@ describe('§18 close()', () => {
 
   it('issues no network request', async () => {
     // §18.1 rule 5. No handler is mounted, so any outbound call would fail the
-    // suite's onUnhandledRequest: 'error'. A close() that logged out would end
+    // suite's onUnhandledFrame: 'error'. A close() that logged out would end
     // every user's session on each deploy — and would do it silently.
     const c = client();
     c.close();

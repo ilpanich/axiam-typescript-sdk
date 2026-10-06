@@ -13,6 +13,7 @@ import { setupServer } from 'msw/node';
 import { createNodeSession, type NodeSession } from '../../src/node/session.js';
 import { createOidcClient, DISCOVERY_PATH, OidcClient } from '../../src/node/oidc.js';
 import type { MtlsEndpointAliases, OidcConfiguration } from '../../src/node/oidcTypes.js';
+import { testClientIdentity } from '../clientIdentity.js';
 
 export const BASE_URL = 'https://axiam-oidc.test';
 export const TENANT_ID = '11111111-2222-3333-4444-555555555555';
@@ -41,17 +42,14 @@ export const MTLS_DEVICE_AUTHORIZATION_ENDPOINT = `${MTLS_BASE_URL}/oauth2/devic
 export const MTLS_PAR_ENDPOINT = `${MTLS_BASE_URL}/oauth2/par`;
 
 /**
- * A syntactically valid PEM pair. `resolveClientIdentity` checks the shape and
- * the https.Agent is built eagerly, but msw intercepts above the socket, so no
- * handshake ever runs against these.
+ * A real (throwaway, run-time generated) PEM pair. `resolveClientIdentity`
+ * checks the shape and the https.Agent is built eagerly; msw 3 intercepts
+ * below that agent, so it parses both PEMs into a TLS secure context even
+ * though no handshake ever reaches a server.
  */
-export const CLIENT_CERT_PEM = [
-  '-----BEGIN CERTIFICATE-----',
-  'MIIBkTCB+wIJAKZ0000000000MA0GCSqGSIb3DQEBCwUAMBQxEjAQBgNVBAMMCWxv',
-  '-----END CERTIFICATE-----',
-  '',
-].join('\n');
-export const CLIENT_KEY_PEM = '-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIA==\n-----END PRIVATE KEY-----\n';
+const clientIdentity = testClientIdentity();
+export const CLIENT_CERT_PEM = clientIdentity.cert;
+export const CLIENT_KEY_PEM = clientIdentity.key;
 
 /** The six RFC 8705 §5 aliases, every one on {@link MTLS_BASE_URL}. */
 export function mtlsEndpointAliases(): MtlsEndpointAliases {

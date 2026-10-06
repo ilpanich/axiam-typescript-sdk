@@ -20,7 +20,7 @@ async function signedToken(privateKey: CryptoKey, kid: string, scope = 'read wri
 describe('axiamPlugin (Fastify)', () => {
   const server = setupServer();
 
-  beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+  beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
   afterEach(() => server.resetHandlers());
   afterAll(() => server.close());
 
