@@ -98,11 +98,17 @@ export type IdTokenFailureReason =
 export class OAuthProtocolError extends AuthError {
   /** The RFC 6749 `error` code (e.g. `"invalid_grant"`, `"invalid_client"`, `"unsupported_grant_type"`). */
   readonly error: string;
-  /** The server's human-readable `error_description`. Never contains token material. */
+  /**
+   * The server's human-readable `error_description`. Never contains token
+   * material. Empty when the server sent none: RFC 6749 §5.2 makes the member
+   * OPTIONAL, and §2 (contract 1.53, §28.12.3) dispatches on `error` alone.
+   */
   readonly errorDescription: string;
 
-  constructor(error: string, errorDescription: string) {
-    super(`${error}: ${errorDescription}`);
+  constructor(error: string, errorDescription: string = '') {
+    // `"<error>: <error_description>"`, or just `"<error>"` when the server
+    // sent no description — never a dangling `": "`.
+    super(errorDescription ? `${error}: ${errorDescription}` : error);
     this.name = 'OAuthProtocolError';
     this.error = error;
     this.errorDescription = errorDescription;

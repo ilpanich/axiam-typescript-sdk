@@ -119,6 +119,34 @@ export function isOAuth2ErrorBody(body: unknown): body is OAuth2ErrorResponseWir
 }
 
 /**
+ * The tolerant `/oauth2/*` error decoder (CONTRACT.md §2, §28.12.3, §33.4):
+ * an {@link OAuthProtocolError} for any body that is an object carrying a
+ * **non-empty string `error`**, whatever the status, with `error_description`
+ * used when it is a string and left empty otherwise.
+ *
+ * Distinct from {@link isOAuth2ErrorBody}, which requires both members and
+ * gates the two status-qualified rows of {@link mapHttpStatusToError}: those
+ * rows are unchanged. This is for the call paths whose contract text says to
+ * dispatch on `error` at any status — the RFC 7592 client-configuration
+ * operations (a `401 {"error":"invalid_token"}` carries no description) and
+ * CIBA (a `429 {"error":"rate_limit_exceeded"}`).
+ *
+ * Returns `undefined` for anything else, so the caller falls back to §2's
+ * status rows.
+ */
+export function oauth2ErrorFromBody(body: unknown): OAuthProtocolError | undefined {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    return undefined;
+  }
+  const record = body as Record<string, unknown>;
+  if (typeof record.error !== 'string' || record.error === '') {
+    return undefined;
+  }
+  const description = typeof record.error_description === 'string' ? record.error_description : '';
+  return new OAuthProtocolError(record.error, description);
+}
+
+/**
  * ALLOWLIST (X-3) of response headers that are safe to preserve in a
  * NetworkError.cause. Every header NOT listed here has its value redacted to a
  * placeholder, so a custom sensitive header (e.g. `X-Auth-Token`) can never
