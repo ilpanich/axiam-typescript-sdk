@@ -6,7 +6,7 @@
 //   * a call going over mTLS prefers the alias;
 //   * a call NOT going over mTLS keeps the top-level entry;
 //   * an ABSENT member means "no separate mTLS host", never "unsupported";
-//   * only the six listed endpoints are ever aliased — not
+//   * only the seven listed endpoints are ever aliased — not
 //     `authorization_endpoint`, `end_session_endpoint` or `jwks_uri`;
 //   * `issuer` is not an endpoint, does not move, and still governs `iss`
 //     validation by exact string for a token minted at an alias host.
@@ -55,7 +55,7 @@ beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
-/** A discovery document carrying all six aliases on the mTLS origin. */
+/** A discovery document carrying all seven aliases on the mTLS origin. */
 function withAliases() {
   return discoveryDocument({ mtls_endpoint_aliases: mtlsEndpointAliases() });
 }
@@ -107,8 +107,11 @@ describe('§21.3 rule 2 — the document round-trips the member', () => {
     const configuration = await oidc.oidcDiscover();
 
     expect(configuration.mtls_endpoint_aliases).toEqual(mtlsEndpointAliases());
-    // The six, and only the six. A seventh key here would mean the SDK invented one.
+    // The seven of §21.3.1 vector A (contract 1.58 added CIBA's
+    // backchannel_authentication_endpoint), and only those. An eighth key here
+    // would mean the SDK invented one.
     expect(Object.keys(configuration.mtls_endpoint_aliases ?? {}).sort()).toEqual([
+      'backchannel_authentication_endpoint',
       'device_authorization_endpoint',
       'introspection_endpoint',
       'pushed_authorization_request_endpoint',

@@ -83,6 +83,15 @@ export {
   UMA_CLAIM_TOKEN_FORMAT,
   umaParseChallenge,
   umaChallengeHeader,
+  // §33 CIBA (contract 1.58).
+  CIBA_GRANT_TYPE,
+  CIBA_SLOW_DOWN_INCREMENT_SECS,
+  CibaRequestSigner,
+  DEFAULT_CIBA_INTERVAL_SECS,
+  isAccessDenied,
+  isExpiredToken,
+  SIGNED_REQUEST_LIFETIME_SECS,
+  type CibaSigningKey,
 } from './oidc.js';
 export type {
   AuthorizationRequest,
@@ -111,6 +120,16 @@ export type {
   // §26 pushed authorization requests (RFC 9126).
   OidcParParams,
   PushedAuthorizationRequest,
+  // §33 CIBA (contract 1.58).
+  CibaAwaitParams,
+  CibaClock,
+  CibaDelivery,
+  CibaInitiateParams,
+  CibaInitiateResponse,
+  CibaPingHeaders,
+  CibaPollParams,
+  CibaSigningAlg,
+  CibaUserHint,
   DeviceLoginParams,
   DevicePollParams,
   ExchangedToken,
