@@ -12,7 +12,7 @@
 
 import type { AxiosResponse } from 'axios';
 
-import { AuthError, mapHttpStatusToError } from '../core/index.js';
+import { AuthError, AxiamError, mapHttpStatusToError } from '../core/index.js';
 import { withRetry } from '../rest/retry.js';
 import type { AxiamClient } from '../rest/client.js';
 import { ConflictError, NotFoundError, ValidationError, parseFieldErrors } from './errors.js';
@@ -117,6 +117,12 @@ function bodyOf(err: unknown): unknown {
  * three statuses §27.4 rule 7 names, and 404 is the one §2 genuinely lacks.
  */
 function mapManagementError(operation: string, err: unknown): unknown {
+  // Already classified — the response interceptor maps a 401 itself once the
+  // §9 refresh it attempted has failed (an `AuthError`, §29.4 / §30.4 /
+  // §31.4 / §32.4). It carries no axios response, so without this check it
+  // would be re-read below as a transport failure and reported as a
+  // `NetworkError`.
+  if (err instanceof AxiamError) return err;
   const status = statusOf(err);
   if (status === undefined) {
     // No response at all — a transport failure. The shared mapper owns it.

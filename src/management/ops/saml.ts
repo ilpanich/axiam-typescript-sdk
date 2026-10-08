@@ -20,6 +20,7 @@ import type { Page, PageRequest } from '../page.js';
 import { collectPages, pageQuery } from '../page.js';
 import { sendManagement } from '../request.js';
 import type { NamespaceScope } from '../scope.js';
+import * as checks from '../checks.js';
 import { resolveOrg, resolveTenant } from '../scope.js';
 
 /**
@@ -95,6 +96,12 @@ export class SamlApi {
   /**
    * `POST /api/v1/tenants/{tenant_id}/saml/service-providers`
    *
+   * `sp_signing_cert_pem` must be RSA (2048 bits or more) or ECDSA on P-256,
+   * P-384 or P-521; an **ECDSA certificate verifies HTTP-POST requests only**
+   * — the HTTP-Redirect binding is RSA-only (§29.3 rule 2).
+   * `encrypt_assertions: true` is refused while encryption is unimplemented.
+   * `entity_id` is unique per tenant (`409`) and immutable once created.
+   *
    * Not retried on failure (§27.4 rule 8): every write on this surface is
    * issued exactly once, including the ones that look idempotent.
    */
@@ -125,6 +132,15 @@ export class SamlApi {
   /**
    * `PUT /api/v1/tenants/{tenant_id}/saml/service-providers/{sp_id}`
    *
+   * An omitted member takes its **default**, not its stored value: `enabled`
+   * and `sign_responses` default to `true`, `name_id_format` to `persistent`,
+   * the other flags to `false`, certificates and `slo_url` / `slo_binding` to
+   * null, the lists to empty (§29.2). Start from
+   * `samlServiceProviderInputFrom(await saml.getServiceProvider(id))`.
+   * `entity_id` is immutable: changing it is `400` — register a new service
+   * provider instead (§29.3 rule 3). An ECDSA `sp_signing_cert_pem` verifies
+   * HTTP-POST requests only; HTTP-Redirect is RSA-only.
+   *
    * **This is a replacement, not a patch** (§27.4 rule 5). Every field of the
    * body is required, and what you do not carry over from a prior read is not
    * preserved — it is overwritten. Read first, change the field you mean, send
@@ -148,6 +164,9 @@ export class SamlApi {
   /**
    * `DELETE /api/v1/tenants/{tenant_id}/saml/service-providers/{sp_id}`
    *
+   * Ends no session: users already signed in to the SP stay signed in there
+   * until their SP session ends (§29.3 rule 5).
+   *
    * Not retried on failure (§27.4 rule 8): every write on this surface is
    * issued exactly once, including the ones that look idempotent.
    */
@@ -164,10 +183,18 @@ export class SamlApi {
   /**
    * `POST /api/v1/tenants/{tenant_id}/saml/parse-sp-metadata`
    *
+   * **Parses and stores nothing** (§29.3 rule 6): the result is a draft to
+   * review and pass to `createServiceProvider`. Exactly one of `metadata_xml`
+   * and `metadata_url` must be set (`parseSpMetadataFromUrl` /
+   * `parseSpMetadataFromXml` build one); both or neither is refused locally
+   * with a `ValidationError`, before any request. The metadata's own signature
+   * is not evaluated. `503` in a server built without SAML.
+   *
    * Not retried on failure (§27.4 rule 8): every write on this surface is
    * issued exactly once, including the ones that look idempotent.
    */
   async parseSpMetadata(body: models.ParseSamlSpMetadata): Promise<models.SamlSpMetadataDraft> {
+    checks.assertParseSpMetadataExactlyOne(body);
     const tenantId = resolveTenant(this.#client, this.#scope, "saml.parse_sp_metadata");
     const wire = await sendManagement<models.SamlSpMetadataDraft>(this.#client, {
       operation: 'saml.parse_sp_metadata',
@@ -188,11 +215,14 @@ export class SamlApi {
       pathTemplate: '/api/v1/tenants/{tenant_id}/saml/idp-credentials',
       path: `/api/v1/tenants/${tenantId}/saml/idp-credentials`,
     });
-    return wire;
+    return wire.map(models.scrubSamlIdpCredential);
   }
 
   /**
    * `POST /api/v1/tenants/{tenant_id}/saml/idp-credentials`
+   *
+   * Generates an RSA-4096 key on the server, which takes seconds; the key is
+   * never returned. An occupied slot is `409` (§29.3 rule 7).
    *
    * Not retried on failure (§27.4 rule 8): every write on this surface is
    * issued exactly once, including the ones that look idempotent.
@@ -206,12 +236,16 @@ export class SamlApi {
       path: `/api/v1/tenants/${tenantId}/saml/idp-credentials`,
       body: body,
     });
-    return wire;
+    return models.scrubSamlIdpCredential(wire);
   }
 
   /**
    * `POST
    * /api/v1/tenants/{tenant_id}/saml/idp-credentials/{credential_id}/promote`
+   *
+   * `credentialId` must be the tenant's current `next` credential; in one
+   * transaction the old `active` is retired — its key destroyed — and `next`
+   * becomes `active` (§29.3 rule 7).
    *
    * Not retried on failure (§27.4 rule 8): every write on this surface is
    * issued exactly once, including the ones that look idempotent.
@@ -224,12 +258,18 @@ export class SamlApi {
       pathTemplate: '/api/v1/tenants/{tenant_id}/saml/idp-credentials/{credential_id}/promote',
       path: `/api/v1/tenants/${tenantId}/saml/idp-credentials/${encodeURIComponent(credentialId)}/promote`,
     });
-    return wire;
+    return models.scrubSamlIdpCredentialPromotion(wire);
   }
 
   /**
    * `POST
    * /api/v1/tenants/{tenant_id}/saml/idp-credentials/{credential_id}/retire`
+   *
+   * **Retiring the `active` credential with no successor stops SAML sign-on
+   * for the whole tenant at once** (§29.3 rule 7) — it is the incident
+   * response to a leaked key. The key is destroyed. The safe rotation is:
+   * issue into `next`, wait until every SP has refreshed the metadata, then
+   * promote.
    *
    * Not retried on failure (§27.4 rule 8): every write on this surface is
    * issued exactly once, including the ones that look idempotent.
@@ -242,7 +282,7 @@ export class SamlApi {
       pathTemplate: '/api/v1/tenants/{tenant_id}/saml/idp-credentials/{credential_id}/retire',
       path: `/api/v1/tenants/${tenantId}/saml/idp-credentials/${encodeURIComponent(credentialId)}/retire`,
     });
-    return wire;
+    return models.scrubSamlIdpCredential(wire);
   }
 
 }

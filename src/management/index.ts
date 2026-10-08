@@ -58,6 +58,7 @@
  */
 
 export * from './errors.js';
+export * from './checks.js';
 export * from './models.js';
 export * from './ops/index.js';
 export * from './page.js';

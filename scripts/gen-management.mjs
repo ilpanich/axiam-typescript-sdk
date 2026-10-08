@@ -66,6 +66,87 @@ const IMPLICIT_TENANT_NAMESPACES = new Set([
 // §31.2's — widening it is a contract decision this re-vendor does not make.
 const OPEN_TAGGED_UNIONS = new Set(['ScimTargetAuth', 'ScimTargetScope']);
 
+// Members where an explicit `null` is a different statement from an absent
+// member (§27.4 rule 5, "null is not absent"). TypeScript already has both —
+// `undefined` (omitted from the JSON body, or absent from a response) and
+// `null` — so nothing about the type changes; what this list adds is the
+// documentation that says which of the two to use, because the export spells
+// every optional member `X | null` and cannot say which ones `null` clears.
+//
+// §30.2 names two request members: on `UpdateDirectoryConfig`, `null` clears
+// the value and absence keeps it. §29.8 test 8 asks the same of a response:
+// `SamlIdpInfo`'s two credential ids are `null` when the slot is empty, and
+// that `null` must stay distinct from an absent member.
+const EXPLICIT_NULL_FIELDS = {
+  UpdateDirectoryConfig: new Set(['group_base_dn', 'group_filter']),
+  SamlIdpInfo: new Set(['active_credential_id', 'next_credential_id']),
+};
+
+// Members a response type must NOT surface even if a (misbehaving) server
+// sends them: §29.2 (`private_key_pem`), §30.2 (`bind_secret`), §31.2
+// (`credential`), §32.5 (`authorization_header`). This SDK applies no runtime
+// decoder to a response — the parsed JSON object reaches the caller as sent —
+// so an undeclared member would otherwise ride along into every `console.log`
+// and `JSON.stringify` of the result. The generated operations run every such
+// response (and every response that nests one) through a `scrub<Type>` that
+// drops these keys.
+const RESPONSE_SCRUB = {
+  DirectoryConfig: ['bind_secret'],
+  SamlIdpCredential: ['private_key_pem'],
+  ScimTargetResponse: ['credential'],
+  SsfStream: ['authorization_header'],
+};
+
+// Call-site documentation the contract makes an SDK repeat (§29.3, §30.3,
+// §31.3, §32.2). Generated rather than hand-written because the methods are
+// generated; keyed by the registry's namespace-qualified operation name.
+const CALL_SITE_NOTES = {
+  'directory.set':
+    '**Moving the connection requires the secret again** (§30.3 rule 2): a `set` that changes `url`, `start_tls`, `bind_dn` or `trust_anchors_pem` without `bind_secret` is refused `400` and changes nothing. The SDK holds no copy of the secret and cannot re-send one for you. `bind_secret` is required while the tenant has no configuration; otherwise absent keeps the stored secret. Every other optional member left out is **reset to its default** — start from `setDirectoryConfigFrom(await directory.get())`. An enabled directory and an effective `opaque_mode = required` never coexist (`409`); without the deployment\'s directory key a write carrying a secret is `503`.',
+  'directory.update':
+    '**Moving the connection requires the secret again** (§30.3 rule 2): an `update` that changes `url`, `start_tls`, `bind_dn` or `trust_anchors_pem` without `bind_secret` is refused `400` and changes nothing; the SDK holds no copy of the secret to re-send. A member left `undefined` is not sent and stays as stored; `group_base_dn` / `group_filter` set to `null` are sent as `null` and clear the value. An enabled directory and an effective `opaque_mode = required` never coexist (`409`).',
+  'directory.delete':
+    '**Deleting stops the directory, and only that** (§30.3 rule 5): directory accounts can no longer sign in with a password — there is no fallback to a local hash — and the sync stops. Sessions, refresh tokens and passkeys those accounts already hold keep working until they expire or the accounts are deactivated. There is no unlink: a linked account stays a directory account.',
+  'directory.link_account':
+    "**Signs the account's owner out everywhere** (§30.3 rule 6): linking deletes the account's WebAuthn credentials and federation links, revokes its `User` certificates, all its sessions and its OAuth2 refresh tokens (TOTP is kept). The entry is found by the account's own username; a repeat on an already-linked account answers `was_already_linked` and repeats the revocations.",
+  'saml.create_service_provider':
+    '`sp_signing_cert_pem` must be RSA (2048 bits or more) or ECDSA on P-256, P-384 or P-521; an **ECDSA certificate verifies HTTP-POST requests only** — the HTTP-Redirect binding is RSA-only (§29.3 rule 2). `encrypt_assertions: true` is refused while encryption is unimplemented. `entity_id` is unique per tenant (`409`) and immutable once created.',
+  'saml.update_service_provider':
+    'An omitted member takes its **default**, not its stored value: `enabled` and `sign_responses` default to `true`, `name_id_format` to `persistent`, the other flags to `false`, certificates and `slo_url` / `slo_binding` to null, the lists to empty (§29.2). Start from `samlServiceProviderInputFrom(await saml.getServiceProvider(id))`. `entity_id` is immutable: changing it is `400` — register a new service provider instead (§29.3 rule 3). An ECDSA `sp_signing_cert_pem` verifies HTTP-POST requests only; HTTP-Redirect is RSA-only.',
+  'saml.delete_service_provider':
+    'Ends no session: users already signed in to the SP stay signed in there until their SP session ends (§29.3 rule 5).',
+  'saml.parse_sp_metadata':
+    '**Parses and stores nothing** (§29.3 rule 6): the result is a draft to review and pass to `createServiceProvider`. Exactly one of `metadata_xml` and `metadata_url` must be set (`parseSpMetadataFromUrl` / `parseSpMetadataFromXml` build one); both or neither is refused locally with a `ValidationError`, before any request. The metadata\'s own signature is not evaluated. `503` in a server built without SAML.',
+  'saml.issue_idp_credential':
+    'Generates an RSA-4096 key on the server, which takes seconds; the key is never returned. An occupied slot is `409` (§29.3 rule 7).',
+  'saml.promote_idp_credential':
+    "`credentialId` must be the tenant's current `next` credential; in one transaction the old `active` is retired — its key destroyed — and `next` becomes `active` (§29.3 rule 7).",
+  'saml.retire_idp_credential':
+    '**Retiring the `active` credential with no successor stops SAML sign-on for the whole tenant at once** (§29.3 rule 7) — it is the incident response to a leaked key. The key is destroyed. The safe rotation is: issue into `next`, wait until every SP has refreshed the metadata, then promote.',
+  'ssf.update_stream':
+    "An omitted optional member takes its default (§32.2) — **except `authorization_header`, which absent keeps the stored one** — unless the update moves `endpoint_url` to another scheme, host or port while a header is stored: then it must carry `authorization_header` again or `clear_authorization_header: true`, else `400` (§32.3 rule 5). Start from `ssfStreamInputFrom(await ssf.getStream(id))`. An update overtaken by the receiver's own write is `409`: read the stream again.",
+  'scim_targets.create':
+    '`credential` is required here (§31.3 rule 2). It is write-only: no response ever carries it, and the SDK keeps no copy.',
+  'scim_targets.update':
+    "**The credential is bound to its URL** (§31.3 rule 2): absent `credential` keeps the stored one — except that changing `base_url` of a bearer target, `auth.token_url` or `base_url` of a client-credentials target, or `auth.type`, without `credential` in the same write is refused `400` and changes nothing. The SDK holds no credential to re-send. Every other member left out takes its default — start from `scimTargetInputFrom(await scimTargets.get(id))`. An update overtaken by another administrator's write is `409` (§31.3 rule 4): reload, then retry yourself.",
+  'scim_targets.delete':
+    '**Deprovisions nothing downstream** (§31.3 rule 8): the users and groups AXIAM created in the service provider stay there, and AXIAM no longer knows them. To remove them, set `deprovision` to `delete`, let AXIAM push, and only then delete the target.',
+  'scim_targets.reconcile':
+    "Starts a reconciliation in the background and answers `202`; its outcome is on the target's `state` (§31.3 rule 7). `409` while a run holds the claim, within five minutes of the last one, or for a disabled target.",
+};
+
+// Local checks a generated operation runs before any I/O, by name of a
+// function in the hand-written `src/management/checks.ts` taking the body.
+const PRECHECKS = {
+  'saml.parse_sp_metadata': 'assertParseSpMetadataExactlyOne',
+};
+
+// The body the generated surface test sends to an operation with a PRECHECK —
+// the minimal literal every other test uses would be refused locally.
+const PRECHECK_TEST_BODIES = {
+  'saml.parse_sp_metadata': "{ metadata_url: 'https://sp.example/metadata' }",
+};
+
 // contract 1.51 / §27.13 S-10 rule 3: on the three role-side listings
 // (`RoleUserAssignment`, `RoleGroupAssignment`, `RoleServiceAccountAssignment`)
 // `inherit` is REQUIRED in openapi.json — true for a 1.51+ server, but an
@@ -435,9 +516,11 @@ function emitModels() {
  *
  * - **Sparse update bodies.** Every field is optional, and an omitted field is
  *   *absent from the wire body* rather than sent as \`null\` — so a body
- *   carrying one field changes one field (§27.4 rule 5). This SDK cannot
- *   express "set this field to null", which is the safe direction to be
- *   inexpressive in.
+ *   carrying one field changes one field (§27.4 rule 5). \`null\` is not
+ *   absent: where a member's documentation says so (contract 1.54's
+ *   \`UpdateDirectoryConfig.group_base_dn\` / \`group_filter\`), \`null\` is sent
+ *   as \`null\` and clears the stored value; leave a member \`undefined\` to
+ *   keep it.
  * - **Replacement bodies.** \`SetOrgSettings\`, the organization email config,
  *   \`WebauthnAttestationPolicy\` and \`SetMtlsTrustAnchor\` have required
  *   fields, because a \`PUT\` on those routes replaces rather than patches.
@@ -533,7 +616,87 @@ export function roleAssignmentInherits(assignment: { inherit?: boolean }): boole
       ),
     );
   }
+  out.push(emitScrubbers());
   return out.join('\n');
+}
+
+/** The response schemas whose values need a `scrub<Type>` pass, nested ones included. */
+function scrubbable() {
+  const names = new Set(Object.keys(RESPONSE_SCRUB));
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const name of schemaClosure()) {
+      if (names.has(name) || !SCHEMAS[name]?.properties) continue;
+      if (scrubFields(name, names).length) {
+        names.add(name);
+        grew = true;
+      }
+    }
+  }
+  return names;
+}
+
+/** `[{ name, array }]` — the members of `name` whose type is (an array of) a scrubbable schema. */
+function scrubFields(name, names) {
+  const out = [];
+  for (const [pname, pschema] of Object.entries(flatten(name).props)) {
+    const direct = pschema.$ref?.split('/').pop() ?? nullableRef(pschema);
+    const item = pschema.items?.$ref?.split('/').pop();
+    if (direct && names.has(direct)) out.push({ name: pname, target: direct, array: false });
+    else if (item && names.has(item)) out.push({ name: pname, target: item, array: true });
+  }
+  return out;
+}
+
+function emitScrubbers() {
+  const names = scrubbable();
+  const lines = [
+    ...doc(
+      'Drop `keys` from a decoded response object, returning a shallow copy.\n\n@internal — the generated `scrub<Type>` functions are built on it.',
+    ),
+    'function dropMembers<T>(value: T, keys: readonly string[]): T {',
+    "  if (value === null || typeof value !== 'object') return value;",
+    '  const copy = { ...(value as Record<string, unknown>) };',
+    '  for (const key of keys) delete copy[key];',
+    '  return copy as T;',
+    '}',
+    '',
+  ];
+  for (const name of [...names].sort()) {
+    const rname = pascal(name);
+    const own = RESPONSE_SCRUB[name] ?? [];
+    const nested = scrubFields(name, names);
+    lines.push(
+      ...doc(
+        own.length
+          ? `Drop ${own.map((k) => `\`${k}\``).join(', ')} from a \`${rname}\` response (CONTRACT §29.2, §30.2, §31.2, §32.5): the type declares no such member, and a value that (wrongly) carries one must not surface it in any rendering.`
+          : `Scrub the nested responses a \`${rname}\` carries (see the \`scrub\` function of each).`,
+      ),
+    );
+    lines.push(`export function scrub${rname}(value: ${rname}): ${rname} {`);
+    lines.push(`  const out = dropMembers(value, ${JSON.stringify(own)});`);
+    if (nested.length) {
+      lines.push("  if (out === null || typeof out !== 'object') return out;");
+      lines.push('  const record = out as unknown as Record<string, unknown>;');
+      for (const f of nested) {
+        const fn = `scrub${pascal(f.target)}`;
+        if (f.array) {
+          lines.push(
+            `  if (Array.isArray(record.${f.name})) record.${f.name} = (record.${f.name} as ${pascal(f.target)}[]).map(${fn});`,
+          );
+        } else {
+          lines.push(
+            `  if (record.${f.name} != null) record.${f.name} = ${fn}(record.${f.name} as ${pascal(f.target)});`,
+          );
+        }
+      }
+    }
+    lines.push('  return out;');
+    lines.push('}');
+    lines.push('');
+  }
+  return lines.join('\n');
 }
 
 function emitEnum(rname, schema) {
@@ -661,6 +824,7 @@ function emitInterface(rname, name, secrets, directions, projected = []) {
       secret: secrets.has(pname),
       type: secrets.has(pname) ? 'Sensitive<string>' : tsType(pschema),
       description: pschema.description,
+      explicitNull: EXPLICIT_NULL_FIELDS[name]?.has(pname) ?? false,
     }));
 
   const allOptional = fields.length > 0 && fields.every((f) => f.optional);
@@ -674,7 +838,12 @@ function emitInterface(rname, name, secrets, directions, projected = []) {
   lines.push(`export interface ${rname} {`);
   if (!fields.length) lines.push('  // The server documents no fields on this schema.');
   for (const f of fields) {
-    const text = f.description ?? `\`${f.name}\`.`;
+    let text = f.description ?? `\`${f.name}\`.`;
+    if (f.explicitNull) {
+      text += directions.has('request') || /^(Update|Set)/.test(rname)
+        ? '\n\n**`null` is not absent** (§27.4 rule 5, §30.2): leave it `undefined` to keep the stored value; set it to `null` to send `null` and clear it.'
+        : '\n\n**`null` is not absent** (§29.8): `null` means the slot is empty; a server that stopped sending the member yields `undefined`, which this SDK keeps distinct.';
+    }
     lines.push(
       ...doc(
         f.secret
@@ -834,6 +1003,7 @@ function emitNamespace(namespace, nsdef, secrets) {
   if (pageValues.length) imports.push(`import { ${pageValues.join(', ')} } from '../page.js';`);
   imports.push("import { sendManagement } from '../request.js';");
   imports.push("import type { NamespaceScope } from '../scope.js';");
+  if (/\bchecks\./.test(rendered)) imports.push("import * as checks from '../checks.js';");
   if (/resolveOrg|resolveTenant/.test(rendered)) {
     imports.push("import { resolveOrg, resolveTenant } from '../scope.js';");
   }
@@ -982,6 +1152,9 @@ function emitOperation(namespace, opname, op, secrets) {
     args.push('body: unknown');
     bodyExpr = 'body';
   }
+  if (PRECHECKS[canonical]) {
+    prelude.unshift(`    checks.${PRECHECKS[canonical]}(body);`);
+  }
 
   const queryEntries = [];
   if (op.paginated) queryEntries.push('...pageQuery(page)');
@@ -992,7 +1165,7 @@ function emitOperation(namespace, opname, op, secrets) {
   }
 
   const resp = responseType(op, secrets);
-  const lines = doc(buildOperationDoc(op), '  ');
+  const lines = doc(buildOperationDoc(op, canonical), '  ');
   lines.push(`  async ${method}(${args.join(', ')}): Promise<${resp.public}> {`);
   lines.push(...prelude);
   const wireGeneric = resp.kind === 'none' ? 'void' : resp.wire;
@@ -1007,8 +1180,18 @@ function emitOperation(namespace, opname, op, secrets) {
   if (bodyExpr !== 'undefined') lines.push(`      body: ${bodyExpr},`);
   lines.push('    });');
 
+  const scrub = resp.kind !== 'none' && SCRUBBABLE.has(op.response.schema)
+    ? `models.scrub${pascal(op.response.schema)}`
+    : null;
+  if (scrub && resp.wire !== resp.public) {
+    throw new Error(`${canonical}: a response both scrubbed and carrying Sensitive fields is not supported`);
+  }
   if (resp.kind === 'none') {
     // nothing to return
+  } else if (scrub) {
+    if (resp.kind === 'array') lines.push(`    return wire.map(${scrub});`);
+    else if (resp.kind === 'page') lines.push(`    return { ...wire, items: wire.items.map(${scrub}) };`);
+    else lines.push(`    return ${scrub}(wire);`);
   } else if (resp.wire === resp.public) {
     lines.push('    return wire;');
   } else {
@@ -1043,8 +1226,9 @@ function emitOperation(namespace, opname, op, secrets) {
   return lines.join('\n');
 }
 
-function buildOperationDoc(op) {
+function buildOperationDoc(op, canonical) {
   let text = `\`${op.method} ${op.path}\``;
+  if (CALL_SITE_NOTES[canonical]) text += `\n\n${CALL_SITE_NOTES[canonical]}`;
   if (op.update_style === 'replace') {
     text +=
       '\n\n**This is a replacement, not a patch** (§27.4 rule 5). Every field of the body is required, and what you do not carry over from a prior read is not preserved — it is overwritten. Read first, change the field you mean, send the whole thing back.';
@@ -1247,7 +1431,9 @@ function callArguments(namespace, opname, op, secrets) {
   if (optionalQ.length > 2) args.push('{}');
   else for (const _ of optionalQ) args.push('undefined');
   if (op.paginated) args.push('{ limit: 50 }');
-  if (op.request_body === 'schema') {
+  if (op.request_body === 'schema' && PRECHECK_TEST_BODIES[`${namespace}.${opname}`]) {
+    args.push(PRECHECK_TEST_BODIES[`${namespace}.${opname}`]);
+  } else if (op.request_body === 'schema') {
     args.push(literalFor(op.request_schema, secrets.get(op.request_schema) ?? new Set()));
   } else if (op.request_body === 'untyped') {
     args.push('{}');
@@ -1322,6 +1508,8 @@ function emitTest() {
 
 const files = new Map();
 const secrets = sensitiveMap();
+// Computed once; read by emitOperation (which runs after emitModels).
+const SCRUBBABLE = scrubbable();
 files.set(join(ROOT, 'src/management/models.ts'), emitModels());
 for (const [ns, nsdef] of Object.entries(REGISTRY.namespaces)) {
   files.set(join(ROOT, `src/management/ops/${ns}.ts`), emitNamespace(ns, nsdef, secrets));

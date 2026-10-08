@@ -946,7 +946,7 @@ describe('saml namespace', () => {
   it('saml.parse_sp_metadata', async () => {
     await withServer(async (server, client) => {
       mountJson(server, 'POST', `/api/v1/tenants/${TENANT_ID}/saml/parse-sp-metadata`, 200, {"service_provider":{"acs_urls":[],"display_name":"example","entity_id":"example"},"warnings":[]});
-      await client.saml.parseSpMetadata({  });
+      await client.saml.parseSpMetadata({ metadata_url: 'https://sp.example/metadata' });
     });
   });
   it('saml.list_idp_credentials', async () => {

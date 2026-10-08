@@ -48,7 +48,7 @@ export class ScimTargetsApi {
       path: '/api/v1/scim-targets',
       query: { ...pageQuery(page) },
     });
-    return wire;
+    return { ...wire, items: wire.items.map(models.scrubScimTargetResponse) };
   }
 
   /**
@@ -65,6 +65,9 @@ export class ScimTargetsApi {
   /**
    * `POST /api/v1/scim-targets`
    *
+   * `credential` is required here (§31.3 rule 2). It is write-only: no
+   * response ever carries it, and the SDK keeps no copy.
+   *
    * Not retried on failure (§27.4 rule 8): every write on this surface is
    * issued exactly once, including the ones that look idempotent.
    */
@@ -78,7 +81,7 @@ export class ScimTargetsApi {
       path: '/api/v1/scim-targets',
       body: models.scimTargetInputToWire(body),
     });
-    return wire;
+    return models.scrubScimTargetResponse(wire);
   }
 
   /** `GET /api/v1/scim-targets/{id}` */
@@ -89,11 +92,20 @@ export class ScimTargetsApi {
       pathTemplate: '/api/v1/scim-targets/{id}',
       path: `/api/v1/scim-targets/${encodeURIComponent(id)}`,
     });
-    return wire;
+    return models.scrubScimTargetResponse(wire);
   }
 
   /**
    * `PUT /api/v1/scim-targets/{id}`
+   *
+   * **The credential is bound to its URL** (§31.3 rule 2): absent `credential`
+   * keeps the stored one — except that changing `base_url` of a bearer target,
+   * `auth.token_url` or `base_url` of a client-credentials target, or
+   * `auth.type`, without `credential` in the same write is refused `400` and
+   * changes nothing. The SDK holds no credential to re-send. Every other
+   * member left out takes its default — start from `scimTargetInputFrom(await
+   * scimTargets.get(id))`. An update overtaken by another administrator's
+   * write is `409` (§31.3 rule 4): reload, then retry yourself.
    *
    * **This is a replacement, not a patch** (§27.4 rule 5). Every field of the
    * body is required, and what you do not carry over from a prior read is not
@@ -113,11 +125,16 @@ export class ScimTargetsApi {
       path: `/api/v1/scim-targets/${encodeURIComponent(id)}`,
       body: models.scimTargetInputToWire(body),
     });
-    return wire;
+    return models.scrubScimTargetResponse(wire);
   }
 
   /**
    * `DELETE /api/v1/scim-targets/{id}`
+   *
+   * **Deprovisions nothing downstream** (§31.3 rule 8): the users and groups
+   * AXIAM created in the service provider stay there, and AXIAM no longer
+   * knows them. To remove them, set `deprovision` to `delete`, let AXIAM push,
+   * and only then delete the target.
    *
    * Not retried on failure (§27.4 rule 8): every write on this surface is
    * issued exactly once, including the ones that look idempotent.
@@ -133,6 +150,10 @@ export class ScimTargetsApi {
 
   /**
    * `POST /api/v1/scim-targets/{id}/reconcile`
+   *
+   * Starts a reconciliation in the background and answers `202`; its outcome
+   * is on the target's `state` (§31.3 rule 7). `409` while a run holds the
+   * claim, within five minutes of the last one, or for a disabled target.
    *
    * Not retried on failure (§27.4 rule 8): every write on this surface is
    * issued exactly once, including the ones that look idempotent.

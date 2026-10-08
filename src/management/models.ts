@@ -10,9 +10,11 @@
  *
  * - **Sparse update bodies.** Every field is optional, and an omitted field is
  *   *absent from the wire body* rather than sent as `null` — so a body
- *   carrying one field changes one field (§27.4 rule 5). This SDK cannot
- *   express "set this field to null", which is the safe direction to be
- *   inexpressive in.
+ *   carrying one field changes one field (§27.4 rule 5). `null` is not
+ *   absent: where a member's documentation says so (contract 1.54's
+ *   `UpdateDirectoryConfig.group_base_dn` / `group_filter`), `null` is sent
+ *   as `null` and clears the stored value; leave a member `undefined` to
+ *   keep it.
  * - **Replacement bodies.** `SetOrgSettings`, the organization email config,
  *   `WebauthnAttestationPolicy` and `SetMtlsTrustAnchor` have required
  *   fields, because a `PUT` on those routes replaces rather than patches.
@@ -3904,7 +3906,13 @@ export type SamlIdpCredentialStatus =
  * yet.
  */
 export interface SamlIdpInfo {
-  /** The `active` credential, or null. */
+  /**
+   * The `active` credential, or null.
+   *
+   * **`null` is not absent** (§29.8): `null` means the slot is empty; a server
+   * that stopped sending the member yields `undefined`, which this SDK keeps
+   * distinct.
+   */
   active_credential_id?: string | null;
   /** The IdP's entity id (the metadata URL itself). */
   entity_id: string;
@@ -3915,7 +3923,13 @@ export interface SamlIdpInfo {
   metadata_served: boolean;
   /** Where the IdP metadata is served. */
   metadata_url: string;
-  /** The `next` credential, or null. */
+  /**
+   * The `next` credential, or null.
+   *
+   * **`null` is not absent** (§29.8): `null` means the slot is empty; a server
+   * that stopped sending the member yields `undefined`, which this SDK keeps
+   * distinct.
+   */
   next_credential_id?: string | null;
   /**
    * Whether this server build serves SAML at all (it was built with the `saml`
@@ -5421,9 +5435,19 @@ export interface UpdateDirectoryConfig {
   bind_secret?: Sensitive<string>;
   /** See [`SetDirectoryConfig::enabled`]. */
   enabled?: boolean | null;
-  /** Explicit `null` clears it. */
+  /**
+   * Explicit `null` clears it.
+   *
+   * **`null` is not absent** (§27.4 rule 5, §30.2): leave it `undefined` to
+   * keep the stored value; set it to `null` to send `null` and clear it.
+   */
   group_base_dn?: string | null;
-  /** Explicit `null` clears it. */
+  /**
+   * Explicit `null` clears it.
+   *
+   * **`null` is not absent** (§27.4 rule 5, §30.2): leave it `undefined` to
+   * keep the stored value; set it to `null` to send `null` and clear it.
+   */
   group_filter?: string | null;
   /** Replaces the whole table when present. */
   group_mappings?: GroupMapping[] | null;
@@ -6076,4 +6100,69 @@ export interface WebhookResponse {
   updated_at: string;
   /** `url`. */
   url: string;
+}
+
+/**
+ * Drop `keys` from a decoded response object, returning a shallow copy.
+ *
+ * @internal — the generated `scrub<Type>` functions are built on it.
+ */
+function dropMembers<T>(value: T, keys: readonly string[]): T {
+  if (value === null || typeof value !== 'object') return value;
+  const copy = { ...(value as Record<string, unknown>) };
+  for (const key of keys) delete copy[key];
+  return copy as T;
+}
+
+/**
+ * Drop `bind_secret` from a `DirectoryConfig` response (CONTRACT §29.2,
+ * §30.2, §31.2, §32.5): the type declares no such member, and a value that
+ * (wrongly) carries one must not surface it in any rendering.
+ */
+export function scrubDirectoryConfig(value: DirectoryConfig): DirectoryConfig {
+  const out = dropMembers(value, ["bind_secret"]);
+  return out;
+}
+
+/**
+ * Drop `private_key_pem` from a `SamlIdpCredential` response (CONTRACT
+ * §29.2, §30.2, §31.2, §32.5): the type declares no such member, and a value
+ * that (wrongly) carries one must not surface it in any rendering.
+ */
+export function scrubSamlIdpCredential(value: SamlIdpCredential): SamlIdpCredential {
+  const out = dropMembers(value, ["private_key_pem"]);
+  return out;
+}
+
+/**
+ * Scrub the nested responses a `SamlIdpCredentialPromotion` carries (see the
+ * `scrub` function of each).
+ */
+export function scrubSamlIdpCredentialPromotion(value: SamlIdpCredentialPromotion): SamlIdpCredentialPromotion {
+  const out = dropMembers(value, []);
+  if (out === null || typeof out !== 'object') return out;
+  const record = out as unknown as Record<string, unknown>;
+  if (record.active != null) record.active = scrubSamlIdpCredential(record.active as SamlIdpCredential);
+  if (record.retired != null) record.retired = scrubSamlIdpCredential(record.retired as SamlIdpCredential);
+  return out;
+}
+
+/**
+ * Drop `credential` from a `ScimTargetResponse` response (CONTRACT §29.2,
+ * §30.2, §31.2, §32.5): the type declares no such member, and a value that
+ * (wrongly) carries one must not surface it in any rendering.
+ */
+export function scrubScimTargetResponse(value: ScimTargetResponse): ScimTargetResponse {
+  const out = dropMembers(value, ["credential"]);
+  return out;
+}
+
+/**
+ * Drop `authorization_header` from a `SsfStream` response (CONTRACT §29.2,
+ * §30.2, §31.2, §32.5): the type declares no such member, and a value that
+ * (wrongly) carries one must not surface it in any rendering.
+ */
+export function scrubSsfStream(value: SsfStream): SsfStream {
+  const out = dropMembers(value, ["authorization_header"]);
+  return out;
 }
