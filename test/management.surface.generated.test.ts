@@ -866,6 +866,189 @@ describe('email_config namespace', () => {
   });
 });
 
+describe('directory namespace', () => {
+  it('directory.get', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/tenants/${TENANT_ID}/directory`, 200, {"base_dn":"example","bind_dn":"example","created_at":"2026-08-26T00:00:00Z","enabled":true,"group_mappings":[],"group_member_attribute":"example","group_nesting_depth":1,"id":"11111111-1111-4111-8111-111111111111","jit_provisioning":true,"kind":"open_ldap","start_tls":true,"sync_interval_secs":1,"tenant_id":"11111111-1111-4111-8111-111111111111","trust_anchors_pem":[],"updated_at":"2026-08-26T00:00:00Z","url":"example","user_attribute_map":{"display_name":"example","email":"example","external_id":"example","username":"example"},"user_filter":"example"});
+      await client.directory.get();
+    });
+  });
+  it('directory.set', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'PUT', `/api/v1/tenants/${TENANT_ID}/directory`, 200, {"base_dn":"example","bind_dn":"example","created_at":"2026-08-26T00:00:00Z","enabled":true,"group_mappings":[],"group_member_attribute":"example","group_nesting_depth":1,"id":"11111111-1111-4111-8111-111111111111","jit_provisioning":true,"kind":"open_ldap","start_tls":true,"sync_interval_secs":1,"tenant_id":"11111111-1111-4111-8111-111111111111","trust_anchors_pem":[],"updated_at":"2026-08-26T00:00:00Z","url":"example","user_attribute_map":{"display_name":"example","email":"example","external_id":"example","username":"example"},"user_filter":"example"});
+      await client.directory.set({ base_dn: 'example', bind_dn: 'example', enabled: true, kind: "open_ldap", start_tls: true, url: 'example', user_filter: 'example' });
+    });
+  });
+  it('directory.update', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'PATCH', `/api/v1/tenants/${TENANT_ID}/directory`, 200, {"base_dn":"example","bind_dn":"example","created_at":"2026-08-26T00:00:00Z","enabled":true,"group_mappings":[],"group_member_attribute":"example","group_nesting_depth":1,"id":"11111111-1111-4111-8111-111111111111","jit_provisioning":true,"kind":"open_ldap","start_tls":true,"sync_interval_secs":1,"tenant_id":"11111111-1111-4111-8111-111111111111","trust_anchors_pem":[],"updated_at":"2026-08-26T00:00:00Z","url":"example","user_attribute_map":{"display_name":"example","email":"example","external_id":"example","username":"example"},"user_filter":"example"});
+      await client.directory.update({  });
+    });
+  });
+  it('directory.delete', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'DELETE', `/api/v1/tenants/${TENANT_ID}/directory`, 204, undefined);
+      await client.directory.delete();
+    });
+  });
+  it('directory.link_account', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'POST', `/api/v1/tenants/${TENANT_ID}/directory/links`, 200, {"certificates_revoked":1,"directory_external_id":"example","user_id":"11111111-1111-4111-8111-111111111111","was_already_linked":true,"webauthn_credentials_deleted":1});
+      await client.directory.linkAccount({ user_id: '11111111-1111-4111-8111-111111111111' });
+    });
+  });
+  it('directory.get_sync_status', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/tenants/${TENANT_ID}/directory/sync-status`, 200, {"full_required":true,"has_watermark":true});
+      await client.directory.getSyncStatus();
+    });
+  });
+});
+
+describe('saml namespace', () => {
+  it('saml.get_idp', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/tenants/${TENANT_ID}/saml/idp`, 200, {"entity_id":"example","metadata_served":true,"metadata_url":"example","saml_available":true,"saml_idp_enabled":true,"slo_url":"example","sso_url":"example","tenant_id":"11111111-1111-4111-8111-111111111111"});
+      await client.saml.getIdp();
+    });
+  });
+  it('saml.list_service_providers', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/tenants/${TENANT_ID}/saml/service-providers`, 200, {"items":[{"acs_urls":[],"allow_idp_initiated":true,"allowed_groups":[],"attribute_mappings":[],"created_at":"2026-08-26T00:00:00Z","display_name":"example","enabled":true,"encrypt_assertions":true,"entity_id":"example","id":"11111111-1111-4111-8111-111111111111","name_id_format":"persistent","sign_responses":true,"tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z","want_authn_requests_signed":true}],"total":1,"offset":0,"limit":50});
+      await client.saml.listServiceProviders({ limit: 50 });
+      await client.saml.listServiceProvidersAll({ limit: 50 });
+    });
+  });
+  it('saml.create_service_provider', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'POST', `/api/v1/tenants/${TENANT_ID}/saml/service-providers`, 201, {"acs_urls":[],"allow_idp_initiated":true,"allowed_groups":[],"attribute_mappings":[],"created_at":"2026-08-26T00:00:00Z","display_name":"example","enabled":true,"encrypt_assertions":true,"entity_id":"example","id":"11111111-1111-4111-8111-111111111111","name_id_format":"persistent","sign_responses":true,"tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z","want_authn_requests_signed":true});
+      await client.saml.createServiceProvider({ acs_urls: [], display_name: 'example', entity_id: 'example' });
+    });
+  });
+  it('saml.get_service_provider', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/tenants/${TENANT_ID}/saml/service-providers/${EXAMPLE_ID}`, 200, {"acs_urls":[],"allow_idp_initiated":true,"allowed_groups":[],"attribute_mappings":[],"created_at":"2026-08-26T00:00:00Z","display_name":"example","enabled":true,"encrypt_assertions":true,"entity_id":"example","id":"11111111-1111-4111-8111-111111111111","name_id_format":"persistent","sign_responses":true,"tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z","want_authn_requests_signed":true});
+      await client.saml.getServiceProvider(EXAMPLE_ID);
+    });
+  });
+  it('saml.update_service_provider', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'PUT', `/api/v1/tenants/${TENANT_ID}/saml/service-providers/${EXAMPLE_ID}`, 200, {"acs_urls":[],"allow_idp_initiated":true,"allowed_groups":[],"attribute_mappings":[],"created_at":"2026-08-26T00:00:00Z","display_name":"example","enabled":true,"encrypt_assertions":true,"entity_id":"example","id":"11111111-1111-4111-8111-111111111111","name_id_format":"persistent","sign_responses":true,"tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z","want_authn_requests_signed":true});
+      await client.saml.updateServiceProvider(EXAMPLE_ID, { acs_urls: [], display_name: 'example', entity_id: 'example' });
+    });
+  });
+  it('saml.delete_service_provider', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'DELETE', `/api/v1/tenants/${TENANT_ID}/saml/service-providers/${EXAMPLE_ID}`, 204, undefined);
+      await client.saml.deleteServiceProvider(EXAMPLE_ID);
+    });
+  });
+  it('saml.parse_sp_metadata', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'POST', `/api/v1/tenants/${TENANT_ID}/saml/parse-sp-metadata`, 200, {"service_provider":{"acs_urls":[],"display_name":"example","entity_id":"example"},"warnings":[]});
+      await client.saml.parseSpMetadata({  });
+    });
+  });
+  it('saml.list_idp_credentials', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/tenants/${TENANT_ID}/saml/idp-credentials`, 200, [{"certificate_pem":"example","created_at":"2026-08-26T00:00:00Z","fingerprint":"example","id":"11111111-1111-4111-8111-111111111111","issuer_ca_id":"11111111-1111-4111-8111-111111111111","not_after":"2026-08-26T00:00:00Z","not_before":"2026-08-26T00:00:00Z","serial":"example","status":"active","tenant_id":"11111111-1111-4111-8111-111111111111"}]);
+      await client.saml.listIdpCredentials();
+    });
+  });
+  it('saml.issue_idp_credential', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'POST', `/api/v1/tenants/${TENANT_ID}/saml/idp-credentials`, 201, {"certificate_pem":"example","created_at":"2026-08-26T00:00:00Z","fingerprint":"example","id":"11111111-1111-4111-8111-111111111111","issuer_ca_id":"11111111-1111-4111-8111-111111111111","not_after":"2026-08-26T00:00:00Z","not_before":"2026-08-26T00:00:00Z","serial":"example","status":"active","tenant_id":"11111111-1111-4111-8111-111111111111"});
+      await client.saml.issueIdpCredential({ issuer_ca_id: '11111111-1111-4111-8111-111111111111', slot: "active" });
+    });
+  });
+  it('saml.promote_idp_credential', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'POST', `/api/v1/tenants/${TENANT_ID}/saml/idp-credentials/${EXAMPLE_ID}/promote`, 200, {"active":{"certificate_pem":"example","created_at":"2026-08-26T00:00:00Z","fingerprint":"example","id":"11111111-1111-4111-8111-111111111111","issuer_ca_id":"11111111-1111-4111-8111-111111111111","not_after":"2026-08-26T00:00:00Z","not_before":"2026-08-26T00:00:00Z","serial":"example","status":"active","tenant_id":"11111111-1111-4111-8111-111111111111"}});
+      await client.saml.promoteIdpCredential(EXAMPLE_ID);
+    });
+  });
+  it('saml.retire_idp_credential', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'POST', `/api/v1/tenants/${TENANT_ID}/saml/idp-credentials/${EXAMPLE_ID}/retire`, 200, {"certificate_pem":"example","created_at":"2026-08-26T00:00:00Z","fingerprint":"example","id":"11111111-1111-4111-8111-111111111111","issuer_ca_id":"11111111-1111-4111-8111-111111111111","not_after":"2026-08-26T00:00:00Z","not_before":"2026-08-26T00:00:00Z","serial":"example","status":"active","tenant_id":"11111111-1111-4111-8111-111111111111"});
+      await client.saml.retireIdpCredential(EXAMPLE_ID);
+    });
+  });
+});
+
+describe('ssf namespace', () => {
+  it('ssf.list_streams', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/tenants/${TENANT_ID}/ssf/streams`, 200, {"items":[{"audience":"example","authorization_header_set":true,"created_at":"2026-08-26T00:00:00Z","delivery_method":"push","events_allowed":[],"events_delivered":[],"events_requested":[],"id":"11111111-1111-4111-8111-111111111111","receiver_client_id":"example","status":"enabled","status_actor":"admin","subject_format":"iss_sub","tenant_id":"11111111-1111-4111-8111-111111111111","transmitter_active":true,"updated_at":"2026-08-26T00:00:00Z"}],"total":1,"offset":0,"limit":50});
+      await client.ssf.listStreams({ limit: 50 });
+      await client.ssf.listStreamsAll({ limit: 50 });
+    });
+  });
+  it('ssf.create_stream', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'POST', `/api/v1/tenants/${TENANT_ID}/ssf/streams`, 201, {"audience":"example","authorization_header_set":true,"created_at":"2026-08-26T00:00:00Z","delivery_method":"push","events_allowed":[],"events_delivered":[],"events_requested":[],"id":"11111111-1111-4111-8111-111111111111","receiver_client_id":"example","status":"enabled","status_actor":"admin","subject_format":"iss_sub","tenant_id":"11111111-1111-4111-8111-111111111111","transmitter_active":true,"updated_at":"2026-08-26T00:00:00Z"});
+      await client.ssf.createStream({ audience: 'example', delivery_method: "push", events_allowed: [], receiver_client_id: 'example' });
+    });
+  });
+  it('ssf.get_stream', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/tenants/${TENANT_ID}/ssf/streams/${EXAMPLE_ID}`, 200, {"audience":"example","authorization_header_set":true,"created_at":"2026-08-26T00:00:00Z","delivery_method":"push","events_allowed":[],"events_delivered":[],"events_requested":[],"id":"11111111-1111-4111-8111-111111111111","receiver_client_id":"example","status":"enabled","status_actor":"admin","subject_format":"iss_sub","tenant_id":"11111111-1111-4111-8111-111111111111","transmitter_active":true,"updated_at":"2026-08-26T00:00:00Z"});
+      await client.ssf.getStream(EXAMPLE_ID);
+    });
+  });
+  it('ssf.update_stream', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'PUT', `/api/v1/tenants/${TENANT_ID}/ssf/streams/${EXAMPLE_ID}`, 200, {"audience":"example","authorization_header_set":true,"created_at":"2026-08-26T00:00:00Z","delivery_method":"push","events_allowed":[],"events_delivered":[],"events_requested":[],"id":"11111111-1111-4111-8111-111111111111","receiver_client_id":"example","status":"enabled","status_actor":"admin","subject_format":"iss_sub","tenant_id":"11111111-1111-4111-8111-111111111111","transmitter_active":true,"updated_at":"2026-08-26T00:00:00Z"});
+      await client.ssf.updateStream(EXAMPLE_ID, { audience: 'example', delivery_method: "push", events_allowed: [], receiver_client_id: 'example' });
+    });
+  });
+  it('ssf.delete_stream', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'DELETE', `/api/v1/tenants/${TENANT_ID}/ssf/streams/${EXAMPLE_ID}`, 204, undefined);
+      await client.ssf.deleteStream(EXAMPLE_ID);
+    });
+  });
+});
+
+describe('scim_targets namespace', () => {
+  it('scim_targets.list', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/scim-targets`, 200, {"items":[{"auth":{"type":"bearer"},"base_url":"example","created_at":"2026-08-26T00:00:00Z","deprovision":"deactivate","enabled":true,"id":"11111111-1111-4111-8111-111111111111","name":"example","push_groups":true,"scope":{"type":"all_users"},"tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z","user_name_from":"username"}],"total":1,"offset":0,"limit":50});
+      await client.scimTargets.list({ limit: 50 });
+      await client.scimTargets.listAll({ limit: 50 });
+    });
+  });
+  it('scim_targets.create', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'POST', `/api/v1/scim-targets`, 201, {"auth":{"type":"bearer"},"base_url":"example","created_at":"2026-08-26T00:00:00Z","deprovision":"deactivate","enabled":true,"id":"11111111-1111-4111-8111-111111111111","name":"example","push_groups":true,"scope":{"type":"all_users"},"tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z","user_name_from":"username"});
+      await client.scimTargets.create({ auth: { type: "bearer" }, base_url: 'example', name: 'example', scope: { type: "all_users" } });
+    });
+  });
+  it('scim_targets.get', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/scim-targets/${EXAMPLE_ID}`, 200, {"auth":{"type":"bearer"},"base_url":"example","created_at":"2026-08-26T00:00:00Z","deprovision":"deactivate","enabled":true,"id":"11111111-1111-4111-8111-111111111111","name":"example","push_groups":true,"scope":{"type":"all_users"},"tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z","user_name_from":"username"});
+      await client.scimTargets.get(EXAMPLE_ID);
+    });
+  });
+  it('scim_targets.update', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'PUT', `/api/v1/scim-targets/${EXAMPLE_ID}`, 200, {"auth":{"type":"bearer"},"base_url":"example","created_at":"2026-08-26T00:00:00Z","deprovision":"deactivate","enabled":true,"id":"11111111-1111-4111-8111-111111111111","name":"example","push_groups":true,"scope":{"type":"all_users"},"tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z","user_name_from":"username"});
+      await client.scimTargets.update(EXAMPLE_ID, { auth: { type: "bearer" }, base_url: 'example', name: 'example', scope: { type: "all_users" } });
+    });
+  });
+  it('scim_targets.delete', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'DELETE', `/api/v1/scim-targets/${EXAMPLE_ID}`, 204, undefined);
+      await client.scimTargets.delete(EXAMPLE_ID);
+    });
+  });
+  it('scim_targets.reconcile', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'POST', `/api/v1/scim-targets/${EXAMPLE_ID}/reconcile`, 202, {"status":"example","target_id":"11111111-1111-4111-8111-111111111111"});
+      await client.scimTargets.reconcile(EXAMPLE_ID);
+    });
+  });
+});
+
 describe('settings namespace', () => {
   it('settings.get_org', async () => {
     await withServer(async (server, client) => {
@@ -1058,7 +1241,7 @@ describe('privacy namespace', () => {
 describe('platform namespace', () => {
   it('platform.health', async () => {
     await withServer(async (server, client) => {
-      mountJson(server, 'GET', `/health`, 200, {"status":"example"});
+      mountJson(server, 'GET', `/health`, 200, {"profile":"example","status":"example"});
       await client.platform.health();
     });
   });
@@ -1103,6 +1286,12 @@ describe('generated surface', () => {
           "certificates.list",
           "certificates.revoke",
           "certificates.sign_csr",
+          "directory.delete",
+          "directory.get",
+          "directory.get_sync_status",
+          "directory.link_account",
+          "directory.set",
+          "directory.update",
           "email_config.delete_org",
           "email_config.delete_tenant",
           "email_config.get_org",
@@ -1199,6 +1388,23 @@ describe('generated surface', () => {
           "roles.unassign_from_service_account",
           "roles.unassign_from_user",
           "roles.update",
+          "saml.create_service_provider",
+          "saml.delete_service_provider",
+          "saml.get_idp",
+          "saml.get_service_provider",
+          "saml.issue_idp_credential",
+          "saml.list_idp_credentials",
+          "saml.list_service_providers",
+          "saml.parse_sp_metadata",
+          "saml.promote_idp_credential",
+          "saml.retire_idp_credential",
+          "saml.update_service_provider",
+          "scim_targets.create",
+          "scim_targets.delete",
+          "scim_targets.get",
+          "scim_targets.list",
+          "scim_targets.reconcile",
+          "scim_targets.update",
           "scim_tokens.create",
           "scim_tokens.list",
           "scim_tokens.revoke",
@@ -1223,6 +1429,11 @@ describe('generated surface', () => {
           "settings.set_effective",
           "settings.set_org",
           "settings.set_tenant_override",
+          "ssf.create_stream",
+          "ssf.delete_stream",
+          "ssf.get_stream",
+          "ssf.list_streams",
+          "ssf.update_stream",
           "tenants.create",
           "tenants.delete",
           "tenants.export_audit",

@@ -77,6 +77,27 @@ export function roleAssignmentInherits(assignment: { inherit?: boolean }): boole
 }
 
 /**
+ * One `AssertionConsumerService` endpoint of a service provider.
+ *
+ * The list of these is an **allow-list**, checked the way OAuth2 redirect
+ * URIs are: an `AuthnRequest` naming an ACS URL is honoured only when the
+ * URL equals one registered here, byte for byte. No globs, no prefix match.
+ */
+export interface AcsEndpoint {
+  /** The binding the endpoint accepts. */
+  binding: SamlBinding;
+  /** The `index` an `AuthnRequest` may use instead of a URL. Unique per SP. */
+  index: number;
+  /**
+   * Whether this is the SP's default endpoint. At most one is; when none is
+   * marked, the first listed is the default (SAML Metadata §2.4.4.1).
+   */
+  is_default?: boolean;
+  /** The endpoint URL. */
+  url: string;
+}
+
+/**
  * `ActorType` (generated from openapi.json).
  *
  * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
@@ -249,6 +270,48 @@ export type AttestationMode =
   | "none"
   | "indirect"
   | "direct_required"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
+
+/** One entry of an SP's attribute mapping table. */
+export interface AttributeMapping {
+  /**
+   * The `NameFormat`, one of [`ATTRIBUTE_NAME_FORMATS`]. `None` leaves the
+   * attribute unqualified (`unspecified`).
+   */
+  name_format?: string | null;
+  /**
+   * The `Name` of the emitted `<saml:Attribute>`. Unique within one SP,
+   * compared exactly (SAML attribute names are case-sensitive).
+   */
+  saml_name: string;
+  /** Where the value comes from. */
+  source: AttributeSource;
+}
+
+/**
+ * Where an attribute's value comes from.
+ *
+ * Every variant has a real source today; a variant with none (a telephone
+ * number the OIDC `phone` scope gates behind its own consent, say) is
+ * deliberately absent rather than mapped to an empty value.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type AttributeSource =
+  | "username"
+  | "email"
+  | "display_name"
+  | "given_name"
+  | "family_name"
+  | "groups"
+  | "roles"
   // eslint-disable-next-line @typescript-eslint/ban-types
   | (string & {});
 
@@ -576,6 +639,52 @@ export type CertificationLevel =
   | "L2Plus"
   | "L3"
   | "L3Plus"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
+
+/**
+ * How a CIBA client learns that a request has been decided (CIBA Core §5).
+ *
+ * `push` is deliberately absent: AXIAM does not offer it, and the FAPI-CIBA
+ * profile forbids it — push delivers the tokens themselves to a client
+ * endpoint, which makes the notification endpoint a token sink.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type CibaDeliveryMode =
+  | "poll"
+  | "ping"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
+
+/**
+ * The JWS algorithm a CIBA client signs its authentication requests with
+ * (CIBA Core §4 `backchannel_authentication_request_signing_alg`, §7.1.1).
+ *
+ * Exactly the three algorithms AXIAM verifies on any client-signed JWT
+ * (`axiam_oauth2::jose::PERMITTED_ALGORITHMS`): FAPI 2.0 §5.3.1.1's list. A
+ * registration naming anything else — `RS256`, `HS256`, `none` — is refused
+ * rather than stored, so no row can hold an algorithm the verifier would not
+ * honour (D-61).
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type CibaRequestSigningAlg =
+  | "PS256"
+  | "ES256"
+  | "EdDSA"
   // eslint-disable-next-line @typescript-eslint/ban-types
   | (string & {});
 
@@ -1082,10 +1191,38 @@ export interface CreateOAuth2ClientRequest {
    */
   authn_request_params?: AuthnRequestParamsMode;
   /**
+   * G-7 — CIBA Core §4: `PS256`, `ES256` or `EdDSA`. When set, every
+   * backchannel authentication request must be a signed `request` JWT under
+   * this algorithm, verified against `jwks` or `jwks_uri` (exactly one is
+   * required; an inline `jwks` must hold a key of the algorithm). Required for
+   * a `fapi2` client holding the CIBA grant.
+   */
+  backchannel_authentication_request_signing_alg?: string | null;
+  /**
+   * G-7 — CIBA Core §4: where a ping-mode client is notified. Required in ping
+   * mode and refused in poll mode; an absolute `https` URL held to the webhook
+   * address policy (no credentials, no fragment, no private, loopback or
+   * internal host).
+   */
+  backchannel_client_notification_endpoint?: string | null;
+  /**
    * B5 — where OIDC back-channel logout tokens are delivered. Omit for a
    * client that does not participate.
    */
   backchannel_logout_uri?: string | null;
+  /**
+   * G-7 — CIBA Core §4 `backchannel_token_delivery_mode`: `poll` or `ping`.
+   * Required when `grant_types` holds `urn:openid:params:grant-type:ciba`,
+   * refused otherwise; `push` is not offered. A CIBA client must be
+   * confidential; a `fapi2` one must also register
+   * `backchannel_authentication_request_signing_alg`.
+   */
+  backchannel_token_delivery_mode?: string | null;
+  /**
+   * G-7 — CIBA Core §4. `true` is **refused**: this server holds no user code
+   * to verify.
+   */
+  backchannel_user_code_parameter?: boolean | null;
   /**
    * X7.3 — whether an unauthenticated authorization request from this client
    * may be answered with a redirect to the login page rather than the `401`
@@ -1508,6 +1645,154 @@ export function createWebhookRequestToWire(v: CreateWebhookRequest): CreateWebho
     ...v,
     secret: v.secret.expose(),
   };
+}
+
+/**
+ * What happens downstream to a user who falls out of scope or is no longer
+ * active. Erasure always deletes, whatever this says.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type DeprovisionPolicy =
+  | "deactivate"
+  | "delete"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
+
+/**
+ * A tenant's directory configuration, as stored and as read back.
+ *
+ * Carries no secret: see the module documentation.
+ */
+export interface DirectoryConfig {
+  /** Where users are searched for. */
+  base_dn: string;
+  /**
+   * The service account AXIAM binds as to search. It should hold read-only
+   * rights: AXIAM never writes to a directory.
+   */
+  bind_dn: string;
+  /** When the row was created. */
+  created_at: string;
+  /** Whether the directory is used for sign-in and sync. */
+  enabled: boolean;
+  /** Where groups are searched for (reverse-`member` lookups, group sync). */
+  group_base_dn?: string | null;
+  /** Restricts which entries under [`Self::group_base_dn`] are groups. */
+  group_filter?: string | null;
+  /**
+   * The group-mapping table (D-30): which directory groups put a user into
+   * which AXIAM groups. Empty means no directory group maps to anything, and a
+   * sign-in then removes every directory-sourced membership the user held.
+   */
+  group_mappings: GroupMapping[];
+  /** `memberOf` (user-side, AD) or `member` (group-side, OpenLDAP). */
+  group_member_attribute: string;
+  /** How many levels of nested groups are followed, `0..=10`. */
+  group_nesting_depth: number;
+  /** Row identifier. */
+  id: string;
+  /** Provision an AXIAM user on first successful directory sign-in. */
+  jit_provisioning: boolean;
+  /** The kind of directory, which selects defaults. */
+  kind: DirectoryKind;
+  /** Upgrade an `ldap://` connection with StartTLS before any bind. */
+  start_tls: boolean;
+  /** Seconds between incremental sync runs. */
+  sync_interval_secs: number;
+  /** The owning tenant. At most one configuration exists per tenant. */
+  tenant_id: string;
+  /**
+   * PEM CA certificates that anchor trust in the directory's server
+   * certificate. Empty means the platform roots used by the rest of the
+   * workspace's outbound TLS. An organisation CA's PEM can be pasted here.
+   */
+  trust_anchors_pem: string[];
+  /** When the row was last written. */
+  updated_at: string;
+  /**
+   * `ldaps://host[:port]` or `ldap://host[:port]` together with
+   * [`Self::start_tls`]. A plaintext URL is refused at configuration time.
+   */
+  url: string;
+  /** Which attribute feeds which user field. */
+  user_attribute_map: UserAttributeMap;
+  /**
+   * The user-lookup filter template. It contains exactly one `{username}`
+   * placeholder, which the bind path replaces with the RFC 4515-escaped login
+   * name; the template itself is never formatted with raw input.
+   */
+  user_filter: string;
+}
+
+/**
+ * Which kind of directory server a configuration points at.
+ *
+ * It drives **defaults only**: the external-id attribute, the
+ * group-membership strategy and the change attribute the sync job reads.
+ * Every one of them is still an explicit, editable field of the
+ * configuration (or, for the strategy and change attribute, derived from
+ * this value at the point of use); nothing about the kind changes what is
+ * *allowed*.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type DirectoryKind =
+  | "open_ldap"
+  | "active_directory"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
+
+/** What linking did. */
+export interface DirectoryLinkResult {
+  /** `User`-type certificates revoked. */
+  certificates_revoked: number;
+  /**
+   * The entry's `entryUUID` or `objectGUID` as text: an identifier, not a
+   * secret.
+   */
+  directory_external_id: string;
+  /** The account that was linked. */
+  user_id: string;
+  /**
+   * `true` when the account was already linked to that very entry and the call
+   * only re-ran the revocations (an interrupted link completed).
+   */
+  was_already_linked: boolean;
+  /** Passkeys and security keys deleted. */
+  webauthn_credentials_deleted: number;
+}
+
+/**
+ * A read-only view of the sync job's state for one tenant. Counts of what a
+ * run did are in its audit rows, and no account id is here.
+ */
+export interface DirectorySyncStatus {
+  /** The next run must be a full reconciliation. */
+  full_required: boolean;
+  /** An incremental run has a starting point. */
+  has_watermark: boolean;
+  /** When the last attempt started, or null before the first run. */
+  last_attempt_at?: string | null;
+  /** When the last complete full run finished, or null. */
+  last_full_run_at?: string | null;
+  /**
+   * `ok`, `partial`, `failed` or `safety_valve` (an open set: decode another
+   * value without failing), or null before the first run.
+   */
+  last_result?: string | null;
 }
 
 /** Fully resolved email configuration (all fields present). */
@@ -2081,10 +2366,51 @@ export interface Group {
   updated_at: string;
 }
 
-/** `HealthResponse` (generated from openapi.json). */
+/**
+ * One row of the group-mapping table (G-3, T23.3.4, D-30): a directory
+ * group, named by its distinguished name, and the AXIAM group a member of it
+ * is put into.
+ *
+ * **The table is the only way a directory group reaches an AXIAM group.**
+ * There is no match by name, no prefix or wildcard, and no AXIAM group is
+ * ever created from a directory one: a directory administrator who names a
+ * group `admins` gains nothing unless a tenant administrator mapped it here.
+ *
+ * The DN is stored as the administrator typed it and compared after RFC 4514
+ * normalisation (`axiam_directory::dn`), so `CN=Staff, OU=Groups` and
+ * `cn=staff,ou=groups` are the same row. One DN may map to several AXIAM
+ * groups; the same (DN, group) pair twice is refused as redundant.
+ */
+export interface GroupMapping {
+  /** The directory group's distinguished name. */
+  directory_group_dn: string;
+  /**
+   * The AXIAM group of the same tenant a member of that directory group is put
+   * into. Checked to exist in the tenant when the configuration is written.
+   */
+  group_id: string;
+}
+
+/**
+ * Response body for `GET /health`.
+ *
+ * `profile` and `unavailable` are additive (G-8, D-59): a client that reads
+ * only `status` is unaffected.
+ */
 export interface HealthResponse {
+  /**
+   * The messaging profile this process runs: `full` (RabbitMQ is used) or
+   * `minimal` (`AXIAM__AMQP__ENABLED=false`, no broker).
+   */
+  profile: string;
   /** `status`. */
   status: string;
+  /**
+   * Present only in the `minimal` profile: the capabilities it does not
+   * provide — `reactors`, `amqp_authz`, `amqp_audit_ingestion` and
+   * `decision_cache_broadcast`. Absent in `full`.
+   */
+  unavailable?: string[] | null;
 }
 
 /**
@@ -2137,6 +2463,16 @@ export function importCaCertificateRequestToWire(v: ImportCaCertificateRequest):
   };
 }
 
+/** `POST …/saml/idp-credentials` body. */
+export interface IssueSamlIdpCredential {
+  /** An active signing CA the caller may issue from. */
+  issuer_ca_id: string;
+  /** The slot to fill; it must be empty. */
+  slot: SamlIdpSlot;
+  /** 1 to 730, default 365; never beyond the CA's own expiry. */
+  validity_days?: number | null;
+}
+
 /**
  * The type of key algorithm used for a certificate.
  *
@@ -2153,6 +2489,15 @@ export type KeyAlgorithm =
   | "Ed25519"
   // eslint-disable-next-line @typescript-eslint/ban-types
   | (string & {});
+
+/** `POST /api/v1/tenants/{tenant_id}/directory/links` body. */
+export interface LinkDirectoryAccount {
+  /**
+   * The local account to link. The directory entry is found by the directory,
+   * from the account's own username; the caller names no entry.
+   */
+  user_id: string;
+}
 
 /** Account lockout rules. */
 export interface LockoutPolicy {
@@ -2333,6 +2678,23 @@ export interface MtlsTrustAnchorResponse {
 }
 
 /**
+ * How the assertion's `NameID` is formed (per service provider).
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type NameIdFormat =
+  | "persistent"
+  | "email_address"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
+
+/**
  * Events that can trigger an admin notification.
  *
  * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
@@ -2361,6 +2723,7 @@ export type NotificationEventType =
   | "user_updated"
   | "service_account_created"
   | "service_account_deleted"
+  | "scim_delivery_failed"
   // eslint-disable-next-line @typescript-eslint/ban-types
   | (string & {});
 
@@ -2474,6 +2837,12 @@ export interface OAuth2ClientResponse {
    * database.
    */
   authn_request_params: AuthnRequestParamsMode;
+  /** `backchannel_authentication_request_signing_alg`. */
+  backchannel_authentication_request_signing_alg?: CibaRequestSigningAlg | null;
+  /** G-7 — the ping-mode notification endpoint. */
+  backchannel_client_notification_endpoint?: string | null;
+  /** `backchannel_token_delivery_mode`. */
+  backchannel_token_delivery_mode?: CibaDeliveryMode | null;
   /** X7.3 — echoed for the same reason. */
   browser_sso: boolean;
   /** `client_id`. */
@@ -2618,12 +2987,16 @@ export interface OidcCallbackResponse {
  * * [`Self::sensitive_scopes_enabled`], validated **disable-only** — the
  * mirror image of `mfa_enforced`, because releasing personal data is the
  * less-restrictive direction, so a tenant can turn its organization's
- * decision off but never on. * [`Self::dynamic_registration`], on the ladder
- * `disabled` → `initial_access_token` → `anonymous`: a tenant may move down
- * it and never up. * [`Self::dcr_max_clients`] and
- * [`Self::dcr_unused_client_ttl_days`], on the ordinary `tenant <= org` rule
- * — with the wrinkle that `0` on the second means *never sweep*, which is
- * the longest window of all and is handled by [`dcr_ttl_strictness`].
+ * decision off but never on. * [`Self::saml_idp_enabled`], validated
+ * **disable-only** exactly like [`Self::sensitive_scopes_enabled`] (D-20): a
+ * tenant may turn its organization's `true` off and never its `false` on. *
+ * [`Self::ssf_enabled`], validated **disable-only** the same way (D-45). *
+ * [`Self::dynamic_registration`], on the ladder `disabled` →
+ * `initial_access_token` → `anonymous`: a tenant may move down it and never
+ * up. * [`Self::dcr_max_clients`] and [`Self::dcr_unused_client_ttl_days`],
+ * on the ordinary `tenant <= org` rule — with the wrinkle that `0` on the
+ * second means *never sweep*, which is the longest window of all and is
+ * handled by [`dcr_ttl_strictness`].
  *
  * **Not ordered**, therefore never validated against the baseline and never
  * clamped:
@@ -2743,6 +3116,28 @@ export interface OidcPolicy {
    */
   external_client_allowed_resources?: string[];
   /**
+   * G-2 / D-20 — whether this tenant may act as a SAML 2.0 identity provider:
+   * publish IdP metadata and accept `AuthnRequest`s on
+   * `/saml/v2/{tenant}/{metadata,sso,slo}`.
+   *
+   * **Off unless an organization turns it on.** A SAML IdP issues assertions
+   * that other systems accept as proof of identity, so a deployment that has
+   * never decided to be one issues none, and the three endpoints answer `404`
+   * as if they did not exist. The switch lives on this policy, beside the
+   * other OpenID Provider surface controls, because the SSO endpoint is the
+   * same browser login hop and OP session with a different wire format.
+   *
+   * **Disable-only**, with the shape of [`Self::sensitive_scopes_enabled`]: a
+   * tenant may turn its organization's `true` off but never its `false` on,
+   * because the decision to issue identity assertions on behalf of the
+   * organization's tenants is the organization's.
+   *
+   * A deployment built without the `saml` feature answers `404` whatever this
+   * says; the setting is a capability, not a grant (each SP must still be
+   * registered, and `allow_idp_initiated` is its own opt-in).
+   */
+  saml_idp_enabled?: boolean;
+  /**
    * Whether `address` and `phone` may be registered on a client, requested at
    * the authorization endpoint, and released at UserInfo (X7 G8).
    *
@@ -2759,6 +3154,24 @@ export interface OidcPolicy {
    * only one an operator can close for everybody at once.
    */
   sensitive_scopes_enabled: boolean;
+  /**
+   * G-5 / D-45 — whether the tenant is a Shared Signals Framework transmitter:
+   * its `/.well-known/ssf-configuration` is served, its receivers can use the
+   * stream management API, and events are signed and transmitted on its
+   * streams. Default **`false`**.
+   *
+   * **Disable-only**, with the shape of [`Self::saml_idp_enabled`]: sending
+   * security events about the organization's users to third parties is the
+   * organization's decision. Streams can be registered while it is off; they
+   * carry nothing until it is on.
+   */
+  ssf_enabled?: boolean;
+  /**
+   * **Read-only**, D-55: set on a settings response when `ssf_enabled` is on
+   * but the transmitter is inactive anyway, saying why — the deployment holds
+   * more than one tenant and serves no per-tenant issuers. Never stored.
+   */
+  ssf_inactive_reason?: string | null;
 }
 
 /**
@@ -2826,6 +3239,23 @@ export interface Organization {
   slug: string;
   /** `updated_at`. */
   updated_at: string;
+}
+
+/**
+ * `POST …/saml/parse-sp-metadata` body: **exactly one** of the two members.
+ *
+ * Every field is optional, so this is a **sparse** body: what you leave out
+ * is left unchanged, and is omitted from the wire request entirely rather
+ * than sent as `null` (§27.4 rule 5).
+ */
+export interface ParseSamlSpMetadata {
+  /**
+   * An `https` URL the server fetches the document from, once, through its
+   * SSRF guard.
+   */
+  metadata_url?: string | null;
+  /** A metadata document, at most 512 KiB. */
+  metadata_xml?: string | null;
 }
 
 /** Password complexity and history requirements. */
@@ -3383,6 +3813,510 @@ export function rotateSecretResponseFromWire(w: RotateSecretResponseWire): Rotat
 }
 
 /**
+ * A SAML 2.0 protocol binding (SAML Bindings §3).
+ *
+ * The response binding for Web Browser SSO is always [`Self::HttpPost`], but
+ * the enum keeps both because SP metadata carries both, and an `slo_url` may
+ * use either.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type SamlBinding =
+  | "http_post"
+  | "http_redirect"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
+
+/**
+ * The tenant's IdP signing credential, **public facts only**.
+ *
+ * There is no key on it and no field a key could be put in: the private key
+ * is generated by the server, sealed at rest, never returned by any route
+ * and destroyed on retirement (D-21).
+ */
+export interface SamlIdpCredential {
+  /** The leaf certificate, PEM. Public: it is what the metadata publishes. */
+  certificate_pem: string;
+  /** When the credential was issued. */
+  created_at: string;
+  /**
+   * Lower-case hex SHA-256 of the certificate's DER — what an SP administrator
+   * compares out of band.
+   */
+  fingerprint: string;
+  /** Credential id. */
+  id: string;
+  /** The signing CA that issued the leaf. */
+  issuer_ca_id: string;
+  /** End of the certificate's validity (at most 730 days after the start). */
+  not_after: string;
+  /** Start of the certificate's validity. */
+  not_before: string;
+  /** When it was retired, or null. */
+  retired_at?: string | null;
+  /** The certificate's serial, lower-case hex. */
+  serial: string;
+  /**
+   * `active`, `next` or `retired`. At most one `active` and one `next` per
+   * tenant.
+   */
+  status: SamlIdpCredentialStatus;
+  /** The tenant it signs for. */
+  tenant_id: string;
+}
+
+/** What promoting the `next` credential did. */
+export interface SamlIdpCredentialPromotion {
+  /** The credential that is now `active`. */
+  active: SamlIdpCredential;
+  /** `retired`. */
+  retired?: SamlIdpCredential | null;
+}
+
+/**
+ * Where a signing credential is in its life. An open set: an SDK decodes a
+ * value it does not know without failing.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type SamlIdpCredentialStatus =
+  | "active"
+  | "next"
+  | "retired"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
+
+/**
+ * The tenant's SAML IdP, as the administrator needs to see it before and
+ * while switching it on: what an SP will be given, and whether it answers
+ * yet.
+ */
+export interface SamlIdpInfo {
+  /** The `active` credential, or null. */
+  active_credential_id?: string | null;
+  /** The IdP's entity id (the metadata URL itself). */
+  entity_id: string;
+  /**
+   * Whether `metadata_url` answers now: SAML is available, enabled for the
+   * tenant, and an `active` or `next` credential exists (D-40).
+   */
+  metadata_served: boolean;
+  /** Where the IdP metadata is served. */
+  metadata_url: string;
+  /** The `next` credential, or null. */
+  next_credential_id?: string | null;
+  /**
+   * Whether this server build serves SAML at all (it was built with the `saml`
+   * feature).
+   */
+  saml_available: boolean;
+  /**
+   * The tenant's **effective** `saml_idp_enabled` setting (D-20). Written
+   * through the `settings` operations, not here.
+   */
+  saml_idp_enabled: boolean;
+  /** The single-logout endpoint. */
+  slo_url: string;
+  /** The single-sign-on endpoint. */
+  sso_url: string;
+  /** The tenant. */
+  tenant_id: string;
+}
+
+/**
+ * Which slot a credential is issued into.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type SamlIdpSlot =
+  | "active"
+  | "next"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
+
+/** A registered service provider, as stored. */
+export interface SamlServiceProvider {
+  /** See [`SamlServiceProviderInput::acs_urls`]. */
+  acs_urls: AcsEndpoint[];
+  /** See [`SamlServiceProviderInput::allow_idp_initiated`]. */
+  allow_idp_initiated: boolean;
+  /** See [`SamlServiceProviderInput::allowed_groups`]. */
+  allowed_groups: string[];
+  /** See [`SamlServiceProviderInput::attribute_mappings`]. */
+  attribute_mappings: AttributeMapping[];
+  /** When the SP was registered. */
+  created_at: string;
+  /** See [`SamlServiceProviderInput::display_name`]. */
+  display_name: string;
+  /** See [`SamlServiceProviderInput::enabled`]. */
+  enabled: boolean;
+  /** See [`SamlServiceProviderInput::encrypt_assertions`]. */
+  encrypt_assertions: boolean;
+  /** See [`SamlServiceProviderInput::entity_id`]. */
+  entity_id: string;
+  /** Record id. */
+  id: string;
+  /** See [`SamlServiceProviderInput::name_id_format`]. */
+  name_id_format: NameIdFormat;
+  /** See [`SamlServiceProviderInput::sign_responses`]. */
+  sign_responses: boolean;
+  /** `slo_binding`. */
+  slo_binding?: SamlBinding | null;
+  /** See [`SamlServiceProviderInput::slo_url`]. */
+  slo_url?: string | null;
+  /** See [`SamlServiceProviderInput::sp_encryption_cert_pem`]. */
+  sp_encryption_cert_pem?: string | null;
+  /** See [`SamlServiceProviderInput::sp_signing_cert_pem`]. */
+  sp_signing_cert_pem?: string | null;
+  /** The owning tenant. */
+  tenant_id: string;
+  /** When it was last replaced. */
+  updated_at: string;
+  /** See [`SamlServiceProviderInput::want_authn_requests_signed`]. */
+  want_authn_requests_signed: boolean;
+}
+
+/**
+ * Everything an administrator supplies when registering or replacing a
+ * service provider (`create` and `update` both take it; `update` is a full
+ * replacement).
+ *
+ * Every field but `entity_id`, `display_name` and `acs_urls` has a default,
+ * so a client written against a later revision of this struct keeps working.
+ */
+export interface SamlServiceProviderInput {
+  /** The ACS allow-list. At least one, at most one default. */
+  acs_urls: AcsEndpoint[];
+  /**
+   * Whether IdP-initiated SSO is allowed for this SP (D-3). A per-SP opt-in,
+   * off by default: an unsolicited assertion has no `InResponseTo` to bind it
+   * to a request the SP made.
+   */
+  allow_idp_initiated?: boolean;
+  /**
+   * Groups whose members may sign in to this SP. **Empty means every active
+   * user of the tenant may.** Evaluated by the SSO endpoint (T23.2.3).
+   */
+  allowed_groups?: string[];
+  /** Attribute mapping table, at most [`MAX_ATTRIBUTE_MAPPINGS`] entries. */
+  attribute_mappings?: AttributeMapping[];
+  /** Human-readable name for the console. */
+  display_name: string;
+  /**
+   * Whether the SP may sign in at all. A disabled SP stays registered but
+   * every SSO request for it is refused.
+   */
+  enabled?: boolean;
+  /**
+   * Encrypt assertions to the SP's encryption certificate (D-2). Off by
+   * default; requires [`Self::sp_encryption_cert_pem`].
+   */
+  encrypt_assertions?: boolean;
+  /** The SP's `entityID`, unique per tenant. At most [`MAX_ENTITY_ID_BYTES`]. */
+  entity_id: string;
+  /** `NameID` policy. Default: persistent, pairwise. */
+  name_id_format?: NameIdFormat;
+  /**
+   * Sign the `<samlp:Response>` envelope as well as the assertion (which is
+   * signed always). Default **`true`**: it costs nothing and many SPs require
+   * it.
+   */
+  sign_responses?: boolean;
+  /** `slo_binding`. */
+  slo_binding?: SamlBinding | null;
+  /** Single-logout endpoint, if the SP supports it. */
+  slo_url?: string | null;
+  /**
+   * PEM certificate assertions are encrypted to. Required when
+   * `encrypt_assertions` is set.
+   */
+  sp_encryption_cert_pem?: string | null;
+  /** PEM certificate the SP signs its `AuthnRequest`s with. */
+  sp_signing_cert_pem?: string | null;
+  /**
+   * Refuse an `AuthnRequest` that is not signed by `sp_signing_cert_pem`.
+   * Requires that certificate.
+   */
+  want_authn_requests_signed?: boolean;
+}
+
+/**
+ * A parse of SP metadata: **a draft, not a registration**. Nothing is stored
+ * until the caller submits `service_provider` to `create_service_provider`
+ * or `update_service_provider`, and nothing in it is trusted because it came
+ * from a document (D-41).
+ */
+export interface SamlSpMetadataDraft {
+  /**
+   * Lower-case hex SHA-256 of the encryption certificate's DER the draft
+   * carries, or null.
+   */
+  encryption_certificate_fingerprint?: string | null;
+  /**
+   * A body `create_service_provider` accepts unchanged (bar the rules that
+   * need the datastore). `encrypt_assertions` is never set.
+   */
+  service_provider: SamlServiceProviderInput;
+  /**
+   * Lower-case hex SHA-256 of the signing certificate's DER the draft carries,
+   * or null.
+   */
+  signing_certificate_fingerprint?: string | null;
+  /** What to know before submitting it. Human text; do not parse it. */
+  warnings: string[];
+}
+
+/** The body of a started reconciliation's `202`. */
+export interface ScimReconcileAccepted {
+  /** Always `started`. */
+  status: string;
+  /** The target being reconciled. */
+  target_id: string;
+}
+
+/**
+ * How AXIAM authenticates to the downstream service provider, without the
+ * credential itself.
+ */
+export type ScimTargetAuth =
+  | {
+      /** Discriminator: always `bearer`. */
+      type: "bearer";
+    }
+  | {
+      /** Discriminator: always `oauth2_client_credentials`. */
+      type: "oauth2_client_credentials";
+      /** The OAuth2 client id. */
+      client_id: string;
+      /** The scope requested, if any. */
+      scope?: string | null;
+      /** The token endpoint the client secret is sent to. */
+      token_url: string;
+    };
+
+/**
+ * The `type` values of {@link ScimTargetAuth} this SDK knows: `bearer`,
+ * `oauth2_client_credentials`.
+ *
+ * A newer server may return another (CONTRACT §31.2: an unknown `type` MUST
+ * decode without failing). Such a value reaches the caller exactly as sent —
+ * there is no runtime decoder to reject it — so a `switch` over `type` needs
+ * a default branch.
+ */
+export const KNOWN_SCIM_TARGET_AUTH_TYPES: readonly string[] = ["bearer", "oauth2_client_credentials"];
+
+/**
+ * Refuse a `ScimTargetAuth` whose `type` this SDK does not know (CONTRACT
+ * §31.2). An unknown variant decodes, but MUST NOT be sent: the SDK cannot
+ * know which members it needs, and re-sending a value read from a newer
+ * server would ask that server to store a shape this client never
+ * understood. Refused client-side, before any request (§27.4 rule 2's
+ * error).
+ */
+export function assertKnownScimTargetAuth(value: ScimTargetAuth | null | undefined): void {
+  if (value === null || value === undefined) return;
+  const tag = (value as unknown as Record<string, unknown>)["type"];
+  if (typeof tag !== 'string' || !KNOWN_SCIM_TARGET_AUTH_TYPES.includes(tag)) {
+    throw new NetworkError(
+      `ScimTargetAuth has type ${JSON.stringify(tag)}, which this SDK does not know and will not send (CONTRACT.md §31.2)`,
+    );
+  }
+}
+
+/**
+ * A target's delivery state, as `GET` projects it. Fixed vocabulary only:
+ * the failure reason is one of the deliverer's phrases, never a URL, a
+ * response body or a value.
+ */
+export interface ScimTargetDeliveryState {
+  /** Failed attempts since the last success. */
+  consecutive_failures: number;
+  /** Deliveries dead-lettered over the target's lifetime. */
+  dead_lettered_total: number;
+  /** When a delivery attempt last failed or was dead-lettered. */
+  last_failure_at?: string | null;
+  /** Why, in the deliverer's fixed vocabulary. */
+  last_failure_reason?: string | null;
+  /** When reconciliation last ran. */
+  last_reconciled_at?: string | null;
+  /** When a delivery last succeeded. */
+  last_success_at?: string | null;
+}
+
+/** `create` and `update` (a **replacement**) body. */
+export interface ScimTargetInput {
+  /**
+   * `bearer`, or `oauth2_client_credentials` with `token_url` (the same URL
+   * policy), `client_id` (1–256 bytes) and an optional `scope`.
+   */
+  auth: ScimTargetAuth;
+  /**
+   * The downstream's SCIM service root: an `https` URL under the outbound
+   * address policy (no credentials or fragment, at most 2 048 bytes, no
+   * non-public address, no local name).
+   */
+  base_url: string;
+  /**
+   * **Write-only.** The bearer token or the OAuth2 client secret, 1–4 096
+   * bytes. Required on create. On update, absent keeps the stored one — except
+   * that moving it to another URL (`base_url` of a bearer target, `token_url`
+   * or `base_url` of a client-credentials one) or switching `auth.type`
+   * requires it again.
+   *
+   * **Secret.** Redacted from every string, log and JSON rendering; call
+   * `.expose()` to read it.
+   */
+  credential?: Sensitive<string>;
+  /** `deactivate` (default: `PATCH active=false`) or `delete`. */
+  deprovision?: DeprovisionPolicy;
+  /** `true` by default. A disabled target receives nothing. */
+  enabled?: boolean;
+  /** 1–128 bytes. */
+  name: string;
+  /**
+   * Push groups too (every group for `all_users`, the listed ones for
+   * `groups`). `false` by default.
+   */
+  push_groups?: boolean;
+  /**
+   * `all_users`, or `groups` with 1–100 `group_ids` of this tenant: users who
+   * are direct members of any listed group.
+   */
+  scope: ScimTargetScope;
+  /** `username` (default) or `email`. */
+  user_name_from?: UserNameSource;
+}
+
+/**
+ * Wire twin of {@link ScimTargetInput} — plain strings, never logged.
+ *
+ * @internal — it exists because `Sensitive` cannot be serialized, not
+ * because a consumer should read it.
+ */
+export interface ScimTargetInputWire {
+  auth: ScimTargetAuth;
+  base_url: string;
+  credential?: string;
+  deprovision?: DeprovisionPolicy;
+  enabled?: boolean;
+  name: string;
+  push_groups?: boolean;
+  scope: ScimTargetScope;
+  user_name_from?: UserNameSource;
+}
+
+/**
+ * Unwrap a `ScimTargetInput` for the wire.
+ *
+ * One of the two places a §27 secret is unwrapped, so that "put a secret on
+ * the socket" stays a single greppable call rather than fourteen (§7 rule
+ * 4).
+ */
+export function scimTargetInputToWire(v: ScimTargetInput): ScimTargetInputWire {
+  return {
+    ...v,
+    credential: v.credential === undefined ? undefined : v.credential.expose(),
+  };
+}
+
+/**
+ * A registered SCIM target, as the management API returns it. **The
+ * credential is never returned**, and there is no member that says anything
+ * about it.
+ */
+export interface ScimTargetResponse {
+  /** How AXIAM authenticates to it (no credential). */
+  auth: ScimTargetAuth;
+  /** The downstream's SCIM service root. */
+  base_url: string;
+  /** When the target was registered. */
+  created_at: string;
+  /**
+   * What happens downstream to a user who leaves scope or is no longer active
+   * (erasure always deletes).
+   */
+  deprovision: DeprovisionPolicy;
+  /** Whether AXIAM pushes to it. */
+  enabled: boolean;
+  /** The target id. */
+  id: string;
+  /** The name. */
+  name: string;
+  /** Whether groups are pushed too. */
+  push_groups: boolean;
+  /** Which users it provisions. */
+  scope: ScimTargetScope;
+  /** `state`. */
+  state?: ScimTargetDeliveryState | null;
+  /** The owning tenant. */
+  tenant_id: string;
+  /** When it was last written: the version an update is conditional on. */
+  updated_at: string;
+  /** Which attribute becomes `userName`. */
+  user_name_from: UserNameSource;
+}
+
+/** Which users a target provisions. */
+export type ScimTargetScope =
+  | {
+      /** Discriminator: always `all_users`. */
+      type: "all_users";
+    }
+  | {
+      /** Discriminator: always `groups`. */
+      type: "groups";
+      /** Users who are direct members of any listed group. */
+      group_ids: string[];
+    };
+
+/**
+ * The `type` values of {@link ScimTargetScope} this SDK knows: `all_users`,
+ * `groups`.
+ *
+ * A newer server may return another (CONTRACT §31.2: an unknown `type` MUST
+ * decode without failing). Such a value reaches the caller exactly as sent —
+ * there is no runtime decoder to reject it — so a `switch` over `type` needs
+ * a default branch.
+ */
+export const KNOWN_SCIM_TARGET_SCOPE_TYPES: readonly string[] = ["all_users", "groups"];
+
+/**
+ * Refuse a `ScimTargetScope` whose `type` this SDK does not know (CONTRACT
+ * §31.2). An unknown variant decodes, but MUST NOT be sent: the SDK cannot
+ * know which members it needs, and re-sending a value read from a newer
+ * server would ask that server to store a shape this client never
+ * understood. Refused client-side, before any request (§27.4 rule 2's
+ * error).
+ */
+export function assertKnownScimTargetScope(value: ScimTargetScope | null | undefined): void {
+  if (value === null || value === undefined) return;
+  const tag = (value as unknown as Record<string, unknown>)["type"];
+  if (typeof tag !== 'string' || !KNOWN_SCIM_TARGET_SCOPE_TYPES.includes(tag)) {
+    throw new NetworkError(
+      `ScimTargetScope has type ${JSON.stringify(tag)}, which this SDK does not know and will not send (CONTRACT.md §31.2)`,
+    );
+  }
+}
+
+/**
  * Metadata only. The handle is never in a list response — it exists in
  * plaintext exactly once, in [`CreateScimTokenResponse`].
  */
@@ -3606,6 +4540,99 @@ export interface SessionResponse {
   user_agent?: string | null;
 }
 
+/**
+ * `PUT /api/v1/tenants/{tenant_id}/directory` — a **replacement**.
+ *
+ * Every `DirectoryConfig` member except `id`, `tenant_id` and the two
+ * timestamps, plus the write-only `bind_secret`. An omitted optional member
+ * is **reset to its default**, not kept.
+ */
+export interface SetDirectoryConfig {
+  /** Where users are searched for. */
+  base_dn: string;
+  /** The service account the search runs as. */
+  bind_dn: string;
+  /**
+   * The service account's password: **write-only**, 1 to 4096 octets. Required
+   * when the tenant has no configuration yet; on a replacement, absent means
+   * *keep the stored secret* — unless the write moves the connection (`url`,
+   * `start_tls`, `bind_dn` or `trust_anchors_pem`), which then requires it
+   * (`400`, P23W2-01).
+   *
+   * **Secret.** Redacted from every string, log and JSON rendering; call
+   * `.expose()` to read it.
+   */
+  bind_secret?: Sensitive<string>;
+  /** A disabled directory serves no sign-in and is not synced. */
+  enabled: boolean;
+  /** Defaults to null. */
+  group_base_dn?: string | null;
+  /** Defaults to null. */
+  group_filter?: string | null;
+  /** At most 500; every `group_id` a group of the tenant. Default empty. */
+  group_mappings?: GroupMapping[] | null;
+  /** Defaults by `kind`. */
+  group_member_attribute?: string | null;
+  /** `0..=10`, default 5. */
+  group_nesting_depth?: number | null;
+  /** Default false. */
+  jit_provisioning?: boolean | null;
+  /** Chooses defaults only. */
+  kind: DirectoryKind;
+  /** Upgrade an `ldap://` connection with StartTLS before any bind. */
+  start_tls: boolean;
+  /** `300..=86400`, default 3600. */
+  sync_interval_secs?: number | null;
+  /** At most 16 CA certificates in PEM. Default empty (the public roots). */
+  trust_anchors_pem?: string[] | null;
+  /** `ldaps://host[:port]`, or `ldap://host[:port]` with `start_tls`. */
+  url: string;
+  /** `user_attribute_map`. */
+  user_attribute_map?: UserAttributeMap | null;
+  /** One `{username}` placeholder in value position. */
+  user_filter: string;
+}
+
+/**
+ * Wire twin of {@link SetDirectoryConfig} — plain strings, never logged.
+ *
+ * @internal — it exists because `Sensitive` cannot be serialized, not
+ * because a consumer should read it.
+ */
+export interface SetDirectoryConfigWire {
+  base_dn: string;
+  bind_dn: string;
+  bind_secret?: string;
+  enabled: boolean;
+  group_base_dn?: string | null;
+  group_filter?: string | null;
+  group_mappings?: GroupMapping[] | null;
+  group_member_attribute?: string | null;
+  group_nesting_depth?: number | null;
+  jit_provisioning?: boolean | null;
+  kind: DirectoryKind;
+  start_tls: boolean;
+  sync_interval_secs?: number | null;
+  trust_anchors_pem?: string[] | null;
+  url: string;
+  user_attribute_map?: UserAttributeMap | null;
+  user_filter: string;
+}
+
+/**
+ * Unwrap a `SetDirectoryConfig` for the wire.
+ *
+ * One of the two places a §27 secret is unwrapped, so that "put a secret on
+ * the socket" stays a single greppable call rather than fourteen (§7 rule
+ * 4).
+ */
+export function setDirectoryConfigToWire(v: SetDirectoryConfig): SetDirectoryConfigWire {
+  return {
+    ...v,
+    bind_secret: v.bind_secret === undefined ? undefined : v.bind_secret.expose(),
+  };
+}
+
 /** Body for `PUT .../ca-certificates/{id}/mtls-trust-anchor`. */
 export interface SetMtlsTrustAnchor {
   /** Whether this CA should be trusted for client-certificate authentication. */
@@ -3696,6 +4723,12 @@ export interface SetOrgSettings {
   require_symbols: boolean;
   /** `require_uppercase`. */
   require_uppercase: boolean;
+  /**
+   * G-2 / D-20 — defaulted, so an API client written before the SAML identity
+   * provider existed lands on `false`, which is what every deployment did
+   * before (I1).
+   */
+  saml_idp_enabled?: boolean;
   /** `sensitive_scopes_enabled`. */
   sensitive_scopes_enabled?: boolean;
   /**
@@ -3703,6 +4736,12 @@ export interface SetOrgSettings {
    * on "no `Server` certificate is issued" (I1).
    */
   server_cert_allowed_names?: string[];
+  /**
+   * G-5 / D-45 — defaulted, so an API client written before the SSF
+   * transmitter existed lands on `false`, which is what every deployment did
+   * before (I1).
+   */
+  ssf_enabled?: boolean;
   /** `webauthn_user_verification`. */
   webauthn_user_verification?: string;
 }
@@ -3813,6 +4852,239 @@ export interface SmtpConfig {
   /** `username`. */
   username: string;
 }
+
+/**
+ * How SETs reach the receiver.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type SsfDeliveryMethod =
+  | "push"
+  | "poll"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
+
+/**
+ * The six event types AXIAM transmits (G-5).
+ *
+ * Stored and sent as their event-type URIs; [`Self::ALL`] is the canonical
+ * order every list AXIAM returns is sorted in.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type SsfEventType =
+  | "https://schemas.openid.net/secevent/caep/event-type/session-revoked"
+  | "https://schemas.openid.net/secevent/caep/event-type/credential-change"
+  | "https://schemas.openid.net/secevent/caep/event-type/assurance-level-change"
+  | "https://schemas.openid.net/secevent/risc/event-type/account-disabled"
+  | "https://schemas.openid.net/secevent/risc/event-type/account-enabled"
+  | "https://schemas.openid.net/secevent/risc/event-type/account-purged"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
+
+/**
+ * Who set a stream's current status. A status an administrator set to
+ * anything but `enabled` cannot be changed by the receiver (D-51).
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type SsfStatusActor =
+  | "admin"
+  | "receiver"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
+
+/**
+ * A registered SSF stream, as the management API returns it. **The push
+ * `Authorization` header is never returned**; `authorization_header_set`
+ * says whether one is stored.
+ */
+export interface SsfStream {
+  /** The SET `aud`. Unique across the deployment. */
+  audience: string;
+  /** Whether a push `Authorization` header is stored. */
+  authorization_header_set: boolean;
+  /** When the stream was registered. */
+  created_at: string;
+  /** `push` (RFC 8935) or `poll` (RFC 8936). */
+  delivery_method: SsfDeliveryMethod;
+  /** A description. */
+  description?: string | null;
+  /** The push endpoint, or null for a poll stream. */
+  endpoint_url?: string | null;
+  /** The event types the receiver may have. */
+  events_allowed: SsfEventType[];
+  /** What the stream carries: the intersection of the two. */
+  events_delivered: SsfEventType[];
+  /** The event types the receiver asked for (a subset of `events_allowed`). */
+  events_requested: SsfEventType[];
+  /** The stream id, also the SSF `stream_id`. */
+  id: string;
+  /** When the receiver last asked for a verification event, or null. */
+  last_verification_at?: string | null;
+  /**
+   * The OAuth2 `client_id` whose client-credentials token (scope `ssf.manage`)
+   * is this stream's receiver on the stream management API.
+   */
+  receiver_client_id: string;
+  /** `enabled`, `paused` or `disabled`. */
+  status: SsfStreamStatus;
+  /** Who set the status: `admin` or `receiver`. */
+  status_actor: SsfStatusActor;
+  /** Why, if anyone said. */
+  status_reason?: string | null;
+  /** `iss_sub` (default) or `email`. */
+  subject_format: SsfSubjectFormat;
+  /** The owning tenant. */
+  tenant_id: string;
+  /**
+   * Whether the tenant's transmitter is active: its `ssf_enabled` is on and
+   * the deployment does not make every tenant share one issuer (D-55). A
+   * stream of an inactive transmitter is kept, and carries nothing.
+   */
+  transmitter_active: boolean;
+  /** Why the transmitter is inactive, when it is. */
+  transmitter_inactive_reason?: string | null;
+  /** When it was last written. */
+  updated_at: string;
+}
+
+/** `create_stream` and `update_stream` (a **replacement**) body. */
+export interface SsfStreamInput {
+  /** 1–512 bytes; unique across the deployment. */
+  audience: string;
+  /**
+   * **Write-only.** The `Authorization` header value AXIAM sends to a push
+   * endpoint. On update, absent keeps the stored one — except that moving the
+   * endpoint to another origin requires it again.
+   *
+   * **Secret.** Redacted from every string, log and JSON rendering; call
+   * `.expose()` to read it.
+   */
+  authorization_header?: Sensitive<string>;
+  /**
+   * On update: remove the stored header. Refused together with
+   * `authorization_header`.
+   */
+  clear_authorization_header?: boolean;
+  /** `push` or `poll`. */
+  delivery_method: SsfDeliveryMethod;
+  /** At most 256 bytes. */
+  description?: string | null;
+  /**
+   * Required for `push` (an `https` URL under the outbound address policy),
+   * refused for `poll`.
+   */
+  endpoint_url?: string | null;
+  /** 1–6 event types. */
+  events_allowed: SsfEventType[];
+  /**
+   * A subset of `events_allowed`; absent means all of them. The receiver may
+   * narrow it later, never widen it.
+   */
+  events_requested?: SsfEventType[] | null;
+  /**
+   * An OAuth2 client of the tenant with the `client_credentials` grant and the
+   * `ssf.manage` scope.
+   */
+  receiver_client_id: string;
+  /** `enabled` by default. */
+  status?: SsfStreamStatus;
+  /** At most 256 bytes. */
+  status_reason?: string | null;
+  /** `iss_sub` by default. */
+  subject_format?: SsfSubjectFormat;
+}
+
+/**
+ * Wire twin of {@link SsfStreamInput} — plain strings, never logged.
+ *
+ * @internal — it exists because `Sensitive` cannot be serialized, not
+ * because a consumer should read it.
+ */
+export interface SsfStreamInputWire {
+  audience: string;
+  authorization_header?: string;
+  clear_authorization_header?: boolean;
+  delivery_method: SsfDeliveryMethod;
+  description?: string | null;
+  endpoint_url?: string | null;
+  events_allowed: SsfEventType[];
+  events_requested?: SsfEventType[] | null;
+  receiver_client_id: string;
+  status?: SsfStreamStatus;
+  status_reason?: string | null;
+  subject_format?: SsfSubjectFormat;
+}
+
+/**
+ * Unwrap a `SsfStreamInput` for the wire.
+ *
+ * One of the two places a §27 secret is unwrapped, so that "put a secret on
+ * the socket" stays a single greppable call rather than fourteen (§7 rule
+ * 4).
+ */
+export function ssfStreamInputToWire(v: SsfStreamInput): SsfStreamInputWire {
+  return {
+    ...v,
+    authorization_header: v.authorization_header === undefined ? undefined : v.authorization_header.expose(),
+  };
+}
+
+/**
+ * A stream's SSF status (SSF 1.0 §8.1.2), with AXIAM's meaning pinned by
+ * D-51.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type SsfStreamStatus =
+  | "enabled"
+  | "paused"
+  | "disabled"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
+
+/**
+ * Which RFC 9493 subject identifier names the user in the SETs of a stream
+ * (D-46).
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type SsfSubjectFormat =
+  | "iss_sub"
+  | "email"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /**
  * A name to put in a `Server` certificate's `subjectAltName`.
@@ -3999,6 +5271,11 @@ export interface TenantSettingsOverride {
   require_symbols?: boolean | null;
   /** `require_uppercase`. */
   require_uppercase?: boolean | null;
+  /**
+   * G-2 / D-20 — disable-only, like `sensitive_scopes_enabled`; see
+   * [`OidcPolicy::saml_idp_enabled`].
+   */
+  saml_idp_enabled?: boolean | null;
   /** `sensitive_scopes_enabled`. */
   sensitive_scopes_enabled?: boolean | null;
   /**
@@ -4007,6 +5284,11 @@ export interface TenantSettingsOverride {
    * which is different from an absent field (inherit the organization's list).
    */
   server_cert_allowed_names?: string[] | null;
+  /**
+   * G-5 / D-45 — disable-only, like `saml_idp_enabled`; see
+   * [`OidcPolicy::ssf_enabled`].
+   */
+  ssf_enabled?: boolean | null;
   /** `webauthn_user_verification`. */
   webauthn_user_verification?: string | null;
 }
@@ -4113,6 +5395,99 @@ export type UnknownAaguidAction =
   | "deny"
   // eslint-disable-next-line @typescript-eslint/ban-types
   | (string & {});
+
+/**
+ * `PATCH /api/v1/tenants/{tenant_id}/directory` — a **sparse** update.
+ *
+ * Every member optional: absent leaves the stored value, and for the two
+ * nullable members an explicit `null` clears it.
+ *
+ * Every field is optional, so this is a **sparse** body: what you leave out
+ * is left unchanged, and is omitted from the wire request entirely rather
+ * than sent as `null` (§27.4 rule 5).
+ */
+export interface UpdateDirectoryConfig {
+  /** See [`SetDirectoryConfig::base_dn`]. */
+  base_dn?: string | null;
+  /** See [`SetDirectoryConfig::bind_dn`]. */
+  bind_dn?: string | null;
+  /**
+   * See [`SetDirectoryConfig::bind_secret`]; absent keeps the stored secret,
+   * subject to the same P23W2-01 rule.
+   *
+   * **Secret.** Redacted from every string, log and JSON rendering; call
+   * `.expose()` to read it.
+   */
+  bind_secret?: Sensitive<string>;
+  /** See [`SetDirectoryConfig::enabled`]. */
+  enabled?: boolean | null;
+  /** Explicit `null` clears it. */
+  group_base_dn?: string | null;
+  /** Explicit `null` clears it. */
+  group_filter?: string | null;
+  /** Replaces the whole table when present. */
+  group_mappings?: GroupMapping[] | null;
+  /** See [`SetDirectoryConfig::group_member_attribute`]. */
+  group_member_attribute?: string | null;
+  /** See [`SetDirectoryConfig::group_nesting_depth`]. */
+  group_nesting_depth?: number | null;
+  /** See [`SetDirectoryConfig::jit_provisioning`]. */
+  jit_provisioning?: boolean | null;
+  /** `kind`. */
+  kind?: DirectoryKind | null;
+  /** See [`SetDirectoryConfig::start_tls`]. */
+  start_tls?: boolean | null;
+  /** See [`SetDirectoryConfig::sync_interval_secs`]. */
+  sync_interval_secs?: number | null;
+  /** Replaces the whole list when present. */
+  trust_anchors_pem?: string[] | null;
+  /** See [`SetDirectoryConfig::url`]. */
+  url?: string | null;
+  /** `user_attribute_map`. */
+  user_attribute_map?: UserAttributeMap | null;
+  /** See [`SetDirectoryConfig::user_filter`]. */
+  user_filter?: string | null;
+}
+
+/**
+ * Wire twin of {@link UpdateDirectoryConfig} — plain strings, never logged.
+ *
+ * @internal — it exists because `Sensitive` cannot be serialized, not
+ * because a consumer should read it.
+ */
+export interface UpdateDirectoryConfigWire {
+  base_dn?: string | null;
+  bind_dn?: string | null;
+  bind_secret?: string;
+  enabled?: boolean | null;
+  group_base_dn?: string | null;
+  group_filter?: string | null;
+  group_mappings?: GroupMapping[] | null;
+  group_member_attribute?: string | null;
+  group_nesting_depth?: number | null;
+  jit_provisioning?: boolean | null;
+  kind?: DirectoryKind | null;
+  start_tls?: boolean | null;
+  sync_interval_secs?: number | null;
+  trust_anchors_pem?: string[] | null;
+  url?: string | null;
+  user_attribute_map?: UserAttributeMap | null;
+  user_filter?: string | null;
+}
+
+/**
+ * Unwrap a `UpdateDirectoryConfig` for the wire.
+ *
+ * One of the two places a §27 secret is unwrapped, so that "put a secret on
+ * the socket" stays a single greppable call rather than fourteen (§7 rule
+ * 4).
+ */
+export function updateDirectoryConfigToWire(v: UpdateDirectoryConfig): UpdateDirectoryConfigWire {
+  return {
+    ...v,
+    bind_secret: v.bind_secret === undefined ? undefined : v.bind_secret.expose(),
+  };
+}
 
 /**
  * `UpdateFederationConfigRequest` (generated from openapi.json).
@@ -4270,11 +5645,19 @@ export interface UpdateOAuth2ClientRequest {
   allowed_resources?: string[] | null;
   /** `authn_request_params`. */
   authn_request_params?: AuthnRequestParamsMode | null;
+  /** G-7 — see the create DTO. `""` clears. */
+  backchannel_authentication_request_signing_alg?: string | null;
+  /** G-7 — see the create DTO. `""` clears. */
+  backchannel_client_notification_endpoint?: string | null;
   /**
    * Pass an empty string to clear a previously registered URI — the one edit
    * an operator makes when an RP is decommissioned.
    */
   backchannel_logout_uri?: string | null;
+  /** G-7 — see the create DTO. `""` clears. */
+  backchannel_token_delivery_mode?: string | null;
+  /** G-7 — `true` refused, as on create. */
+  backchannel_user_code_parameter?: boolean | null;
   /** X7.3 — see [`CreateOAuth2ClientRequest::browser_sso`]. */
   browser_sso?: boolean | null;
   /** `dpop_bound_access_tokens`. */
@@ -4526,6 +5909,39 @@ export function updateWebhookRequestToWire(v: UpdateWebhookRequest): UpdateWebho
     secret: v.secret === undefined ? undefined : v.secret.expose(),
   };
 }
+
+/** Which directory attribute feeds each AXIAM user field. */
+export interface UserAttributeMap {
+  /** The attribute holding the human-readable name. */
+  display_name: string;
+  /** The attribute holding the e-mail address. */
+  email: string;
+  /**
+   * The attribute holding the immutable entry identifier (`entryUUID`,
+   * `objectGUID`).
+   */
+  external_id: string;
+  /** The attribute holding the login name (`uid`, `sAMAccountName`). */
+  username: string;
+}
+
+/**
+ * Which AXIAM attribute becomes the downstream `userName`. The mapping is a
+ * fixed attribute set, not a mapping language (D-57).
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type UserNameSource =
+  | "username"
+  | "email"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /** Public-safe user representation (no password_hash, no mfa_secret). */
 export interface UserResponse {

@@ -69,7 +69,7 @@ export function mountJson(
   status: number,
   body: unknown,
 ): void {
-  const verb = method.toLowerCase() as 'get' | 'post' | 'put' | 'delete';
+  const verb = method.toLowerCase() as 'get' | 'post' | 'put' | 'patch' | 'delete';
   target.use(
     http[verb](`${BASE_URL}${path}`, () =>
       body === undefined

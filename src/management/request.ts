@@ -17,8 +17,12 @@ import { withRetry } from '../rest/retry.js';
 import type { AxiamClient } from '../rest/client.js';
 import { ConflictError, NotFoundError, ValidationError, parseFieldErrors } from './errors.js';
 
-/** The HTTP verbs this surface uses. */
-export type ManagementMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
+/**
+ * The HTTP verbs this surface uses. `PATCH` arrived with contract 1.58
+ * (`directory.update`, a sparse update); like every other write it is never
+ * retried (§27.4 rule 8).
+ */
+export type ManagementMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 /** One management call, fully resolved. */
 export interface ManagementCall {
