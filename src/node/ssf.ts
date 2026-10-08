@@ -413,7 +413,11 @@ export class SsfReceiver {
       );
     }
     const base = new URL(this.#client.session.baseUrl);
-    base.pathname = `${base.pathname.replace(/\/+$/, '')}/ssf/v1/poll/${encodeURIComponent(streamId)}`;
+    // Trailing slashes trimmed with a loop rather than /\/+$/, which is
+    // polynomial on a path of many '/' (CodeQL js/polynomial-redos).
+    let prefix = base.pathname;
+    while (prefix.endsWith('/')) prefix = prefix.slice(0, -1);
+    base.pathname = `${prefix}/ssf/v1/poll/${encodeURIComponent(streamId)}`;
     base.search = '';
     base.hash = '';
     const body: Record<string, unknown> = {};
