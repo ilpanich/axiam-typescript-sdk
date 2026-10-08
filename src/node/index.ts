@@ -91,6 +91,7 @@ export {
   isAccessDenied,
   isExpiredToken,
   SIGNED_REQUEST_LIFETIME_SECS,
+  type CibaSignerDescription,
   type CibaSigningKey,
 } from './oidc.js';
 export type {

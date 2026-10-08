@@ -1,7 +1,7 @@
 /**
  * Where `{org_id}` and `{tenant_id}` come from — CONTRACT §27.4 rule 3.
  *
- * Thirty-one of the 147 routes carry one or both, and in almost every call they
+ * Fifty-six of the 190 routes carry one or both, and in almost every call they
  * are the client's own. Making the caller restate them every time is ceremony
  * that gets wrapped in a helper anyway; making them impossible to override is
  * worse, because a platform-admin token legitimately administers a tenant

@@ -1265,7 +1265,7 @@ describe('platform namespace', () => {
   });
 });
 
-/** §27.9: a partial regeneration must fail here, not ship 140 of 147. */
+/** §27.9: a partial regeneration must fail here, not ship 180 of 190. */
 describe('generated surface', () => {
   it('covers exactly the operations the registry names', () => {
     const exercised = [

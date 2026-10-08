@@ -25,11 +25,33 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to **contract 1.52**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
-§20, §21, §22, §23, §24, §25, §26, §27, §28 (including §6.1 mTLS client certificates, the
+This SDK conforms to **contract 1.58**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
+§20, §21, §22, §23, §24, §25, §26, §27, §28, §28.12, §29, §30, §31, §32 and §33, with §32.7 and
+§33.2 signed (including §6.1 mTLS client certificates, the
 §10.1 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
 `verifyWebhook` signature verifier). §12 is implemented in full at its 1.38 shape: all
 **thirteen** operations, including the four public "Sign in with X" entry points.
+
+### Contracts 1.53 – 1.58
+
+| Section | What ships | Where |
+|---|---|---|
+| §28.12 RFC 7592 client configuration (1.53) | `readClientRegistration`, `updateClientRegistration`, `deleteClientRegistration`, `ClientRegistration` | `AxiamClient` (see [below](#rfc-7592-client-configuration-contract-153-2812)) |
+| §30 directory configuration (1.54) | the `directory` namespace, explicit-`null` sparse update, `setDirectoryConfigFrom` | `client.directory` |
+| §29 SAML service-provider registration (1.55) | the `saml` namespace, `parseSpMetadataFromUrl` / `FromXml`, `samlServiceProviderInputFrom` | `client.saml` |
+| §32 SSF stream registration (1.56) | the `ssf` namespace, `ssfStreamInputFrom` | `client.ssf` |
+| §32.7 SSF receiver helper (1.56) | `SsfReceiver.verifySet` / `.poll` | `axiam-sdk/node` |
+| §31 outbound SCIM targets (1.57) | the `scim_targets` namespace, `scimTargetInputFrom` | `client.scimTargets` |
+| §33 CIBA, and §33.2's signed form (1.58) | `cibaInitiate`, `cibaPoll`, `cibaAwait`, `cibaHandlePing`, `CibaRequestSigner` (PS256, ES256, EdDSA) | `OidcClient` (`axiam-sdk/node`) |
+| §21.3.1 vector A amended (1.58) | `mtls_endpoint_aliases.backchannel_authentication_endpoint`, the seventh alias | `OidcConfiguration` |
+
+**Not shipped, and why:** nothing in these sections is declined. Two placement notes:
+`SsfReceiver` is Node-only (it verifies Ed25519 signatures with `node:crypto`), and the CIBA
+helpers live on the Node-only `OidcClient` with the rest of §12, as §33.6 asks ("the handle
+that already carries `oidc_exchange` and `device_authorize`"). A CIBA client authenticates
+by `clientSecret` (`client_secret_post`) or by the session's §6.1 client certificate
+(`tls_client_auth`); this SDK has no `private_key_jwt` client authentication (§21.8 is
+informative), so a CIBA client registered for `private_key_jwt` cannot use these helpers.
 
 ### Contract 1.51 — the dogfooding remediation
 
@@ -53,7 +75,7 @@ browser bundle pulls in no Node-only code. §12.2 forbids splitting them across 
 the four operations contract 1.38 adds are on `OidcClient` too, with the nine that preceded
 them, even though three of them need no Node-only code at all.
 
-§27 is implemented **in full**, both halves: the 162-operation imperative surface *and*
+§27 is implemented **in full**, both halves: the 190-operation imperative surface *and*
 the §27.6 declarative manifest with its §27.7 `defineManifest` and decorator forms. The
 contract asks an SDK that ships only one half to say which; this one ships both.
 
@@ -62,8 +84,8 @@ Express middleware and the Fastify plugin — with all three operations, the
 `resourceMetadataUrl` guard option and §28.9's five required tests. This SDK is §28.10's
 reference implementation: it lands first and the ten ports are read against it.
 
-§12.7, §14, §15, §17, §19, §20, §21, §22, §23, §24, §25, §26, §27 and §28 are named rather
-than folded into the range because they landed after this SDK already claimed §1–§13:
+§12.7, §14, §15, §17, §19, §20, §21, §22, §23, §24, §25, §26, §27, §28, §28.12, §29, §30,
+§31, §32, §32.7, §33 and §33.2 signed are named rather than folded into the range because they landed after this SDK already claimed §1–§13:
 widening the range silently would turn a statement that was true when written into a
 different claim without anyone editing it.
 
@@ -2099,6 +2121,191 @@ just failed to authenticate, so both must stay readable. The corollary is the on
 matters — **no part of the presented credential reaches either of them**, in any parameter,
 any header, any body or any log line the guard writes on the 401 path.
 
+## RFC 7592 client configuration (contract 1.53, §28.12)
+
+A client that registered itself through `POST /oauth2/register` (RFC 7591) received, once,
+a `registration_client_uri` and a `registration_access_token`. With them it reads, replaces
+and deletes **its own** registration:
+
+```ts
+const token = new Sensitive(storedRegistrationToken);
+const current = await client.readClientRegistration(registrationClientUri, token);
+
+// An update is a FULL replacement: start from the read, change what you mean.
+current.client_name = 'Agent v2';
+const updated = await client.updateClientRegistration(registrationClientUri, token, current);
+await persist(updated.registration_access_token!); // the ONLY valid token from now on
+
+await client.deleteClientRegistration(registrationClientUri, updated.registration_access_token!);
+```
+
+- The URI is used **verbatim** (its `tenant_id` query included), and only at this client's
+  configured origin: another scheme, host or port — or `http` unless `baseUrl` is `http` on a
+  loopback host — is refused locally with a `ValidationError` before any request.
+- The token travels in `Authorization: Bearer` only, on a session-free transport: no SDK
+  cookie, access token or CSRF header rides along, redirects are not followed, and a `401`
+  never refreshes the SDK's session. (A browser follows redirects itself; use these
+  server-side.)
+- `ClientRegistration` keeps every member it does not model in `extra`, so a read passed to
+  an update round-trips them; the SDK drops `registration_access_token`,
+  `registration_client_uri`, `client_secret_expires_at`, `client_id_issued_at` and
+  `client_secret` from the body and sets `client_id`. Both secrets are `Sensitive`.
+- **Update and delete are never retried**; persist the rotated token before anything else.
+  The read follows §16, but never retries a `4xx` other than `408`/`429`.
+- A body with `error` is an `OAuthProtocolError` at any status (`invalid_token`,
+  `invalid_client_metadata`, …); a `204` on delete resolves.
+
+## Directory, SAML, SSF and SCIM targets (§29 – §32)
+
+Four management namespaces, generated like every other (§27), with the call-site rules the
+contract makes an SDK repeat in their TSDoc. Every write is issued once; reads retry.
+
+```ts
+import { Sensitive, setDirectoryConfigFrom, parseSpMetadataFromUrl,
+         samlServiceProviderInputFrom, ssfStreamInputFrom, scimTargetInputFrom } from 'axiam-sdk';
+
+// §30 directory — a sparse update: undefined keeps, null CLEARS.
+await client.directory.update({ group_filter: null });           // sends {"group_filter":null}
+await client.directory.update({ enabled: false });                // sends {"enabled":false}
+// Moving the connection (url, start_tls, bind_dn, trust_anchors_pem) requires the secret
+// again — the SDK holds no copy (§30.3 rule 2).
+await client.directory.update({ url: 'ldaps://dc2.corp.example', bind_secret: new Sensitive(secret) });
+// set() is a replacement: start from a read (bind_secret absent keeps the stored one).
+const config = setDirectoryConfigFrom(await client.directory.get());
+await client.directory.set({ ...config, sync_interval_secs: 900 });
+
+// §29 SAML — parse a draft (stores nothing), review it, create from it.
+const draft = await client.saml.parseSpMetadata(parseSpMetadataFromUrl('https://sp.example/metadata'));
+const sp = await client.saml.createServiceProvider(draft.service_provider);
+const body = samlServiceProviderInputFrom(await client.saml.getServiceProvider(sp.id));
+await client.saml.updateServiceProvider(sp.id, { ...body, display_name: 'Payroll (EU)' });
+
+// §32 SSF and §31 SCIM targets — read-modify-write; the secret is left absent (kept).
+const stream = ssfStreamInputFrom(await client.ssf.getStream(streamId));
+await client.ssf.updateStream(streamId, { ...stream, description: 'rotated' });
+const target = scimTargetInputFrom(await client.scimTargets.get(targetId));
+await client.scimTargets.update(targetId, { ...target, push_groups: true });
+```
+
+- `bind_secret`, `authorization_header` and `credential` are `Sensitive` and write-only. A
+  response that (wrongly) carries one of them — or `private_key_pem` on a SAML credential —
+  has it dropped before it reaches you, so it surfaces in no rendering.
+- `parseSpMetadata` needs **exactly one** of `metadata_url` / `metadata_xml`: both or
+  neither is a local `ValidationError`.
+- Enums and the `ScimTargetAuth` / `ScimTargetScope` unions are open: an unknown value
+  decodes. An unknown `auth.type` / `scope.type` is refused before it is sent back.
+- `getIdp` is never cached: readiness changes with every credential write.
+
+## SSF receiver (`axiam-sdk/node`, contract 1.56, §32.7)
+
+For a relying party that **receives** AXIAM's Security Event Tokens. Node-only.
+
+```ts
+import { SsfReceiver, SetRefusedError, setErrFromReason, createOidcClient } from 'axiam-sdk/node';
+
+const receiver = new SsfReceiver(client, {
+  issuer: 'https://iam.example.com/t/<tenant-uuid>',
+  audience: 'https://rp.example.com',
+  jwksUri: 'https://iam.example.com/oauth2/jwks',      // or discoveryUrl
+  accessTokenProvider: async () =>
+    (await oidc.loginClientCredentials({ scope: 'ssf.manage' })).accessToken,
+  // replayWindowMs defaults to (and may not go below) seven days; replayStore is pluggable.
+});
+
+// Push (RFC 8935): verify, then answer 202 — or 400 {"err": …} on a refusal.
+try {
+  handle(await receiver.verifySet(rawBody));
+  res.status(202).end();
+} catch (e) {
+  if (e instanceof SetRefusedError) res.status(400).json(setErrFromReason(e.reason));
+  else throw e; // a NetworkError: the JWKS could not be fetched — not a verdict on the SET
+}
+
+// Poll (RFC 8936): acknowledge what you processed, refuse what failed, on the NEXT call.
+let ack: string[] = [];
+let setErrs = {};
+for (;;) {
+  const { events, refused, moreAvailable } = await receiver.poll(streamId, { ack, setErrs });
+  for (const event of events) await handle(event);
+  ack = events.map((e) => e.jti);
+  setErrs = Object.fromEntries(refused.map((r) => [r.jti, setErrFromReason(r.reason)]));
+  if (!moreAvailable) await sleep(1000);
+}
+```
+
+`verifySet` checks, in order: three base64url parts, `typ` `secevent+jwt`, `alg` `EdDSA`, the
+`kid` in the configured JWKS (one forced refetch on a miss, at most once a minute), the
+signature, `iss`, `aud`, the SET claim rules (no `exp`/`sub`; `jti`, `iat`, `sub_id`; one
+event) and replay. A refusal is a `SetRefusedError` (an `AuthError`) with a typed `reason`;
+`pushErrorCode` maps `malformed`, `invalid_type` and `replayed` to `invalid_request`, the
+others to themselves. **A SET that verifies has been recorded**: acknowledge it once
+processed, or a re-offer reads as `replayed`. `poll` never acknowledges anything itself, is
+not retried on a `4xx`, and sends no SDK cookie or session token.
+
+## CIBA (`axiam-sdk/node`, contract 1.58, §33)
+
+Client-initiated backchannel authentication: ask AXIAM to authenticate a user **on another
+device**, then collect the tokens. On `OidcClient`; the client always authenticates, by
+`clientSecret` or a §6.1 client certificate.
+
+```ts
+import { createOidcClient, isAccessDenied, isExpiredToken, CibaRequestSigner } from 'axiam-sdk/node';
+
+// Poll mode.
+const initiated = await oidc.cibaInitiate({
+  scope: 'openid profile',
+  loginHint: 'ada@example.com',        // exactly one of loginHint / idTokenHint
+  bindingMessage: 'W4SCT',             // show the same code to your user
+});
+try {
+  const tokens = await oidc.cibaAwait(initiated); // honours interval and slow_down; stops at expires_in
+} catch (e) {
+  if (isAccessDenied(e)) { /* the user refused */ }
+  else if (isExpiredToken(e)) { /* nobody answered in time */ }
+  else throw e;
+}
+```
+
+**Ping mode** — AXIAM calls your notification endpoint; answer at once, then poll once:
+
+```ts
+const notificationToken = new Sensitive(randomBytes(32).toString('base64url'));
+const initiated = await oidc.cibaInitiate({
+  scope: 'openid', loginHint: 'ada', delivery: { mode: 'ping', clientNotificationToken: notificationToken },
+});
+
+app.post('/ciba/notify', express.raw({ type: '*/*' }), async (req, res) => {
+  let authReqId;
+  try {
+    authReqId = oidc.cibaHandlePing(req.rawHeaders, req.body, notificationToken); // no I/O
+  } catch {
+    return res.status(401).end();
+  }
+  res.status(204).end();                       // answer first: AXIAM retries a slow ping
+  const tokens = await oidc.cibaPoll({ authReqId }); // the outcome: tokens, access_denied, expired_token
+});
+// No ping after expires_in / 2? Fall back to oidc.cibaAwait(initiated).
+```
+
+**Signed form** (a client registered with `backchannel_authentication_request_signing_alg`;
+required of a `fapi2` CIBA client):
+
+```ts
+const signer = await CibaRequestSigner.create('EdDSA', new Sensitive(privateKeyPkcs8Pem), 'key-1');
+await oidc.cibaInitiate({ scope: 'openid', loginHint: 'ada', bindingMessage: 'W4SCT', signer });
+// The form carries client authentication and `request` only; every member is inside the JWT.
+```
+
+- `cibaInitiate` is **never retried** — each accepted call may notify a person. A success
+  proves nothing about the user: AXIAM answers an unknown, locked and real user alike.
+- `cibaPoll` surfaces every protocol answer as an `OAuthProtocolError` and retries only
+  transport failures, `5xx`, `408` and a bodiless `429`. Store its tokens before anything else:
+  a request is redeemed once. Neither helper adopts the tokens as the client's credential.
+- `authReqId`, `clientNotificationToken`, the signing key and the `request` JWT are
+  `Sensitive` / never rendered. `CibaRequestSigner` supports PS256, ES256 and EdDSA, signs
+  under exactly the algorithm given, and refuses a key that cannot (a probe signature).
+- `cibaAwait` takes an injectable `clock` (`{ now(), sleep(ms) }`) for tests.
+
 ## Client quality-of-life (CONTRACT.md §16–§19)
 
 ### Retry policy (§16)
@@ -2196,7 +2403,7 @@ entries are keyed by subject rather than by session.
 Everything above assumes a populated tenant. `login` signs a user in,
 `checkAccess` asks about a resource, `verifyWebhook` checks a delivery signature — and
 none of them can create the user, declare the resource or register the webhook. The
-management surface is the part that can: **160 operations across 24 namespaces**,
+management surface is the part that can: **190 operations across 28 namespaces**,
 generated from `management-registry.json`, which is the whole server API minus what other
 contract sections own and minus organization creation and deletion (§27.0 keeps those out
 of reach of a client library on purpose).
@@ -2209,8 +2416,8 @@ const role  = await client.roles.get(roleId);
 await client.roles.assignToUser(roleId, { user_id: userId });
 ```
 
-Operations hang off **namespace handles** rather than the client. Twenty namespaces have a
-`list` and fourteen a `get`, so flattening them would need a disambiguating prefix invented
+Operations hang off **namespace handles** rather than the client. Nineteen namespaces have a
+`list` and nineteen a `get`, so flattening them would need a disambiguating prefix invented
 once per operation — and would bury the eight §1 methods most callers want under five times
 as many they do not. Acquiring a handle performs no I/O. `client.management.users` is the
 same handle as `client.users`, for call sites that read better with the namespace spelled
@@ -2307,7 +2514,7 @@ back.
 
 ### Declarative manifests (§27.6, §27.7)
 
-Calling 160 operations one at a time is rarely what an application wants. What it does at
+Calling 190 operations one at a time is rarely what an application wants. What it does at
 start-up, in a migration, or in a test fixture is assert a shape:
 
 ```ts

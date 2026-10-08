@@ -654,6 +654,14 @@ function cibaRefusal(operation: string, field: string, message: string): Validat
   ]);
 }
 
+/** What a {@link CibaRequestSigner} renders as: the algorithm and `kid`, never the key. */
+export interface CibaSignerDescription {
+  /** The algorithm the signer signs under. */
+  alg: CibaSigningAlg;
+  /** The `kid` it puts in the JWS header, if any. */
+  kid?: string;
+}
+
 /** The signing key a {@link CibaRequestSigner} accepts: a PKCS#8 PEM, or a private `KeyObject` / `CryptoKey`. */
 export type CibaSigningKey = Sensitive<string> | KeyObject | CryptoKey;
 
@@ -743,7 +751,7 @@ export class CibaRequestSigner {
   }
 
   /** `{ alg, kid }` — never the key. */
-  toJSON(): { alg: CibaSigningAlg; kid?: string } {
+  toJSON(): CibaSignerDescription {
     return { alg: this.#alg, ...(this.#kid !== undefined ? { kid: this.#kid } : {}) };
   }
 

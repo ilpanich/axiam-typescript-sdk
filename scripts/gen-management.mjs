@@ -14,10 +14,10 @@
 // an error — every generated call goes through `sendManagement`, so §3 (CSRF),
 // §4 (the cookie jar), §5 (X-Tenant-ID), §9 (single-flight refresh), §16 and
 // §19 are inherited from the shared axios instance rather than reimplemented
-// 147 times.
+// 190 times.
 //
 // The generated test matters as much as the generated code. This repo's
-// coverage floor is 94% of lines and 95% of functions, and 147 hand-written
+// coverage floor is 94% of lines and 95% of functions, and 190 hand-written
 // smoke tests is the chore that gets three-quarters done.
 //
 //   node scripts/gen-management.mjs            # write
@@ -1126,7 +1126,7 @@ function emitOperation(namespace, opname, op, secrets) {
     // CONTRACT.md §5.2.3 rule 1 — see `omitEmptyTenantScope`. Applied at the
     // call site rather than inside `sendManagement` so it is visible in the
     // generated code that a body is being normalised, and so it costs nothing
-    // on the 152 operations that have no such field.
+    // on the operations that have no such field.
     if (SCHEMAS[schema]?.properties?.tenant_scope) {
       bodyExpr = `models.omitEmptyTenantScope(${bodyExpr})`;
     }
@@ -1256,8 +1256,8 @@ function emitOpsIndex() {
     '/**',
     ' * One handle per §27 namespace, and the accessors that reach them.',
     ' *',
-    ' * §27.2 makes this namespacing normative rather than stylistic: twenty',
-    ' * namespaces have a `list` and fourteen a `get`, so flattening 147 operations',
+    ' * §27.2 makes this namespacing normative rather than stylistic: nineteen',
+    ' * namespaces have a `list` and nineteen a `get`, so flattening 190 operations',
     ' * onto the client would need a disambiguating prefix invented once per',
     ' * operation — and would bury the eight §1 methods most callers actually want',
     ' * under five times as many they do not.',
@@ -1491,7 +1491,7 @@ function emitTest() {
     lines.push('');
   }
 
-  lines.push('/** §27.9: a partial regeneration must fail here, not ship 140 of 147. */');
+  lines.push('/** §27.9: a partial regeneration must fail here, not ship 180 of 190. */');
   lines.push("describe('generated surface', () => {");
   lines.push("  it('covers exactly the operations the registry names', () => {");
   lines.push(`    const exercised = ${JSON.stringify(all.sort(), null, 6).replace(/\n/g, '\n    ')};`);
