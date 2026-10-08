@@ -171,6 +171,29 @@ export {
   type VerifyWebhookOptions,
   type WebhookVerifyFailureReason,
 } from './webhook.js';
+// CONTRACT.md §32.7 (contract 1.56) — the SSF receiver helper. Node-only:
+// node:crypto's Ed25519 verifies the SETs.
+export {
+  JWKS_REFETCH_INTERVAL_MS,
+  MemoryReplayStore,
+  MIN_REPLAY_WINDOW_MS,
+  pushErrorCode,
+  SetRefusedError,
+  setErrFromReason,
+  SSF_EVENT_TYPES,
+  SsfReceiver,
+} from './ssf.js';
+export type {
+  AccessTokenProvider,
+  RefusedSet,
+  ReplayStore,
+  SecurityEvent,
+  SetErr,
+  SetFailureReason,
+  SsfPollOptions,
+  SsfPollResult,
+  SsfReceiverConfig,
+} from './ssf.js';
 // Re-exported here (mirroring amqp/index.ts) so `verifyWebhook`'s required
 // `Sensitive<string>` secret can be constructed from this same subpath
 // import, without a second import from the root entry.
