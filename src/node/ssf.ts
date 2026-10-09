@@ -141,12 +141,14 @@ export interface ReplayStore {
   /**
    * Record `jti` for `windowMs` and return `true`, or return `false` without
    * recording when it is already held. Must be atomic: two concurrent calls
-   * with one `jti` must not both see `true`.
+   * with one `jti` must not both see `true`. A store that cannot answer must
+   * throw (or reject) without recording: the SET is then not accepted, and
+   * `poll` leaves it unjudged (contract 1.59, §34.2 P1, P4 — fail closed).
    */
   checkAndRecord(jti: string, windowMs: number): boolean | Promise<boolean>;
 }
 
-/** The in-memory {@link ReplayStore}: one process, lost on restart; entries expire after their window. */
+/** The in-memory {@link ReplayStore}: one process, lost on restart; entries expire after their window and are otherwise unbounded in count (§34.2 P4). */
 export class MemoryReplayStore implements ReplayStore {
   readonly #seen = new Map<string, number>();
   readonly #now: () => number;
