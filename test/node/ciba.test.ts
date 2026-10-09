@@ -420,7 +420,9 @@ describe('§33.8 (8) — a 500 and a 429 mid-loop are survived', () => {
     const seen = tokenScript(
       [
         () => oauthError(400, 'authorization_pending'),
-        () => new HttpResponse(null, { status: 500 }),
+        // Contract 1.59 §34.2 P8: the 500 carries the body AXIAM's token
+        // endpoint actually sends, and is transient whatever its body.
+        () => HttpResponse.json({ error: 'server_error' }, { status: 500 }),
         () => oauthError(429, 'rate_limit_exceeded'),
         tokens,
       ],
@@ -445,6 +447,19 @@ describe('§33.8 (8) — a 500 and a 429 mid-loop are survived', () => {
       tokens,
     ]);
     await oidc.cibaPoll({ authReqId: new Sensitive(random()), configuration: discoveryDocument() });
+    expect(seen).toHaveLength(3);
+  });
+
+  it('a 500 and a 503 with an error member are retried inside one cibaPoll too (§34.2 P8)', async () => {
+    const { oidc } = confidentialClient();
+    const tokens = await tokensWithIdToken();
+    const seen = tokenScript([
+      () => HttpResponse.json({ error: 'server_error' }, { status: 500 }),
+      () => HttpResponse.json({ error: 'temporarily_unavailable' }, { status: 503 }),
+      tokens,
+    ]);
+    const outcome = await oidc.cibaPoll({ authReqId: new Sensitive(random()), configuration: discoveryDocument() });
+    expect('error' in outcome && outcome.error !== undefined).toBe(false);
     expect(seen).toHaveLength(3);
   });
 });

@@ -2315,7 +2315,8 @@ await oidc.cibaInitiate({ scope: 'openid', loginHint: 'ada', bindingMessage: 'W4
 - `cibaInitiate` is **never retried** — each accepted call may notify a person. A success
   proves nothing about the user: AXIAM answers an unknown, locked and real user alike.
 - `cibaPoll` surfaces every protocol answer as an `OAuthProtocolError` and retries only
-  transport failures, `5xx`, `408` and a bodiless `429`. Store its tokens before anything else:
+  transport failures, `408`, a bodiless `429` and a `5xx` — whatever its body, so the server's
+  own `500 {"error":"server_error"}` is retried and never ends `cibaAwait` (§34.2 P8). Store its tokens before anything else:
   a request is redeemed once. Neither helper adopts the tokens as the client's credential.
 - `authReqId`, `clientNotificationToken`, the signing key and the `request` JWT are
   `Sensitive` / never rendered. `CibaRequestSigner` supports PS256, ES256 and EdDSA, signs
