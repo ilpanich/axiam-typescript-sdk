@@ -5,6 +5,7 @@
 // every SET is signed here: no key literal, no captured token.
 
 import { generateKeyPairSync, randomUUID, sign, type KeyObject } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -431,6 +432,36 @@ describe('§32.8 receiver (8) — poll passes ack and setErrs through and sorts 
     );
     await expect(receiver({}, undefined).poll('s-3')).rejects.toBeInstanceOf(NetworkError);
     await expect(receiver({ accessTokenProvider: undefined }).poll('s-3')).rejects.toBeInstanceOf(AuthError);
+  });
+});
+
+// Contract 1.59 §34.2 P7 (R-7, review F-9): `poll` is not retried on a `4xx`
+// other than `408` and `429`, which §16.3 retries. The code always did; the
+// README said "not retried on a `4xx`".
+describe('§32.7 / §34.2 P7 — poll retries 408 and 429, and the README says so', () => {
+  it('408 and 429 are retried, as a 503 is', async () => {
+    for (const status of [408, 429]) {
+      let hits = 0;
+      server.use(
+        http.post(`${BASE_URL}/ssf/v1/poll/s-${status}`, () => {
+          hits += 1;
+          return hits === 1 ? new HttpResponse(null, { status }) : HttpResponse.json({ sets: {}, moreAvailable: false });
+        }),
+      );
+      const result = await receiver().poll(`s-${status}`);
+      expect(result.events).toEqual([]);
+      expect(hits, `HTTP ${status} was not retried`).toBe(2);
+    }
+  });
+
+  it("the README's SSF receiver section states the 408 / 429 exception", () => {
+    const readme = readFileSync(new URL('../../README.md', import.meta.url), 'utf8');
+    const start = readme.indexOf('## SSF receiver');
+    const end = readme.indexOf('\n## ', start + 1);
+    const section = readme.slice(start, end).replace(/\s+/g, ' ');
+    expect(start).toBeGreaterThan(-1);
+    expect(section).not.toMatch(/not retried on a `4xx`(?! other than `408` and `429`)/);
+    expect(section).toContain('not retried on a `4xx` other than `408` and `429`');
   });
 });
 

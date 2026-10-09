@@ -2227,8 +2227,12 @@ let setErrs = {};
 for (;;) {
   const { events, refused, moreAvailable } = await receiver.poll(streamId, { ack, setErrs });
   for (const event of events) await handle(event);
-  ack = events.map((e) => e.jti);
-  setErrs = Object.fromEntries(refused.map((r) => [r.jti, setErrFromReason(r.reason)]));
+  // A `replayed` SET was accepted earlier: acknowledge it, do not report it (§34.2 P2).
+  ack = [...events.map((e) => e.jti), ...refused.filter((r) => r.reason === 'replayed').map((r) => r.jti)];
+  setErrs = Object.fromEntries(
+    refused.filter((r) => r.reason !== 'replayed').map((r) => [r.jti, setErrFromReason(r.reason)]),
+  );
+  // `unjudged` SETs are neither: the transmitter offers them again.
   if (!moreAvailable) await sleep(1000);
 }
 ```
@@ -2244,8 +2248,11 @@ return** (contract 1.59, §34.2 P1): a SET it cannot judge — the JWKS or disco
 failed, or the replay store threw — is left unrecorded and listed by `jti` in `unjudged`
 (neither acknowledge nor refuse it; the transmitter offers it again), while the SETs judged
 in the same batch are returned as usual. When a poll accepts no SET at all it records
-nothing and throws that failure instead. `poll` never acknowledges anything itself, is
-not retried on a `4xx`, and sends no SDK cookie or session token.
+nothing and throws that failure instead. A SET refused as `replayed` was accepted by this
+receiver on an earlier poll: acknowledge it in `ack` rather than reporting it in `setErrs`
+(§34.2 P2). `poll` never acknowledges anything itself, is not retried on a `4xx` other than
+`408` and `429` — which §16 retries, as it does a transport failure and a `5xx` — and sends
+no SDK cookie or session token.
 
 ## CIBA (`axiam-sdk/node`, contract 1.58, §33)
 

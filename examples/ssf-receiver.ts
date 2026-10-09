@@ -52,7 +52,12 @@ for (let round = 0; round < 10; round += 1) {
     returnImmediately: true,
   });
   events.forEach(handle);
-  ack = events.map((e) => e.jti);
-  setErrs = Object.fromEntries(refused.map((r) => [r.jti, setErrFromReason(r.reason)]));
+  // A `replayed` SET was accepted on an earlier poll: acknowledge it rather
+  // than report it (CONTRACT.md §34.2 P2). `unjudged` SETs are neither acked
+  // nor refused: the transmitter offers them again.
+  ack = [...events.map((e) => e.jti), ...refused.filter((r) => r.reason === 'replayed').map((r) => r.jti)];
+  setErrs = Object.fromEntries(
+    refused.filter((r) => r.reason !== 'replayed').map((r) => [r.jti, setErrFromReason(r.reason)]),
+  );
   if (!moreAvailable) await new Promise((resolve) => setTimeout(resolve, 1000));
 }

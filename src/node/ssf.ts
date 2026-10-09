@@ -90,10 +90,9 @@ export type SetFailureReason =
  * The reason itself where RFC 8935 defines it (`invalid_key`,
  * `invalid_issuer`, `invalid_audience`, `invalid_request`), and
  * `invalid_request` for `malformed`, `invalid_type` and `replayed`, which it
- * does not — so only RFC-defined codes reach the wire. (§32.7 says the codes
- * "match RFC 8935" and names only `replayed` as mapped; `malformed` and
- * `invalid_type` are not RFC 8935 codes either, and this SDK maps them the same
- * way — the conservative reading.)
+ * does not — so only RFC-defined codes reach the wire (contract 1.59, §34.2
+ * P5). A `replayed` SET on a poll is acknowledged rather than sent in
+ * `setErrs` (§34.2 P2); its code here serves a push endpoint.
  */
 export function pushErrorCode(reason: SetFailureReason): string {
   return reason === 'malformed' || reason === 'invalid_type' || reason === 'replayed'
@@ -399,12 +398,14 @@ export class SsfReceiver {
    * `ack` and `setErrs` are sent exactly as given, and only the members you
    * set (`{}` when none). **Nothing is acknowledged on your behalf**:
    * acknowledge, on the next call, the `jti`s you processed, and pass each
-   * refused one in `setErrs` (`setErrFromReason(r.reason)`). A SET you neither
-   * acknowledge nor refuse is re-offered and — having been recorded when it
-   * verified — then reads as `replayed`.
+   * refused one in `setErrs` (`setErrFromReason(r.reason)`) — except a
+   * `replayed` one, which this receiver accepted on an earlier poll: acknowledge
+   * that one (contract 1.59, §34.2 P2). A SET you neither acknowledge nor
+   * refuse is re-offered and — having been recorded when it verified — then
+   * reads as `replayed`.
    *
    * Retried per §16 on a transport failure, `408`, `429` or `5xx`; never on
-   * another `4xx` (`400` is a `ValidationError`, `404` a `NotFoundError`). A
+   * another `4xx` (§34.2 P7) (`400` is a `ValidationError`, `404` a `NotFoundError`). A
    * SET whose verified `jti` differs from the key it was returned under is
    * refused `invalid_request`; a non-string SET `malformed`.
    *
