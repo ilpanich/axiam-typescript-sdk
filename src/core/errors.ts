@@ -142,7 +142,12 @@ export class AuthzError extends AxiamError {
  * server error.
  */
 export class NetworkError extends AxiamError {
-  /** The underlying transport error, with every non-allowlisted response header redacted (§2, X-3). */
+  /**
+   * What is safe to keep of the underlying transport error: its name, message,
+   * code and status, and the response's status, body and allow-listed headers
+   * (§2, X-3). Never the request — its body or its headers — which may carry a
+   * write-only secret (contract 1.59 R-18).
+   */
   readonly cause?: unknown;
 
   constructor(message: string, cause?: unknown) {

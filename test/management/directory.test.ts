@@ -3,6 +3,7 @@
 // run time: a literal would be a credential in the repository and would let a
 // redaction test pass by coincidence.
 
+import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { AuthError, NetworkError } from '../../src/core/errors.js';
@@ -17,13 +18,21 @@ import {
   type UpdateDirectoryConfig,
 } from '../../src/management/models.js';
 import {
+  BASE_URL,
   TENANT_ID,
   capture,
   managementClient,
   mockServer,
   retryingManagementClient,
 } from '../managementSupport.js';
-import { assertNoFragment, errorRenderings, freshId, freshSecret, renderings } from '../redaction.js';
+import {
+  assertNoFragment,
+  errorRenderings,
+  exhaustiveErrorRenderings,
+  freshId,
+  freshSecret,
+  renderings,
+} from '../redaction.js';
 
 const DIRECTORY = `/api/v1/tenants/${TENANT_ID}/directory`;
 
@@ -96,6 +105,34 @@ describe('§30.8 (1) — the bind secret reaches the wire and no rendering', () 
     expect((seen[0]?.json as Record<string, unknown>).bind_secret === secret, 'the secret was not sent').toBe(true);
     // The wire conversion is the one place it is unwrapped.
     expect(setDirectoryConfigToWire(set).bind_secret === secret).toBe(true);
+  });
+
+  // R-18 (contract 1.59): the 400 above takes the ValidationError path, which
+  // never held the request. A 5xx and a dropped connection reach NetworkError,
+  // whose cause was the axios error with the serialized body in it.
+  it('redacts it from the error raised by set and update on a 5xx and on a transport failure', async () => {
+    const server = mockServer();
+    const client = managementClient();
+    const failures = [
+      () => HttpResponse.json({ error: 'internal_error' }, { status: 500 }),
+      () => new HttpResponse(null, { status: 503 }),
+      () => HttpResponse.error(),
+    ];
+    for (const respond of failures) {
+      const secret = freshSecret();
+      server.use(
+        http.put(`${BASE_URL}${DIRECTORY}`, respond),
+        http.patch(`${BASE_URL}${DIRECTORY}`, respond),
+      );
+      for (const err of [
+        await client.directory.set(setBody(secret)).catch((e: unknown) => e),
+        await client.directory.update({ bind_secret: new Sensitive(secret) }).catch((e: unknown) => e),
+      ]) {
+        expect(err).toBeInstanceOf(NetworkError);
+        assertNoFragment(exhaustiveErrorRenderings(err), secret, 'error');
+      }
+      server.resetHandlers();
+    }
   });
 });
 

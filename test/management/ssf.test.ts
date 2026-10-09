@@ -18,7 +18,7 @@ import {
   mockServer,
   retryingManagementClient,
 } from '../managementSupport.js';
-import { assertNoFragment, freshId, freshSecret, renderings } from '../redaction.js';
+import { assertNoFragment, exhaustiveErrorRenderings, freshId, freshSecret, renderings } from '../redaction.js';
 
 const STREAMS = `/api/v1/tenants/${TENANT_ID}/ssf/streams`;
 const REVOKED = 'https://schemas.openid.net/secevent/caep/event-type/session-revoked';
@@ -119,6 +119,35 @@ describe('§32.8 (2) — the push header is sent and never rendered or decoded',
     expect(created.authorization_header_set).toBe(true);
     // @ts-expect-error — SsfStream declares no authorization_header member.
     void created.authorization_header;
+  });
+
+  // R-18 (contract 1.59): an error raised by create_stream or update_stream on
+  // a 5xx or a dropped connection is a NetworkError whose cause carried the
+  // serialized body; it must not hold the header either.
+  it('redacts the error raised by createStream and updateStream on a 5xx and on a transport failure', async () => {
+    const server = mockServer();
+    const client = managementClient();
+    const id = freshId();
+    const failures = [
+      () => HttpResponse.json({ error: 'internal_error' }, { status: 500 }),
+      () => new HttpResponse(null, { status: 503 }),
+      () => HttpResponse.error(),
+    ];
+    for (const respond of failures) {
+      const token = freshSecret();
+      server.use(
+        http.post(`${BASE_URL}${STREAMS}`, respond),
+        http.put(`${BASE_URL}${STREAMS}/${id}`, respond),
+      );
+      for (const err of [
+        await client.ssf.createStream(input(`Bearer ${token}`)).catch((e: unknown) => e),
+        await client.ssf.updateStream(id, input(`Bearer ${token}`)).catch((e: unknown) => e),
+      ]) {
+        expect(err).toBeInstanceOf(NetworkError);
+        assertNoFragment(exhaustiveErrorRenderings(err), token, 'error');
+      }
+      server.resetHandlers();
+    }
   });
 });
 
