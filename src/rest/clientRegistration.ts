@@ -58,12 +58,17 @@ export interface ClientRegistration {
   client_id_issued_at?: number;
   /** The registered display name. */
   client_name?: string;
-  /** The registered redirect URIs. */
-  redirect_uris: string[];
-  /** The registered grant types. */
-  grant_types: string[];
-  /** The registered response types. */
-  response_types: string[];
+  /**
+   * The registered redirect URIs. Absent when the read did not carry them as a
+   * list of strings — then nothing is sent for them on an update, and a value
+   * of another shape stays in {@link ClientRegistration.extra}, sent back as
+   * read (contract 1.59, §34.2 P12.4).
+   */
+  redirect_uris?: string[];
+  /** The registered grant types. Absent, and not sent, as {@link ClientRegistration.redirect_uris}. */
+  grant_types?: string[];
+  /** The registered response types. Absent, and not sent, as {@link ClientRegistration.redirect_uris}. */
+  response_types?: string[];
   /** How the client authenticates at the token endpoint. The server refuses an update that changes it. */
   token_endpoint_auth_method?: string;
   /** The registered scope, space-separated. */
@@ -105,8 +110,10 @@ const SERVER_STATED_MEMBERS = [
  * Decode a client information response, tolerating unknown members
  * (§28.12.1: "An SDK MUST decode unknown members without failing").
  *
- * A known member of an unexpected type is kept in `extra` rather than
- * dropped: a replacement must not lose what the server holds.
+ * A known member of an unexpected type — a list holding a non-string item
+ * included — is kept in `extra` as read rather than dropped or filtered, and a
+ * member the response lacks stays absent: a replacement must neither lose what
+ * the server holds nor invent what it does not (§28.12.2 rule 4, §34.2 P12.4).
  *
  * @throws NetworkError when the body is not a JSON object or carries no
  * `client_id` — a response this SDK cannot act on.
@@ -134,14 +141,14 @@ export function clientRegistrationFromJson(value: unknown): ClientRegistration {
     if (v === null) delete map[key];
     return undefined;
   };
-  const takeList = (key: string): string[] => {
+  const takeList = (key: string): string[] | undefined => {
     const v = map[key];
-    if (Array.isArray(v)) {
+    if (Array.isArray(v) && v.every((x) => typeof x === 'string')) {
       delete map[key];
-      return v.filter((x): x is string => typeof x === 'string');
+      return v as string[];
     }
     if (v === null) delete map[key];
-    return [];
+    return undefined;
   };
 
   const clientId = takeString('client_id');
@@ -153,14 +160,11 @@ export function clientRegistrationFromJson(value: unknown): ClientRegistration {
     jwks = map.jwks === null ? undefined : map.jwks;
     delete map.jwks;
   }
-  const out: ClientRegistration = {
-    client_id: clientId,
+  const out: ClientRegistration = { client_id: clientId, extra: {} };
+  const optional: Partial<ClientRegistration> = {
     redirect_uris: takeList('redirect_uris'),
     grant_types: takeList('grant_types'),
     response_types: takeList('response_types'),
-    extra: {},
-  };
-  const optional: Partial<ClientRegistration> = {
     client_id_issued_at: takeNumber('client_id_issued_at'),
     client_name: takeString('client_name'),
     token_endpoint_auth_method: takeString('token_endpoint_auth_method'),
@@ -183,7 +187,9 @@ export function clientRegistrationFromJson(value: unknown): ClientRegistration {
 
 /**
  * The RFC 7592 §2.2 replacement body: every member but the five the server
- * states (§28.12.2 rule 4), with `client_id` set to the registration's own.
+ * states (§28.12.2 rule 4), with `client_id` set to the registration's own. A
+ * member `metadata` does not carry is not sent — a list included, never as
+ * `[]` — and `extra`'s members go back as they were read (§34.2 P12.4).
  *
  * @internal — exported for the tests.
  */
@@ -195,9 +201,9 @@ export function clientRegistrationUpdateBody(metadata: ClientRegistration): Reco
     if (value !== undefined) body[key] = value;
   };
   put('client_name', metadata.client_name);
-  put('redirect_uris', metadata.redirect_uris ?? []);
-  put('grant_types', metadata.grant_types ?? []);
-  put('response_types', metadata.response_types ?? []);
+  put('redirect_uris', metadata.redirect_uris);
+  put('grant_types', metadata.grant_types);
+  put('response_types', metadata.response_types);
   put('token_endpoint_auth_method', metadata.token_endpoint_auth_method);
   put('scope', metadata.scope);
   put('jwks', metadata.jwks);
