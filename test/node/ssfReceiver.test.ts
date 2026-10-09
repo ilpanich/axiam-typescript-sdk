@@ -318,7 +318,7 @@ describe('§32.8 receiver (8) — poll passes ack and setErrs through and sorts 
       }),
     );
     const again = await r.poll(stream);
-    expect(again).toEqual({ events: [], moreAvailable: false, refused: [] });
+    expect(again).toEqual({ events: [], moreAvailable: false, refused: [], unjudged: [] });
     expect(seen[1]!.body).toBe('{}');
   });
 
@@ -343,6 +343,83 @@ describe('§32.8 receiver (8) — poll passes ack and setErrs through and sorts 
     );
     await expect(receiver().poll('s-2')).rejects.toBeInstanceOf(NetworkError);
     expect(unavailable).toBeGreaterThan(1);
+  });
+
+  // Contract 1.59 §34.2 P1 (R-1, review F-2): `poll` never leaves a `jti`
+  // recorded that it does not return. The batch's first SET verifies (and is
+  // recorded); the second names an unknown kid while the refetch fails, which
+  // is no verdict. Before 1.59 the poll threw, the first SET was lost to the
+  // caller, and its re-offer read `replayed`.
+  it('a two-SET batch whose second SET fails its key fetch: the first is returned, the second unrecorded', async () => {
+    const key = generateKey();
+    let jwksHits = 0;
+    server.use(
+      http.get(JWKS_URI, () => {
+        jwksHits += 1;
+        return jwksHits === 1 ? HttpResponse.json({ keys: [key.jwk] }) : new HttpResponse(null, { status: 503 });
+      }),
+    );
+    const first = claims();
+    const second = claims();
+    const firstSet = signSet(key, first);
+    const secondSet = signSet(generateKey(), second);
+    server.use(
+      http.post(`${BASE_URL}/ssf/v1/poll/s-4`, () =>
+        HttpResponse.json({ sets: { [first.jti as string]: firstSet, [second.jti as string]: secondSet }, moreAvailable: false }),
+      ),
+    );
+    const recorded = new Set<string>();
+    const memory = new MemoryReplayStore();
+    const store = {
+      checkAndRecord(jti: string, windowMs: number): boolean {
+        const fresh = memory.checkAndRecord(jti, windowMs);
+        if (fresh) recorded.add(jti);
+        return fresh;
+      },
+    };
+    const r = receiver({ replayStore: store });
+    const outcome = await r.poll('s-4').then(
+      (result) => ({ result, error: undefined }),
+      (error: unknown) => ({ result: undefined, error }),
+    );
+    expect(jwksHits).toBe(2);
+    // The contract's assertion: the first jti is not in the store, or the first SET is returned.
+    const returned = outcome.result?.events.some((e) => e.jti === first.jti) ?? false;
+    expect(!recorded.has(first.jti as string) || returned, 'the first SET was recorded and not returned').toBe(true);
+    // This SDK's form: what was judged is returned; the unjudged SET is neither
+    // returned nor refused nor recorded, and is listed by jti.
+    expect(outcome.error).toBeUndefined();
+    expect(outcome.result?.events.map((e) => e.jti)).toEqual([first.jti]);
+    expect(outcome.result?.refused).toEqual([]);
+    expect(outcome.result?.unjudged).toEqual([second.jti]);
+    expect(recorded.has(second.jti as string)).toBe(false);
+  });
+
+  it('a replay store that cannot answer leaves that SET unjudged and unrecorded, the rest returned', async () => {
+    const key = generateKey();
+    serveJwks([key.jwk]);
+    const first = claims();
+    const second = claims();
+    server.use(
+      http.post(`${BASE_URL}/ssf/v1/poll/s-5`, () =>
+        HttpResponse.json({
+          sets: { [first.jti as string]: signSet(key, first), [second.jti as string]: signSet(key, second) },
+          moreAvailable: false,
+        }),
+      ),
+    );
+    const memory = new MemoryReplayStore();
+    const store = {
+      checkAndRecord(jti: string, windowMs: number): boolean {
+        if (jti === second.jti) throw new NetworkError('replay store unavailable');
+        return memory.checkAndRecord(jti, windowMs);
+      },
+    };
+    const result = await receiver({ replayStore: store }).poll('s-5');
+    expect(result.events.map((e) => e.jti)).toEqual([first.jti]);
+    expect(result.refused).toEqual([]);
+    expect(result.unjudged).toEqual([second.jti]);
+    expect(memory.checkAndRecord(second.jti as string, MIN_REPLAY_WINDOW_MS), 'the unjudged jti was recorded').toBe(true);
   });
 
   it('a JWKS failure during a poll aborts it; no provider is a local AuthError', async () => {

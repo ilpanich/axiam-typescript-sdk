@@ -245,6 +245,14 @@ export interface SsfPollResult {
   moreAvailable: boolean;
   /** The SETs that did not verify. */
   refused: RefusedSet[];
+  /**
+   * The `jti`s of SETs this poll could not judge — the JWKS or discovery
+   * fetch failed, or the replay store could not answer (§34.2 P1, P3). They
+   * are in neither `events` nor `refused` and were **not** recorded:
+   * acknowledge them not, refuse them not, and the transmitter offers them
+   * again. Empty when every SET was judged.
+   */
+  unjudged: string[];
 }
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -398,9 +406,16 @@ export class SsfReceiver {
    * Retried per §16 on a transport failure, `408`, `429` or `5xx`; never on
    * another `4xx` (`400` is a `ValidationError`, `404` a `NotFoundError`). A
    * SET whose verified `jti` differs from the key it was returned under is
-   * refused `invalid_request`; a non-string SET `malformed`. A JWKS fetch
-   * failure aborts the poll with that error rather than refusing SETs it
-   * could not judge.
+   * refused `invalid_request`; a non-string SET `malformed`.
+   *
+   * **A SET it cannot judge is never recorded** (contract 1.59, §34.2 P1). A
+   * JWKS or discovery fetch that fails, or a replay store that throws, is no
+   * verdict: that SET goes in neither `events` nor `refused` but in
+   * `unjudged`, its `jti` unrecorded, so the transmitter offers it again. The
+   * SETs judged before and after it are returned as usual — the ones in
+   * `events` are recorded and must be processed and acknowledged, or they are
+   * lost. When the poll accepted no SET at all, nothing was recorded and the
+   * first such failure is thrown instead (a `NetworkError` for a failed fetch).
    *
    * @throws AuthError (local, no request) when no `accessTokenProvider` was configured.
    */
@@ -458,7 +473,13 @@ export class SsfReceiver {
       }
     }
     const record = isPlainObject(reply) ? reply : {};
-    const result: SsfPollResult = { events: [], moreAvailable: record.moreAvailable === true, refused: [] };
+    const result: SsfPollResult = {
+      events: [],
+      moreAvailable: record.moreAvailable === true,
+      refused: [],
+      unjudged: [],
+    };
+    let firstFailure: { error: unknown } | undefined;
     const sets = isPlainObject(record.sets) ? record.sets : {};
     for (const [jti, set] of Object.entries(sets)) {
       if (typeof set !== 'string') {
@@ -468,10 +489,20 @@ export class SsfReceiver {
       try {
         result.events.push(await this.#verify(set, jti));
       } catch (err) {
-        if (err instanceof SetRefusedError) result.refused.push({ jti, reason: err.reason });
-        else throw err;
+        if (err instanceof SetRefusedError) {
+          result.refused.push({ jti, reason: err.reason });
+        } else {
+          // §34.2 P1: no verdict, so not recorded (#verify records only after
+          // steps 1 – 8 passed and the store answered). Keep judging the rest:
+          // a SET already accepted in this batch is recorded and must be
+          // returned, never dropped by a throw.
+          result.unjudged.push(jti);
+          firstFailure ??= { error: err };
+        }
       }
     }
+    // Nothing accepted means nothing recorded: raising loses no event.
+    if (firstFailure && result.events.length === 0) throw firstFailure.error;
     return result;
   }
 

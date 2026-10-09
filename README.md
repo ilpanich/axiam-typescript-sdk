@@ -2239,7 +2239,12 @@ signature, `iss`, `aud`, the SET claim rules (no `exp`/`sub`; `jti`, `iat`, `sub
 event) and replay. A refusal is a `SetRefusedError` (an `AuthError`) with a typed `reason`;
 `pushErrorCode` maps `malformed`, `invalid_type` and `replayed` to `invalid_request`, the
 others to themselves. **A SET that verifies has been recorded**: acknowledge it once
-processed, or a re-offer reads as `replayed`. `poll` never acknowledges anything itself, is
+processed, or a re-offer reads as `replayed`. **`poll` never keeps a `jti` it does not
+return** (contract 1.59, §34.2 P1): a SET it cannot judge — the JWKS or discovery fetch
+failed, or the replay store threw — is left unrecorded and listed by `jti` in `unjudged`
+(neither acknowledge nor refuse it; the transmitter offers it again), while the SETs judged
+in the same batch are returned as usual. When a poll accepts no SET at all it records
+nothing and throws that failure instead. `poll` never acknowledges anything itself, is
 not retried on a `4xx`, and sends no SDK cookie or session token.
 
 ## CIBA (`axiam-sdk/node`, contract 1.58, §33)
