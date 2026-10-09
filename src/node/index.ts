@@ -83,6 +83,16 @@ export {
   UMA_CLAIM_TOKEN_FORMAT,
   umaParseChallenge,
   umaChallengeHeader,
+  // §33 CIBA (contract 1.58).
+  CIBA_GRANT_TYPE,
+  CIBA_SLOW_DOWN_INCREMENT_SECS,
+  CibaRequestSigner,
+  DEFAULT_CIBA_INTERVAL_SECS,
+  isAccessDenied,
+  isExpiredToken,
+  SIGNED_REQUEST_LIFETIME_SECS,
+  type CibaSignerDescription,
+  type CibaSigningKey,
 } from './oidc.js';
 export type {
   AuthorizationRequest,
@@ -111,6 +121,16 @@ export type {
   // §26 pushed authorization requests (RFC 9126).
   OidcParParams,
   PushedAuthorizationRequest,
+  // §33 CIBA (contract 1.58).
+  CibaAwaitParams,
+  CibaClock,
+  CibaDelivery,
+  CibaInitiateParams,
+  CibaInitiateResponse,
+  CibaPingHeaders,
+  CibaPollParams,
+  CibaSigningAlg,
+  CibaUserHint,
   DeviceLoginParams,
   DevicePollParams,
   ExchangedToken,
@@ -171,6 +191,29 @@ export {
   type VerifyWebhookOptions,
   type WebhookVerifyFailureReason,
 } from './webhook.js';
+// CONTRACT.md §32.7 (contract 1.56) — the SSF receiver helper. Node-only:
+// node:crypto's Ed25519 verifies the SETs.
+export {
+  JWKS_REFETCH_INTERVAL_MS,
+  MemoryReplayStore,
+  MIN_REPLAY_WINDOW_MS,
+  pushErrorCode,
+  SetRefusedError,
+  setErrFromReason,
+  SSF_EVENT_TYPES,
+  SsfReceiver,
+} from './ssf.js';
+export type {
+  AccessTokenProvider,
+  RefusedSet,
+  ReplayStore,
+  SecurityEvent,
+  SetErr,
+  SetFailureReason,
+  SsfPollOptions,
+  SsfPollResult,
+  SsfReceiverConfig,
+} from './ssf.js';
 // Re-exported here (mirroring amqp/index.ts) so `verifyWebhook`'s required
 // `Sensitive<string>` secret can be constructed from this same subpath
 // import, without a second import from the root entry.

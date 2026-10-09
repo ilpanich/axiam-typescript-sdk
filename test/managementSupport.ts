@@ -69,7 +69,7 @@ export function mountJson(
   status: number,
   body: unknown,
 ): void {
-  const verb = method.toLowerCase() as 'get' | 'post' | 'put' | 'delete';
+  const verb = method.toLowerCase() as 'get' | 'post' | 'put' | 'patch' | 'delete';
   target.use(
     http[verb](`${BASE_URL}${path}`, () =>
       body === undefined
@@ -119,4 +119,56 @@ export function expectedSurface(): string[] {
     for (const operation of Object.keys(def.operations)) out.push(`${namespace}.${operation}`);
   }
   return out.sort();
+}
+
+/**
+ * The same authenticated client with §16 retry **enabled** — for the "a write
+ * is not retried" tests, which prove nothing against a client that never
+ * retries anything (contract 1.54–1.58 required tests).
+ */
+export function retryingManagementClient(): AxiamClient {
+  const client = new AxiamClient({ baseUrl: BASE_URL, tenantId: TENANT_ID, orgId: ORG_ID });
+  client.session.authenticated = true;
+  return client;
+}
+
+/** One request a {@link capture} handler saw. */
+export interface CapturedRequest {
+  /** The query string, without `?`. */
+  query: string;
+  /** The raw body text (empty when none was sent). */
+  text: string;
+  /** The body parsed as JSON, or `undefined` when there was none. */
+  json: unknown;
+}
+
+/**
+ * Mount `method path` answering `status` / `body`, recording every request.
+ * `path` is relative to {@link BASE_URL}.
+ */
+export function capture(
+  target: ReturnType<typeof mockServer>,
+  method: string,
+  path: string,
+  status: number,
+  body?: unknown,
+): CapturedRequest[] {
+  const seen: CapturedRequest[] = [];
+  const verb = method.toLowerCase() as 'get' | 'post' | 'put' | 'patch' | 'delete';
+  target.use(
+    http[verb](`${BASE_URL}${path}`, async ({ request }) => {
+      const text = await request.text();
+      let json: unknown;
+      try {
+        json = text ? JSON.parse(text) : undefined;
+      } catch {
+        json = undefined;
+      }
+      seen.push({ query: new URL(request.url).search.replace(/^\?/, ''), text, json });
+      return body === undefined
+        ? new HttpResponse(null, { status })
+        : HttpResponse.json(body as Record<string, unknown>, { status });
+    }),
+  );
+  return seen;
 }

@@ -26,6 +26,7 @@
 //   * §12.4 signature verification            → node/jwks.ts's verifier;
 //   * §7/§12.5 redaction                      → core/sensitive.ts.
 
+import { randomBytes, timingSafeEqual, type KeyObject } from 'node:crypto';
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import {
   AuthError,
@@ -34,9 +35,13 @@ import {
   mapHttpStatusToError,
   NetworkError,
   OAuthProtocolError,
+  oauth2ErrorFromBody,
   sanitizeAxiosError,
   Sensitive,
 } from '../core/index.js';
+import { ValidationError } from '../management/errors.js';
+import { retryableNetworkError, statusIsRetryable } from '../rest/bareTransport.js';
+import { withRetry } from '../rest/retry.js';
 import type { SharedSession } from '../rest/session.js';
 import { createJwksVerifier, type JwksVerifier } from './jwks.js';
 import type { IdTokenClaims } from './oidcIdToken.js';
@@ -94,6 +99,13 @@ import type {
   OidcParParams,
   PushedAuthorizationRequest,
   PushedAuthorizationResponseWire,
+  CibaAwaitParams,
+  CibaClock,
+  CibaInitiateParams,
+  CibaInitiateResponse,
+  CibaPingHeaders,
+  CibaPollParams,
+  CibaSigningAlg,
 } from './oidcTypes.js';
 
 /** Path of the OIDC discovery document, relative to the client base URL. */
@@ -583,6 +595,227 @@ export function assertUsableMtlsAlias(alias: string, replaces: string | undefine
         'falling back to the top-level endpoint.',
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// §33 CIBA — module-level definitions (contract 1.58)
+// ---------------------------------------------------------------------------
+
+/** `grant_type` of the CIBA token request (CIBA Core §10.1). */
+export const CIBA_GRANT_TYPE = 'urn:openid:params:grant-type:ciba';
+
+/** The interval used when the initiate response carries none (§33.7 rule 2). */
+export const DEFAULT_CIBA_INTERVAL_SECS = 5;
+
+/** Seconds added to the interval per `slow_down`, permanently and cumulatively (§33.7 rule 3). */
+export const CIBA_SLOW_DOWN_INCREMENT_SECS = 5;
+
+/** The lifetime of a signed request this SDK mints: five minutes, inside the server's sixty-minute bound on `exp − nbf` (§33.2). */
+export const SIGNED_REQUEST_LIFETIME_SECS = 300;
+
+const CIBA_SIGNING_ALGS: ReadonlySet<string> = new Set(['PS256', 'ES256', 'EdDSA']);
+
+/**
+ * The `NetworkError`s `cibaAwait` may wait out (§33.7 rule 5): a transport
+ * failure, or a `408` / `429` / `5xx` that survived §16's retries inside
+ * `cibaPoll`. A bodiless `400` is a `NetworkError` too (§2), but a decisive
+ * one, and is not in here.
+ */
+const TRANSIENT_POLL_FAILURES = new WeakSet<NetworkError>();
+
+function transient(error: NetworkError): NetworkError {
+  TRANSIENT_POLL_FAILURES.add(error);
+  return error;
+}
+
+/** The real clock: `Date.now` and `setTimeout`. */
+const SYSTEM_CIBA_CLOCK: CibaClock = { now: () => Date.now(), sleep };
+
+/**
+ * Whether `err` is the `access_denied` answer — at a CIBA (or device) poll,
+ * the user refused (§33.4). Distinct from {@link isExpiredToken}.
+ */
+export function isAccessDenied(err: unknown): err is OAuthProtocolError {
+  return err instanceof OAuthProtocolError && err.error === 'access_denied';
+}
+
+/**
+ * Whether `err` is the `expired_token` answer — nobody decided in time. Raised
+ * by the server, and locally by `cibaAwait` when it reaches the request's
+ * deadline (§33.4, §33.7 rule 4).
+ */
+export function isExpiredToken(err: unknown): err is OAuthProtocolError {
+  return err instanceof OAuthProtocolError && err.error === 'expired_token';
+}
+
+function cibaRefusal(operation: string, field: string, message: string): ValidationError {
+  return new ValidationError(operation, 400, `${operation}: ${field}: ${message} (CONTRACT.md §33)`, [
+    { field, message },
+  ]);
+}
+
+/** What a {@link CibaRequestSigner} renders as: the algorithm and `kid`, never the key. */
+export interface CibaSignerDescription {
+  /** The algorithm the signer signs under. */
+  alg: CibaSigningAlg;
+  /** The `kid` it puts in the JWS header, if any. */
+  kid?: string;
+}
+
+/** The signing key a {@link CibaRequestSigner} accepts: a PKCS#8 PEM, or a private `KeyObject` / `CryptoKey`. */
+export type CibaSigningKey = Sensitive<string> | KeyObject | CryptoKey;
+
+const NODE_INSPECT_CUSTOM = Symbol.for('nodejs.util.inspect.custom');
+
+/**
+ * The key and algorithm for CIBA's signed request form (§33.2, CIBA Core
+ * §7.1.1). Both are the caller's: there is no default for either, and the SDK
+ * signs under exactly the algorithm given — the one the client registered as
+ * `backchannel_authentication_request_signing_alg`.
+ *
+ * @remarks
+ * Signing uses `jose` (PS256, ES256 and EdDSA). The key is held privately and
+ * appears in no rendering: `String()`, `JSON.stringify` and `util.inspect` show
+ * the algorithm and `kid` only.
+ */
+export class CibaRequestSigner {
+  readonly #alg: CibaSigningAlg;
+  readonly #key: Sensitive<KeyObject | CryptoKey>;
+  readonly #kid: string | undefined;
+
+  private constructor(alg: CibaSigningAlg, key: KeyObject | CryptoKey, kid: string | undefined) {
+    this.#alg = alg;
+    this.#key = new Sensitive(key);
+    this.#kid = kid;
+  }
+
+  /**
+   * A signer from a private key and the algorithm it signs under.
+   *
+   * @param alg `PS256`, `ES256` or `EdDSA` — required, never defaulted.
+   * @param key a PKCS#8 PEM (wrapped in `Sensitive`), or a private `KeyObject` / `CryptoKey`.
+   * @param kid the `kid` to put in the JWS header, if the client's JWKS names one.
+   * @throws ValidationError (local, before any request) when `alg` is not one
+   *   of the three, or the key is empty, not a private key, or one that cannot
+   *   sign under `alg` — proved by signing a probe.
+   */
+  static async create(alg: CibaSigningAlg, key: CibaSigningKey, kid?: string): Promise<CibaRequestSigner> {
+    const refuse = (): ValidationError =>
+      cibaRefusal(
+        'ciba_initiate',
+        'signing_key',
+        'the key is not a private key that signs under the given algorithm (PS256, ES256 or EdDSA)',
+      );
+    if (!CIBA_SIGNING_ALGS.has(alg)) throw refuse();
+    const jose = await import('jose');
+    let material: KeyObject | CryptoKey;
+    try {
+      if (key instanceof Sensitive) {
+        const pem = key.expose();
+        if (typeof pem !== 'string' || pem.trim() === '') throw new Error('empty');
+        material = (await jose.importPKCS8(pem, alg)) as KeyObject | CryptoKey;
+      } else if (key && typeof key === 'object') {
+        material = key;
+      } else {
+        throw new Error('no key');
+      }
+      // A key that parses is not yet a key for this algorithm: prove it signs.
+      await new jose.SignJWT({ probe: true }).setProtectedHeader({ alg }).sign(material);
+    } catch {
+      throw refuse();
+    }
+    return new CibaRequestSigner(alg, material, kid);
+  }
+
+  /** The algorithm this signer uses. */
+  get alg(): CibaSigningAlg {
+    return this.#alg;
+  }
+
+  /** The `kid` it puts in the header, if any. */
+  get kid(): string | undefined {
+    return this.#kid;
+  }
+
+  /** @internal — sign `claims` as a compact JWS under this signer's algorithm. */
+  async sign(claims: Record<string, unknown>): Promise<Sensitive<string>> {
+    const jose = await import('jose');
+    const header: { alg: string; kid?: string } = { alg: this.#alg };
+    if (this.#kid !== undefined) header.kid = this.#kid;
+    return new Sensitive(await new jose.SignJWT(claims).setProtectedHeader(header).sign(this.#key.expose()));
+  }
+
+  /** `CibaRequestSigner(<alg>)` — never the key. */
+  toString(): string {
+    return `CibaRequestSigner(${this.#alg})`;
+  }
+
+  /** `{ alg, kid }` — never the key. */
+  toJSON(): CibaSignerDescription {
+    return { alg: this.#alg, ...(this.#kid !== undefined ? { kid: this.#kid } : {}) };
+  }
+
+  /** The same as {@link toJSON}, for `console.log` / `util.inspect`. */
+  [NODE_INSPECT_CUSTOM](): string {
+    return `CibaRequestSigner ${JSON.stringify(this.toJSON())}`;
+  }
+}
+
+/** The plain form's authentication-request members, exactly those set (§33.2). */
+function cibaMembers(params: CibaInitiateParams): Array<[string, string]> {
+  const out: Array<[string, string]> = [['scope', params.scope]];
+  if (params.loginHint !== undefined) out.push(['login_hint', params.loginHint]);
+  if (params.idTokenHint !== undefined) out.push(['id_token_hint', params.idTokenHint]);
+  if (params.bindingMessage !== undefined) out.push(['binding_message', params.bindingMessage]);
+  if (params.requestedExpiry !== undefined) out.push(['requested_expiry', String(params.requestedExpiry)]);
+  if (params.acrValues !== undefined) out.push(['acr_values', params.acrValues]);
+  if (params.resource !== undefined) out.push(['resource', params.resource]);
+  if (params.delivery?.mode === 'ping') {
+    out.push(['client_notification_token', params.delivery.clientNotificationToken.expose()]);
+  }
+  return out;
+}
+
+/** Parse a response body axios left as text; `undefined` when it is not JSON. */
+function jsonBody(data: unknown): unknown {
+  if (typeof data !== 'string') return data;
+  try {
+    return JSON.parse(data);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Map a non-2xx `/oauth2/*` answer: `error` at any status is an `OAuthProtocolError` (§33.4); otherwise §2. */
+function cibaError(operation: string, response: AxiosResponse): AxiamError {
+  return (
+    oauth2ErrorFromBody(jsonBody(response.data)) ??
+    mapHttpStatusToError(response.status, `${operation}: HTTP ${response.status}`)
+  );
+}
+
+/** The `Authorization` header values of a ping, in any accepted header shape. */
+function authorizationValues(headers: CibaPingHeaders): string[] {
+  const out: string[] = [];
+  const isAuth = (name: unknown): boolean => typeof name === 'string' && name.toLowerCase() === 'authorization';
+  if (Array.isArray(headers) && headers.every((h) => typeof h === 'string')) {
+    // Node's rawHeaders: [name, value, name, value, …].
+    const flat = headers as readonly string[];
+    for (let i = 0; i + 1 < flat.length; i += 2) if (isAuth(flat[i])) out.push(flat[i + 1]!);
+    return out;
+  }
+  if (headers !== null && typeof headers === 'object' && Symbol.iterator in headers) {
+    for (const entry of headers as Iterable<readonly [string, string]>) {
+      if (Array.isArray(entry) && isAuth(entry[0])) out.push(String(entry[1]));
+    }
+    return out;
+  }
+  for (const [name, value] of Object.entries(headers as Record<string, string | readonly string[] | undefined>)) {
+    if (!isAuth(name) || value === undefined) continue;
+    if (Array.isArray(value)) out.push(...(value as readonly string[]).map(String));
+    else out.push(String(value));
+  }
+  return out;
 }
 
 /**
@@ -1911,6 +2144,328 @@ export class OidcClient {
     );
   }
 
+  // -------------------------------------------------------------------------
+  // §33 CIBA — client-initiated backchannel authentication (contract 1.58)
+  //
+  // On this handle because §33.6 puts them beside `oidcExchange` and
+  // `deviceAuthorize`. The client always authenticates — by its
+  // `clientSecret` (client_secret_post) or, for a `tls_client_auth` client,
+  // by the session's §6.1 client certificate (`client_id` only); a client
+  // with neither is refused locally. `private_key_jwt` client authentication
+  // is not implemented by this SDK (§21.8 is informative).
+  // -------------------------------------------------------------------------
+
+  /**
+   * `POST /oauth2/bc-authorize` (CIBA Core §7, CONTRACT.md §33.1) — ask AXIAM
+   * to authenticate a user **on another device**.
+   *
+   * @remarks
+   * Form-encoded; `tenant_id` in the query, never the body; the endpoint is
+   * discovery's `backchannel_authentication_endpoint`, or its
+   * `mtls_endpoint_aliases` entry on an mTLS call. Exactly the members set are
+   * sent — or, with `signer`, only client authentication and `request`, a JWS
+   * carrying every member (`requested_expiry` as a number) plus `iss` =
+   * `clientId`, `aud` = discovery `issuer`, `iat` = `nbf` = now, `exp` = now +
+   * 300 s and a fresh 128-bit `jti`.
+   *
+   * **Never retried** — not on a transport error, a `5xx` or a `429` (§33.7
+   * rule 1): every accepted call stores a request and may notify a person. On
+   * a lost answer, let it expire and ask again deliberately.
+   *
+   * **A success proves nothing about the user** (§33.3 rule 4): AXIAM answers
+   * a hint naming nobody, a locked user and a real one identically.
+   *
+   * @throws AuthError (local) when the client has no credential, or the
+   *   server advertises no CIBA endpoint.
+   * @throws ValidationError (local) for both or neither hint, or a ping-mode
+   *   request without a non-empty `clientNotificationToken`.
+   * @throws OAuthProtocolError for a body carrying `error`, at any status —
+   *   `invalid_binding_message` with its description, a `429`
+   *   `rate_limit_exceeded`; otherwise §2 (`503` is `NetworkError`).
+   */
+  async cibaInitiate(params: CibaInitiateParams): Promise<CibaInitiateResponse> {
+    const operation = 'ciba_initiate';
+    const auth = this.#cibaClientAuth(operation);
+    const hasLogin = typeof params.loginHint === 'string';
+    const hasIdToken = typeof params.idTokenHint === 'string';
+    if (hasLogin === hasIdToken) {
+      throw cibaRefusal(operation, 'login_hint', 'set exactly one of loginHint and idTokenHint');
+    }
+    if (params.delivery?.mode === 'ping') {
+      const token = params.delivery.clientNotificationToken;
+      if (!(token instanceof Sensitive) || typeof token.expose() !== 'string' || token.expose() === '') {
+        throw cibaRefusal(
+          operation,
+          'client_notification_token',
+          'a ping-mode request needs a non-empty clientNotificationToken: without one AXIAM has nothing to ping with',
+        );
+      }
+    }
+    const configuration = params.configuration ?? (await this.oidcDiscover());
+    const endpoint = this.#optionalEndpoint(configuration, 'backchannel_authentication_endpoint');
+    if (!endpoint) {
+      throw new AuthError(
+        "the authorization server's discovery document advertises no backchannel_authentication_endpoint: " +
+          'this server does not support CIBA (CONTRACT.md §33.1)',
+      );
+    }
+    const url = this.#endpointUrl(endpoint, params.tenantId);
+
+    const form = new URLSearchParams();
+    form.set('client_id', auth.clientId);
+    if (auth.clientSecret !== undefined) form.set('client_secret', auth.clientSecret);
+    if (params.signer) {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const claims: Record<string, unknown> = {};
+      for (const [k, v] of cibaMembers(params)) claims[k] = v;
+      if (params.requestedExpiry !== undefined) claims.requested_expiry = params.requestedExpiry;
+      claims.iss = auth.clientId;
+      claims.aud = configuration.issuer;
+      claims.iat = nowSec;
+      claims.nbf = nowSec;
+      claims.exp = nowSec + SIGNED_REQUEST_LIFETIME_SECS;
+      claims.jti = randomBytes(16).toString('hex');
+      const request = await params.signer.sign(claims);
+      form.set('request', request.expose());
+    } else {
+      for (const [k, v] of cibaMembers(params)) form.set(k, v);
+    }
+
+    // One request, whatever happens to it (§33.7 rule 1).
+    const response = await this.#postCibaForm(url, form, operation);
+    if (response.status < 200 || response.status >= 300) throw cibaError(operation, response);
+    const data = jsonBody(response.data) as { auth_req_id?: unknown; expires_in?: unknown; interval?: unknown } | undefined;
+    if (!data || typeof data.auth_req_id !== 'string' || typeof data.expires_in !== 'number') {
+      throw new NetworkError('ciba_initiate: the response is not a CibaInitiateResponse');
+    }
+    return {
+      authReqId: new Sensitive(data.auth_req_id),
+      expiresIn: data.expires_in,
+      interval: typeof data.interval === 'number' && data.interval > 0 ? data.interval : DEFAULT_CIBA_INTERVAL_SECS,
+      receivedAt: Date.now(),
+    };
+  }
+
+  /**
+   * `POST /oauth2/token` with `grant_type=urn:openid:params:grant-type:ciba`
+   * (CIBA Core §10.1, CONTRACT.md §33.1) — **one** token request.
+   *
+   * @remarks
+   * The answers of §33.3 rule 6 surface as {@link OAuthProtocolError}:
+   * `authorization_pending` and `slow_down` (non-terminal), `access_denied` and
+   * `expired_token` (terminal and distinct — {@link isAccessDenied},
+   * {@link isExpiredToken}), `invalid_grant`, `rate_limit_exceeded`. None of
+   * them is retried. A transport failure, `5xx`, `408` or bodiless `429` is
+   * retried per §16 within the call; no other `4xx` is.
+   *
+   * A `200` is the §12 token set; its ID token is validated as for every other
+   * grant (no nonce). **Store the returned tokens before anything else**: a
+   * request is redeemed once, and a second `cibaPoll` for it is
+   * `invalid_grant` (§33.7 rule 7). The tokens are returned, never adopted as
+   * this client's credential.
+   */
+  async cibaPoll(params: CibaPollParams): Promise<OidcTokenSet> {
+    const operation = 'ciba_poll';
+    const auth = this.#cibaClientAuth(operation);
+    const configuration = params.configuration ?? (await this.oidcDiscover());
+    const url = this.#endpointUrl(this.#requiredEndpoint(configuration, 'token_endpoint'), params.tenantId);
+    const form = new URLSearchParams();
+    form.set('grant_type', CIBA_GRANT_TYPE);
+    form.set('auth_req_id', params.authReqId.expose());
+    form.set('client_id', auth.clientId);
+    if (auth.clientSecret !== undefined) form.set('client_secret', auth.clientSecret);
+
+    const outcome = await withRetry<{ wire?: TokenResponseWire; error?: AxiamError }>(
+      async () => {
+        const response = await this.#postCibaForm(url, form, operation);
+        if (response.status >= 200 && response.status < 300) {
+          // §33.7 rule 7: consume the 200 before anything else — and a body
+          // that does not parse is not retried, since the server may already
+          // have redeemed the request.
+          const wire = jsonBody(response.data) as TokenResponseWire | undefined;
+          if (!wire || typeof wire.access_token !== 'string') {
+            return { error: new NetworkError('ciba_poll: the response is not a TokenResponse') };
+          }
+          return { wire };
+        }
+        const protocol = oauth2ErrorFromBody(jsonBody(response.data));
+        if (protocol) return { error: protocol }; // decisive, never retried
+        if (statusIsRetryable(response.status)) {
+          throw transient(retryableNetworkError(`${operation}: HTTP ${response.status}`, response));
+        }
+        return { error: mapHttpStatusToError(response.status, `${operation}: HTTP ${response.status}`) };
+      },
+      {
+        idempotent: true,
+        operation,
+        enabled: this.#session.retryEnabled,
+        telemetry: this.#session.telemetry.dispatcher,
+      },
+    );
+    if (outcome.error) throw outcome.error;
+    return this.#toTokenSet(outcome.wire as TokenResponseWire, configuration, undefined);
+  }
+
+  /**
+   * Poll for `initiated`'s outcome until it is decided or expires (§33.1,
+   * §33.7). Surfaces nothing to the user — AXIAM notified them.
+   *
+   * @remarks
+   * - The first poll waits one `interval` (the response's, or 5 s); polling
+   *   earlier only earns `slow_down` and a longer wait.
+   * - `slow_down` adds 5 s to the interval, cumulatively and permanently;
+   *   `authorization_pending` never lowers it.
+   * - `rate_limit_exceeded`, and a transport failure or `5xx` that outlived
+   *   §16's retries inside {@link cibaPoll}, are not terminal: the loop waits
+   *   the interval and polls again.
+   * - Polling stops at `receivedAt + expiresIn`, even if the server has not
+   *   said `expired_token`: when the next wait would reach the deadline, the
+   *   same `expired_token` is raised locally, without a request.
+   * - `access_denied`, `expired_token`, `invalid_grant` and any other answer
+   *   end the loop.
+   *
+   * Returns the token set without adopting it as this client's credential —
+   * the posture of `deviceLogin` and `loginClientCredentials`.
+   *
+   * **Ping mode:** do not loop. Answer the ping (`cibaHandlePing`) with `204`,
+   * then call {@link cibaPoll} once — and once more at `interval` if that
+   * answered `authorization_pending` or `slow_down`. Fall back to this loop
+   * once half of `expiresIn` has passed without a ping: a ping is delivered at
+   * least once, never exactly once, and may not arrive at all (§33.7 rule 6).
+   */
+  async cibaAwait(initiated: CibaInitiateResponse, params: CibaAwaitParams = {}): Promise<OidcTokenSet> {
+    const clock = params.clock ?? SYSTEM_CIBA_CLOCK;
+    const configuration = params.configuration ?? (await this.oidcDiscover());
+    const deadline = initiated.receivedAt + initiated.expiresIn * 1000;
+    let interval = initiated.interval > 0 ? initiated.interval : DEFAULT_CIBA_INTERVAL_SECS;
+    for (;;) {
+      const waitMs = interval * 1000;
+      if (clock.now() + waitMs >= deadline) {
+        throw new OAuthProtocolError(
+          'expired_token',
+          'the CIBA request expired before it was decided (client-side deadline from expires_in; CONTRACT.md §33.7 rule 4)',
+        );
+      }
+      await clock.sleep(waitMs);
+      try {
+        return await this.cibaPoll({
+          authReqId: initiated.authReqId,
+          configuration,
+          ...(params.tenantId !== undefined ? { tenantId: params.tenantId } : {}),
+        });
+      } catch (err) {
+        if (err instanceof OAuthProtocolError) {
+          if (err.error === 'authorization_pending' || err.error === 'rate_limit_exceeded') continue;
+          if (err.error === 'slow_down') {
+            interval += CIBA_SLOW_DOWN_INCREMENT_SECS; // cumulative, never reset
+            continue;
+          }
+          throw err;
+        }
+        if (err instanceof NetworkError && TRANSIENT_POLL_FAILURES.has(err)) continue;
+        throw err;
+      }
+    }
+  }
+
+  /**
+   * Check a ping AXIAM delivered to your notification endpoint and return the
+   * `auth_req_id` it names (CIBA Core §10.2, CONTRACT.md §33.1). **No I/O.**
+   *
+   * @param headers the request's headers — prefer Node's `req.rawHeaders`,
+   *   which keeps a duplicated `Authorization` that `req.headers` drops.
+   * @param body the raw body (`string` / `Uint8Array`) or an already-parsed object.
+   * @param expectedToken the `clientNotificationToken` you sent with the request.
+   *
+   * @remarks
+   * 1. Exactly one `Authorization` header, `Bearer` (any case), one space, and
+   *    the token — compared in constant time (`crypto.timingSafeEqual`).
+   *    Otherwise `AuthError`, whose message names no value.
+   * 2. A JSON object with a non-empty string `auth_req_id`; any other member
+   *    is ignored. Otherwise a local `ValidationError`.
+   *
+   * It neither answers the HTTP request nor calls the token endpoint: answer
+   * `204` as soon as this returns, **then** {@link cibaPoll} — AXIAM retries a
+   * ping that is not answered quickly, and the ping says only that the
+   * request was decided, never how. Nor does it check that the `auth_req_id`
+   * is one you issued: the token endpoint answers `invalid_grant` for any
+   * other.
+   */
+  cibaHandlePing(
+    headers: CibaPingHeaders,
+    body: string | Uint8Array | Record<string, unknown>,
+    expectedToken: Sensitive<string>,
+  ): Sensitive<string> {
+    const refused = (): AuthError =>
+      new AuthError('ciba ping refused: the Authorization header is not the expected bearer (CONTRACT.md §33.1)');
+    const values = authorizationValues(headers);
+    if (values.length !== 1) throw refused();
+    const value = values[0]!;
+    const space = value.indexOf(' ');
+    if (space < 0) throw refused();
+    const scheme = value.slice(0, space);
+    const token = value.slice(space + 1);
+    if (scheme.toLowerCase() !== 'bearer' || token === '') throw refused();
+    const expected = expectedToken instanceof Sensitive ? expectedToken.expose() : undefined;
+    if (typeof expected !== 'string' || expected === '') throw refused();
+    if (!constantTimeEqual(token, expected)) throw refused();
+
+    let parsed: unknown = body;
+    if (typeof body === 'string' || body instanceof Uint8Array) {
+      try {
+        parsed = JSON.parse(typeof body === 'string' ? body : Buffer.from(body).toString('utf8'));
+      } catch {
+        throw cibaRefusal('ciba_handle_ping', 'body', 'the ping body is not JSON');
+      }
+    }
+    const id =
+      parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>).auth_req_id
+        : undefined;
+    if (typeof id !== 'string' || id === '') {
+      throw cibaRefusal('ciba_handle_ping', 'auth_req_id', 'the ping body carries no non-empty auth_req_id string');
+    }
+    return new Sensitive(id);
+  }
+
+  /** The client's credential for the CIBA calls (§33.1): never anonymous. */
+  #cibaClientAuth(operation: string): { clientId: string; clientSecret?: string } {
+    const secret = this.#options.clientSecret;
+    if (secret !== undefined) {
+      return { clientId: this.#options.clientId, clientSecret: exposeSecret(secret) };
+    }
+    if (this.#session.presentsClientCertificate) {
+      // tls_client_auth: the certificate is the credential; client_id only.
+      return { clientId: this.#options.clientId };
+    }
+    throw new AuthError(
+      `${operation} requires client authentication: a CIBA client is never public — construct the OidcClient ` +
+        'with a clientSecret, or the session with a §6.1 client certificate (CONTRACT.md §33.1)',
+    );
+  }
+
+  /**
+   * POST a CIBA form through the session transport (§5 `X-Tenant-ID`, §6 TLS)
+   * with every status resolved, so the CIBA error mapping — `error` at any
+   * status, §33.4 — decides, and a `401` never enters the §9 guard. A transport
+   * failure becomes a `NetworkError` that carries no axios cause: its `config`
+   * holds the form, and the form holds the client secret.
+   */
+  async #postCibaForm(url: string, form: URLSearchParams, operation: string): Promise<AxiosResponse<unknown>> {
+    try {
+      return await this.#session.axios.post<unknown>(url, form.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        validateStatus: () => true,
+      });
+    } catch (err) {
+      const code =
+        err && typeof err === 'object' && typeof (err as { code?: unknown }).code === 'string'
+          ? ` (${(err as { code: string }).code})`
+          : '';
+      throw transient(new NetworkError(`${operation}: the request failed before any response arrived${code}`));
+    }
+  }
+
   /** POST a form body to the token endpoint from the discovery document. */
   async #postToken(
     configuration: OidcConfiguration,
@@ -1978,7 +2533,7 @@ export class OidcClient {
    *     running `client_auth = optional` on one listener serves both
    *     populations at the conventional endpoints and correctly publishes
    *     nothing.
-   *   * It is keyed by {@link MtlsEndpointAliases}, so only the six aliasable
+   *   * It is keyed by {@link MtlsEndpointAliases}, so only the seven aliasable
    *     endpoints can reach it. `authorization_endpoint`,
    *     `end_session_endpoint` and `jwks_uri` are unrepresentable here rather
    *     than merely unused: they are front-channel or public, and an mTLS host
@@ -2024,7 +2579,10 @@ export class OidcClient {
    */
   #optionalEndpoint(
     configuration: OidcConfiguration,
-    name: 'device_authorization_endpoint' | 'pushed_authorization_request_endpoint',
+    name:
+      | 'device_authorization_endpoint'
+      | 'pushed_authorization_request_endpoint'
+      | 'backchannel_authentication_endpoint',
   ): string | undefined {
     return this.#aliasFor(configuration, name, configuration[name]) ?? configuration[name];
   }
@@ -2265,4 +2823,20 @@ function normalizeScope(scope: string | string[] | undefined): string {
  */
 export function createOidcClient(session: SharedSession, options: OidcClientOptions): OidcClient {
   return new OidcClient(session, options);
+}
+
+/**
+ * Constant-time string comparison for `cibaHandlePing` (§33.1 rule 1):
+ * `crypto.timingSafeEqual` over the UTF-8 bytes. A length mismatch is
+ * answered `false` after comparing the presented value with itself, so the
+ * time taken does not depend on where the two first differ.
+ */
+function constantTimeEqual(token: string, expectedToken: string): boolean {
+  const presented = Buffer.from(token, 'utf8');
+  const expected = Buffer.from(expectedToken, 'utf8');
+  if (presented.length !== expected.length) {
+    timingSafeEqual(presented, presented);
+    return false;
+  }
+  return timingSafeEqual(presented, expected);
 }

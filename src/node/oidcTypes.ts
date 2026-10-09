@@ -28,9 +28,10 @@ import type { IdTokenClaims } from './oidcIdToken.js';
 // ---------------------------------------------------------------------------
 
 /**
- * RFC 8705 §5 `mtls_endpoint_aliases` — the six endpoints re-based on the host
- * that performs the mutual-TLS handshake (wire schema `MtlsEndpointAliases`,
- * contract 1.40).
+ * RFC 8705 §5 `mtls_endpoint_aliases` — the seven endpoints re-based on the
+ * host that performs the mutual-TLS handshake (wire schema
+ * `MtlsEndpointAliases`, contract 1.40; the seventh, CIBA's
+ * `backchannel_authentication_endpoint`, contract 1.58).
  *
  * @remarks
  * A TLS listener decides whether to request a client certificate during the
@@ -39,14 +40,14 @@ import type { IdTokenClaims } from './oidcIdToken.js';
  * can do. A deployment wanting both runs two, and this object is how the second
  * one is named.
  *
- * Only these six are ever aliased. `authorization_endpoint` and
+ * Only these seven are ever aliased. `authorization_endpoint` and
  * `end_session_endpoint` are front-channel and `jwks_uri` is public, so
  * CONTRACT.md §21.3 rule 2 forbids synthesising an alias for any of them —
  * sending a browser to an mTLS host raises a native certificate-chooser dialog
  * most users cannot answer. `issuer` is not aliased either, and §10.1 rule 3
  * still compares `iss` against it by exact string.
  *
- * Every member is optional even though the server's schema marks all six
+ * Every member is optional even though the server's schema marks them
  * required. AXIAM builds them from one path through a shared macro and so
  * always publishes the complete set, but RFC 8705 §5 permits an OP to alias
  * fewer, and the shape of this member must never be why a client stops
@@ -67,6 +68,13 @@ export interface MtlsEndpointAliases {
   device_authorization_endpoint?: string;
   /** The mTLS pushed authorization request endpoint — RFC 9126 §2, which authenticates the client. */
   pushed_authorization_request_endpoint?: string;
+  /**
+   * The mTLS CIBA backchannel authentication endpoint — CIBA Core §7, which
+   * authenticates the client (contract 1.58, §21.3.1: the **seventh** alias;
+   * a `tls_client_auth` CIBA client has no other way to present its
+   * certificate on a two-listener deployment).
+   */
+  backchannel_authentication_endpoint?: string;
 }
 
 /**
@@ -164,6 +172,23 @@ export interface OidcConfiguration {
    * accepts.
    */
   token_endpoint_auth_signing_alg_values_supported?: string[];
+  /**
+   * CIBA Core §4 — the backchannel authentication endpoint `cibaInitiate`
+   * posts to (contract 1.58, §21.5, §33.1). Optional: its absence means the
+   * server does not support CIBA, and is an error at call time, never a cue
+   * to build `<issuer>/oauth2/bc-authorize` by concatenation.
+   */
+  backchannel_authentication_endpoint?: string;
+  /**
+   * CIBA Core §4 — the token delivery modes the server offers. AXIAM
+   * publishes `["poll", "ping"]`. A statement about the server: which mode a
+   * given client holds is its registration's answer.
+   */
+  backchannel_token_delivery_modes_supported?: string[];
+  /** CIBA Core §4 — AXIAM publishes `false`, and this SDK never sends a `user_code` (§33.3 rule 3). */
+  backchannel_user_code_parameter_supported?: boolean;
+  /** CIBA Core §4 — the algorithms a signed authentication request may use: `["PS256", "ES256", "EdDSA"]` (§33.2). */
+  backchannel_authentication_request_signing_alg_values_supported?: string[];
   /** Whether the OP sends back-channel logout tokens. */
   backchannel_logout_supported?: boolean;
   /** Whether those logout tokens carry `sid`. AXIAM always sends it. */
@@ -1111,3 +1136,148 @@ export interface RptResponseWire {
   token_type: string;
   expires_in: number;
 }
+
+// ---------------------------------------------------------------------------
+// §33 CIBA — client-initiated backchannel authentication (contract 1.58)
+// ---------------------------------------------------------------------------
+
+/**
+ * Whom `cibaInitiate` asks AXIAM to authenticate: **exactly one** hint
+ * (§33.2). The type makes both, or neither, unwritable; a JavaScript caller
+ * that builds one anyway is refused locally with a `ValidationError`.
+ * `login_hint_token` is not offered (§33.3 rule 3).
+ */
+export type CibaUserHint =
+  | {
+      /** A username, then an e-mail address, within the tenant. Personal data: never logged by the SDK. */
+      loginHint: string;
+      /** Not with `loginHint`. */
+      idTokenHint?: never;
+    }
+  | {
+      /** An ID token this deployment issued to this client; it names the user only. */
+      idTokenHint: string;
+      /** Not with `idTokenHint`. */
+      loginHint?: never;
+    };
+
+/**
+ * How the client receives the outcome, as it registered (§33.3 rule 1).
+ * Poll is the default; push is not offered (the server does not).
+ */
+export type CibaDelivery =
+  | {
+      /** The client polls the token endpoint (`cibaAwait`). */
+      mode: 'poll';
+    }
+  | {
+      /** AXIAM pings the client's registered notification endpoint, then the client polls once. */
+      mode: 'ping';
+      /**
+       * The bearer AXIAM presents at the ping; keep it to check the ping with
+       * `cibaHandlePing`. Required and non-empty (1–1 024 visible ASCII; at least
+       * 22 for a `fapi2` client). Never returned by AXIAM.
+       */
+      clientNotificationToken: Sensitive<string>;
+    };
+
+/** The algorithms a signed CIBA request may use (§33.2). */
+export type CibaSigningAlg = 'PS256' | 'ES256' | 'EdDSA';
+
+/**
+ * Arguments to `cibaInitiate` (§33.2 `CibaInitiateRequest`).
+ *
+ * Exactly the members set are sent. `bindingMessage` and `loginHint` can be
+ * personal data: the SDK never logs them. There is no parameter for
+ * `login_hint_token`, `user_code` or `request_uri` — AXIAM refuses each
+ * (§33.3 rule 3) — and no channel for any other form parameter.
+ */
+export type CibaInitiateParams = CibaUserHint & {
+  /** Space-separated; must include `openid` (the server checks; the SDK does not pre-validate, §33.3 rule 5). */
+  scope: string;
+  /** Shown to the user on the approval page — what lets them tell the request they started from an attacker's. Required for a `fapi2` client. */
+  bindingMessage?: string;
+  /** The requested lifetime in seconds, 30–600 (absent: 300). Sent as a string on the form, as a number inside a signed request. */
+  requestedExpiry?: number;
+  /** Space-separated authentication context classes. */
+  acrValues?: string;
+  /** RFC 8707 resource indicator. */
+  resource?: string;
+  /** Poll (default) or ping, as registered. */
+  delivery?: CibaDelivery;
+  /**
+   * Send the request as one signed JWT (`request`, CIBA Core §7.1.1) —
+   * required of a client that registered
+   * `backchannel_authentication_request_signing_alg`, refused from one that
+   * did not. Build it with `CibaRequestSigner.create`.
+   */
+  signer?: import('./oidc.js').CibaRequestSigner;
+  /** Tenant UUID for the `tenant_id` query parameter (§12.3 rule 4). */
+  tenantId?: string;
+  /** A pre-fetched discovery document. */
+  configuration?: OidcConfiguration;
+};
+
+/**
+ * `CibaInitiateResponse` (§33.2), plus when it was received.
+ *
+ * **A successful initiate proves nothing about the user** (§33.3 rule 4):
+ * AXIAM answers a hint that names nobody, a locked user and a real one
+ * identically. The only signal that a user did not answer is `expired_token`.
+ */
+export interface CibaInitiateResponse {
+  /** The request's id at the token endpoint — a bearer credential for the grant (§33.5). Never parse or length-check it. */
+  authReqId: Sensitive<string>;
+  /** The request's lifetime in seconds — authoritative (§33.7 rule 4). */
+  expiresIn: number;
+  /** The minimum seconds between token requests: the response's value, or 5 when it was absent or zero (§33.7 rule 2). */
+  interval: number;
+  /** When the response was received, in epoch milliseconds; `cibaAwait`'s deadline is this plus `expiresIn`. */
+  receivedAt: number;
+}
+
+/** Arguments to `cibaPoll`. */
+export interface CibaPollParams {
+  /** The `auth_req_id` from {@link CibaInitiateResponse} or a ping. */
+  authReqId: Sensitive<string>;
+  /** Tenant UUID for the `tenant_id` query parameter. */
+  tenantId?: string;
+  /** A pre-fetched discovery document. */
+  configuration?: OidcConfiguration;
+}
+
+/**
+ * The clock `cibaAwait` waits on — injectable so its schedule is testable
+ * without sleeping (§33.8 tests 6 and 7).
+ */
+export interface CibaClock {
+  /** The current time, epoch milliseconds. */
+  now(): number;
+  /** Wait `ms` milliseconds. */
+  sleep(ms: number): Promise<void>;
+}
+
+/** Arguments to `cibaAwait`. */
+export interface CibaAwaitParams {
+  /** Tenant UUID for the `tenant_id` query parameter. */
+  tenantId?: string;
+  /** A pre-fetched discovery document. */
+  configuration?: OidcConfiguration;
+  /** The clock to wait on; defaults to `Date.now` and `setTimeout`. */
+  clock?: CibaClock;
+}
+
+/**
+ * The request headers `cibaHandlePing` accepts, in whichever shape the HTTP
+ * framework hands them over:
+ *
+ * - Node's `req.rawHeaders` (a flat `[name, value, name, value, …]` array) —
+ *   **prefer it**: `req.headers` silently drops a duplicated `Authorization`,
+ *   which §33.1 requires refusing;
+ * - an iterable of `[name, value]` pairs (a fetch `Headers`, a `Map`);
+ * - a header record (`req.headers`), a value possibly an array.
+ */
+export type CibaPingHeaders =
+  | readonly string[]
+  | Iterable<readonly [string, string]>
+  | Record<string, string | readonly string[] | undefined>;

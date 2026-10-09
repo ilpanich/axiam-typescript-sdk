@@ -117,6 +117,12 @@ export {
   MIN_DISCOVERY_TTL_MS,
   OidcClient,
   type OidcClientOptions,
+  // §33 CIBA (contract 1.58): what `OidcClient`'s CIBA methods name and link to.
+  CibaRequestSigner,
+  isAccessDenied,
+  isExpiredToken,
+  type CibaSignerDescription,
+  type CibaSigningKey,
 } from '../node/oidc.js';
 // §10.4's poller (contract 1.44). `AuthzVerifiableSession.revocationFeed` names
 // this type, so it must be reachable from this entry point for the same reason
@@ -171,6 +177,16 @@ export type {
   RequestingPartyToken,
   ResourceSet,
   UmaExchangeTicketParams,
+  // §33 CIBA (contract 1.58), same rationale.
+  CibaAwaitParams,
+  CibaClock,
+  CibaDelivery,
+  CibaInitiateParams,
+  CibaInitiateResponse,
+  CibaPingHeaders,
+  CibaPollParams,
+  CibaSigningAlg,
+  CibaUserHint,
 } from '../node/oidcTypes.js';
 // Value exports the same methods' documentation links to: the §12.1 note 10
 // protocol discriminants and the note 12 handoff constants.

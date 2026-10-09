@@ -80,6 +80,9 @@ export type {
   PasswordResetContext,
   PasswordResetRequest,
 } from './accountLifecycle.js';
+// §28.12 RFC 7592 client configuration (contract 1.53).
+export type { ClientRegistration } from './clientRegistration.js';
+export { clientRegistrationFromJson } from './clientRegistration.js';
 // AxiamClientOptions is the AxiamClient constructor's public parameter type
 // (docs-only addition — genuinely part of the public API surface, not an
 // internal detail; RefreshGuard, by contrast, stays unexported/@internal

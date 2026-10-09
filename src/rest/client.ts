@@ -19,6 +19,8 @@ import * as opaqueMethods from './opaque.js';
 import * as authzMethods from './authz.js';
 import * as webauthnMethods from './webauthn.js';
 import * as accountMethods from './accountLifecycle.js';
+import * as registrationMethods from './clientRegistration.js';
+import type { ClientRegistration } from './clientRegistration.js';
 import type { AccessCheck, AccessDecision, LoginResult } from './types.js';
 import type { Sensitive } from '../core/index.js';
 import type {
@@ -537,6 +539,95 @@ export class AxiamClient {
       credentialName,
       response,
     );
+  }
+
+  // -------------------------------------------------------------------------
+  // §28.12 RFC 7592 client configuration (contract 1.53)
+  //
+  // The three requests go out on a session-free transport: no cookie, no SDK
+  // access token, no CSRF header, no redirect following, and a 401 never
+  // enters the §9 refresh guard (§28.12.2 rule 3). Server-side helpers: a
+  // browser follows redirects itself and cannot be told not to.
+  // -------------------------------------------------------------------------
+
+  /**
+   * `GET registration_client_uri` (RFC 7592 §2.1, CONTRACT.md §28.12) — read
+   * this client's registration.
+   *
+   * @remarks
+   * The result carries neither the token nor the client secret: the server
+   * never returns them on a read. It does carry every member an update needs
+   * (unknown ones in `extra`), so the usual update is "read, change a field,
+   * update".
+   *
+   * `registrationClientUri` is used **verbatim**, query included, and only at
+   * this client's configured origin: a URI whose scheme, host or port differs
+   * from `baseUrl` — or an `http` URI unless `baseUrl` is `http` on a loopback
+   * host — is refused locally with a `ValidationError` and no request
+   * (§28.12.2 rule 1). The token travels in `Authorization: Bearer` only.
+   *
+   * Retried per §16 on a transport failure, `408`, `429` or `5xx` — never on
+   * another `4xx`. A `401 invalid_token` (an unknown client, a wrong or
+   * rotated-away token, another tenant's client, a client with no token: the
+   * server never says which) is an `OAuthProtocolError` and never refreshes the
+   * SDK's session.
+   */
+  readClientRegistration(
+    registrationClientUri: string,
+    registrationAccessToken: Sensitive<string> | string,
+  ): Promise<ClientRegistration> {
+    return registrationMethods.readClientRegistration(this, registrationClientUri, registrationAccessToken);
+  }
+
+  /**
+   * `PUT registration_client_uri` (RFC 7592 §2.2, CONTRACT.md §28.12) —
+   * **replace** this client's registration, and receive a **rotated** token.
+   *
+   * @remarks
+   * `metadata` is the **whole** registration: a member it omits is a member the
+   * server deletes. Start from {@link readClientRegistration}'s result, which
+   * carries every member (`jwks` / `jwks_uri` and unknown ones included), and
+   * change what you mean to change. The SDK sets `client_id` to
+   * `metadata.client_id` and never sends `registration_access_token`,
+   * `registration_client_uri`, `client_secret_expires_at`,
+   * `client_id_issued_at` or `client_secret`.
+   *
+   * **Persist the returned `registration_access_token` before doing anything
+   * else.** From the moment the server answers it is the only valid token: the
+   * one you presented is dead for every operation.
+   *
+   * **Never retried** — not on a transport error, not on a `5xx`. An update
+   * that reached the server and lost its response has already rotated the
+   * token; repeating it with the old one is a `401` that locks you out of your
+   * own registration. On a lost answer, read the registration with the token
+   * you hold: a `401` means the update landed.
+   */
+  updateClientRegistration(
+    registrationClientUri: string,
+    registrationAccessToken: Sensitive<string> | string,
+    metadata: ClientRegistration,
+  ): Promise<ClientRegistration> {
+    return registrationMethods.updateClientRegistration(
+      this,
+      registrationClientUri,
+      registrationAccessToken,
+      metadata,
+    );
+  }
+
+  /**
+   * `DELETE registration_client_uri` (RFC 7592 §2.3, CONTRACT.md §28.12) —
+   * delete this client's registration. A `204` resolves.
+   *
+   * @remarks
+   * **Never retried**: a retry after a lost `204` would read `401` and report a
+   * successful deletion as a failure.
+   */
+  deleteClientRegistration(
+    registrationClientUri: string,
+    registrationAccessToken: Sensitive<string> | string,
+  ): Promise<void> {
+    return registrationMethods.deleteClientRegistration(this, registrationClientUri, registrationAccessToken);
   }
 
   // -------------------------------------------------------------------------

@@ -5,8 +5,8 @@
 /**
  * One handle per §27 namespace, and the accessors that reach them.
  *
- * §27.2 makes this namespacing normative rather than stylistic: twenty
- * namespaces have a `list` and fourteen a `get`, so flattening 147 operations
+ * §27.2 makes this namespacing normative rather than stylistic: nineteen
+ * namespaces have a `list` and nineteen a `get`, so flattening 190 operations
  * onto the client would need a disambiguating prefix invented once per
  * operation — and would bury the eight §1 methods most callers actually want
  * under five times as many they do not.
@@ -29,6 +29,10 @@ export * from './oauth2_clients.js';
 export * from './federation.js';
 export * from './notification_rules.js';
 export * from './email_config.js';
+export * from './directory.js';
+export * from './saml.js';
+export * from './ssf.js';
+export * from './scim_targets.js';
 export * from './settings.js';
 export * from './scim_tokens.js';
 export * from './reactors.js';
@@ -54,6 +58,10 @@ import { Oauth2ClientsApi } from './oauth2_clients.js';
 import { FederationApi } from './federation.js';
 import { NotificationRulesApi } from './notification_rules.js';
 import { EmailConfigApi } from './email_config.js';
+import { DirectoryApi } from './directory.js';
+import { SamlApi } from './saml.js';
+import { SsfApi } from './ssf.js';
+import { ScimTargetsApi } from './scim_targets.js';
 import { SettingsApi } from './settings.js';
 import { ScimTokensApi } from './scim_tokens.js';
 import { ReactorsApi } from './reactors.js';
@@ -126,6 +134,38 @@ export interface ManagementNamespaces {
    * overridable per tenant.
    */
   readonly emailConfig: EmailConfigApi;
+  /**
+   * A tenant's LDAP / Active Directory identity source (CONTRACT §30): the one
+   * configuration, the explicit act that links an existing local account to
+   * its directory entry, and a read-only view of the sync job. Signing in
+   * needs nothing new -- a directory account calls the same §1 `login`.
+   */
+  readonly directory: DirectoryApi;
+  /**
+   * A tenant's SAML 2.0 identity provider (CONTRACT §29): the registry of
+   * service providers, the import of an SP's metadata into a *draft*
+   * registration (never a write), and the lifecycle of the IdP signing
+   * credential. The protocol itself -- single sign-on, single logout, the IdP
+   * metadata document -- is browser and SP-to-IdP surface under
+   * /saml/v2/{tenant_id}, an SP's own SAML library speaks to it, and it is not
+   * in this registry.
+   */
+  readonly saml: SamlApi;
+  /**
+   * A tenant's Shared Signals Framework streams (CONTRACT §32): which receiver
+   * -- an OAuth2 client of the tenant -- receives which CAEP and RISC security
+   * events, as SETs pushed to its endpoint or polled. The receiver's own
+   * protocol (transmitter metadata, the SSF stream management API, polling) is
+   * not in this registry.
+   */
+  readonly ssf: SsfApi;
+  /**
+   * A tenant's outbound SCIM targets (CONTRACT §31): the downstream SCIM 2.0
+   * service providers AXIAM pushes the tenant's users and groups to, each with
+   * its delivery state. The credential AXIAM pushes with is write-only.
+   * Deleting a target does not deprovision anything downstream.
+   */
+  readonly scimTargets: ScimTargetsApi;
   /** Effective settings, and the organization/tenant layers they resolve from. */
   readonly settings: SettingsApi;
   /** Bearer tokens for the SCIM 2.0 provisioning endpoint. */
@@ -211,6 +251,18 @@ export function managementNamespaces(client: AxiamClient): ManagementNamespaces 
     },
     get emailConfig() {
       return new EmailConfigApi(client);
+    },
+    get directory() {
+      return new DirectoryApi(client);
+    },
+    get saml() {
+      return new SamlApi(client);
+    },
+    get ssf() {
+      return new SsfApi(client);
+    },
+    get scimTargets() {
+      return new ScimTargetsApi(client);
     },
     get settings() {
       return new SettingsApi(client);

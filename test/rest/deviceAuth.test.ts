@@ -252,16 +252,15 @@ describe('§6.1 rule 8 — every refusal is a 401, mapped to AuthError, never re
       }),
     );
 
-    // sendManagement's own error mapper (src/management/request.ts) wraps
-    // whatever it is handed into a NetworkError when the error carries no
-    // `.response.status` (pre-existing behaviour, exercised here because the
-    // interceptor's 401 branch already turned this into an AxiamError before
-    // sendManagement's catch sees it) — the property under test is that the
-    // ORIGINAL failure is AuthError (never a refresh-then-retry), which
-    // survives as `.cause`.
+    // The interceptor's 401 branch turns this into an AuthError before
+    // sendManagement's catch sees it, and sendManagement passes an
+    // already-classified AxiamError through unchanged (contract 1.58: §29.4,
+    // §30.4, §31.4 and §32.4 require 401 → AuthError on the management
+    // surface; it used to be re-wrapped as a NetworkError with the AuthError
+    // as its cause). The property under test is unchanged: the failure is an
+    // AuthError, never a refresh-then-retry.
     const err: unknown = await client.management.serviceAccounts.list().catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(NetworkError);
-    expect((err as NetworkError).cause).toBeInstanceOf(AuthError);
+    expect(err).toBeInstanceOf(AuthError);
     expect(refreshCalls).toBe(0);
   });
 });

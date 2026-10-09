@@ -6,6 +6,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+Contract 1.58 — re-vendored `CONTRACT.md`, `openapi.json` and `management-registry.json`, and
+implemented contracts 1.53 – 1.58 (§28.12, §29, §30, §31, §32 with §32.7, §33 with §33.2
+signed, and the §21.3.1 amendment). Ported from the reference implementation,
+`ilpanich/axiam-rust-sdk#123`.
+
+### Added
+
+- **RFC 7592 client configuration** (CONTRACT.md §28.12): `AxiamClient.readClientRegistration`,
+  `updateClientRegistration` and `deleteClientRegistration`, and the tolerant
+  `ClientRegistration` (unknown members kept in `extra`; `registration_access_token` and
+  `client_secret` `Sensitive`). Origin-checked before any request, bearer-only on a
+  session-free transport (no cookie, no SDK token, no redirects, no §9 refresh); update and
+  delete never retried.
+- **Four management namespaces** — `directory` (§30), `saml` (§29), `ssf` (§32) and
+  `scimTargets` (§31): 28 operations, 190 across 28 namespaces in all. The call-site rules
+  the contract makes an SDK repeat are in the generated TSDoc; `bind_secret`,
+  `authorization_header` and `credential` are `Sensitive`; a response that carries one of
+  them, or `private_key_pem`, has it dropped (`scrub<Type>`); `directory.update` sends
+  `null` to clear `group_base_dn` / `group_filter`; `saml.parseSpMetadata` refuses both or
+  neither of `metadata_url` / `metadata_xml` locally.
+- Read-modify-write helpers `setDirectoryConfigFrom`, `samlServiceProviderInputFrom`,
+  `ssfStreamInputFrom`, `scimTargetInputFrom`, and `parseSpMetadataFromUrl` / `FromXml`.
+- **The SSF receiver helper** (§32.7, `axiam-sdk/node`): `SsfReceiver.verifySet` (the nine
+  steps, `SetRefusedError` with a typed `reason`) and `SsfReceiver.poll`; `pushErrorCode`,
+  `setErrFromReason`, `SSF_EVENT_TYPES`, `MemoryReplayStore`.
+- **CIBA** (§33, `axiam-sdk/node`): `OidcClient.cibaInitiate`, `cibaPoll`, `cibaAwait`
+  (injectable clock) and `cibaHandlePing`; `isAccessDenied` / `isExpiredToken`; the signed
+  request form through `CibaRequestSigner` (PS256, ES256, EdDSA). `cibaInitiate` is never
+  retried.
+- `OidcConfiguration` gains the four CIBA discovery members, and `MtlsEndpointAliases` the
+  seventh alias, `backchannel_authentication_endpoint` (§21.3.1 vector A).
+- `oauth2ErrorFromBody`: the `/oauth2` error decoder that dispatches on a non-empty `error`
+  at any status, `error_description` optional.
+
+### Changed
+
+- `OAuthProtocolError`'s `errorDescription` may be empty (the server sent none); its message
+  is then just the code.
+- `PATCH` joins the management verbs (`directory.update`); like every write it is not retried.
+
+### Fixed
+
+- A `401` on a management operation surfaced as a `NetworkError` wrapping the `AuthError`
+  the refresh interceptor had produced; it is now the `AuthError` itself, as §29.4, §30.4,
+  §31.4 and §32.4 require.
 
 ## [1.0.0-beta17] - 2026-09-25
 Contract 1.51 — the dogfooding remediation (`claude_dev/dogfooding-findings-fix-plan.md`

@@ -2,23 +2,27 @@
  * The one request path every §27 management operation goes through.
  *
  * §27.8 is explicit that the generated layer MUST sit on the SDK's existing
- * request path and MUST NOT build its own. That is what this module is: 147
+ * request path and MUST NOT build its own. That is what this module is: 190
  * generated operations all funnel into {@link sendManagement}, so they inherit
  * §3 (CSRF), §4 (the cookie jar), §5 (`X-Tenant-ID`), §6 (TLS), §9 (the
  * reactive single-flight refresh the response interceptor already performs),
- * §16 (retry) and §19 (telemetry) by construction rather than by 147
+ * §16 (retry) and §19 (telemetry) by construction rather than by 190
  * opportunities to forget one.
  */
 
 import type { AxiosResponse } from 'axios';
 
-import { AuthError, mapHttpStatusToError } from '../core/index.js';
+import { AuthError, AxiamError, mapHttpStatusToError } from '../core/index.js';
 import { withRetry } from '../rest/retry.js';
 import type { AxiamClient } from '../rest/client.js';
 import { ConflictError, NotFoundError, ValidationError, parseFieldErrors } from './errors.js';
 
-/** The HTTP verbs this surface uses. */
-export type ManagementMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
+/**
+ * The HTTP verbs this surface uses. `PATCH` arrived with contract 1.58
+ * (`directory.update`, a sparse update); like every other write it is never
+ * retried (§27.4 rule 8).
+ */
+export type ManagementMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 /** One management call, fully resolved. */
 export interface ManagementCall {
@@ -113,6 +117,12 @@ function bodyOf(err: unknown): unknown {
  * three statuses §27.4 rule 7 names, and 404 is the one §2 genuinely lacks.
  */
 function mapManagementError(operation: string, err: unknown): unknown {
+  // Already classified — the response interceptor maps a 401 itself once the
+  // §9 refresh it attempted has failed (an `AuthError`, §29.4 / §30.4 /
+  // §31.4 / §32.4). It carries no axios response, so without this check it
+  // would be re-read below as a transport failure and reported as a
+  // `NetworkError`.
+  if (err instanceof AxiamError) return err;
   const status = statusOf(err);
   if (status === undefined) {
     // No response at all — a transport failure. The shared mapper owns it.

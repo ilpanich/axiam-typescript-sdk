@@ -29,6 +29,7 @@ export const ISSUER = 'https://iam.example.com';
 export const DEVICE_AUTHORIZATION_ENDPOINT = `${BASE_URL}/oauth2/device_authorization`;
 export const END_SESSION_ENDPOINT = `${BASE_URL}/oauth2/end_session`;
 export const PAR_ENDPOINT = `${BASE_URL}/oauth2/par`;
+export const BC_AUTHORIZE_ENDPOINT = `${BASE_URL}/oauth2/bc-authorize`;
 
 // ── RFC 8705 §5 mTLS endpoint aliases (CONTRACT.md §21.3 rule 2) ────────────
 // A second origin, standing in for the listener that performs the mutual-TLS
@@ -40,6 +41,7 @@ export const MTLS_INTROSPECT_ENDPOINT = `${MTLS_BASE_URL}/oauth2/introspect`;
 export const MTLS_REVOKE_ENDPOINT = `${MTLS_BASE_URL}/oauth2/revoke`;
 export const MTLS_DEVICE_AUTHORIZATION_ENDPOINT = `${MTLS_BASE_URL}/oauth2/device_authorization`;
 export const MTLS_PAR_ENDPOINT = `${MTLS_BASE_URL}/oauth2/par`;
+export const MTLS_BC_AUTHORIZE_ENDPOINT = `${MTLS_BASE_URL}/oauth2/bc-authorize`;
 
 /**
  * A real (throwaway, run-time generated) PEM pair. `resolveClientIdentity`
@@ -51,7 +53,7 @@ const clientIdentity = testClientIdentity();
 export const CLIENT_CERT_PEM = clientIdentity.cert;
 export const CLIENT_KEY_PEM = clientIdentity.key;
 
-/** The six RFC 8705 §5 aliases, every one on {@link MTLS_BASE_URL}. */
+/** The seven RFC 8705 §5 aliases (contract 1.58, §21.3.1 vector A), every one on {@link MTLS_BASE_URL}. */
 export function mtlsEndpointAliases(): MtlsEndpointAliases {
   return {
     token_endpoint: MTLS_TOKEN_ENDPOINT,
@@ -60,6 +62,7 @@ export function mtlsEndpointAliases(): MtlsEndpointAliases {
     introspection_endpoint: MTLS_INTROSPECT_ENDPOINT,
     device_authorization_endpoint: MTLS_DEVICE_AUTHORIZATION_ENDPOINT,
     pushed_authorization_request_endpoint: MTLS_PAR_ENDPOINT,
+    backchannel_authentication_endpoint: MTLS_BC_AUTHORIZE_ENDPOINT,
   };
 }
 
@@ -89,6 +92,7 @@ export function discoveryDocument(overrides: Partial<OidcConfiguration> = {}): O
     device_authorization_endpoint: DEVICE_AUTHORIZATION_ENDPOINT,
     end_session_endpoint: END_SESSION_ENDPOINT,
     pushed_authorization_request_endpoint: PAR_ENDPOINT,
+    backchannel_authentication_endpoint: BC_AUTHORIZE_ENDPOINT,
     backchannel_logout_supported: true,
     backchannel_logout_session_supported: true,
     ...overrides,

@@ -4,8 +4,8 @@
  * Everything else in this SDK assumes a populated tenant. `login` signs a user
  * in, `checkAccess` asks about a resource, `verifyWebhook` checks a delivery
  * signature — and none of them can create the user, declare the resource or
- * register the webhook. This module is the part that can: **147 operations
- * across 24 namespaces**, which is the whole server API minus what other
+ * register the webhook. This module is the part that can: **190 operations
+ * across 28 namespaces**, which is the whole server API minus what other
  * contract sections own and minus organization creation and deletion, which
  * §27.0 keeps deliberately out of reach of a client library.
  *
@@ -16,9 +16,9 @@
  * ```
  *
  * Operations hang off **namespace handles**, not the client. §27.2 makes that
- * normative: twenty namespaces have a `list` and fourteen a `get`, so a flat
+ * normative: nineteen namespaces have a `list` and nineteen a `get`, so a flat
  * surface would need a disambiguating prefix invented once per operation, and
- * 147 more methods on `AxiamClient` would bury the eight most callers want.
+ * 190 more methods on `AxiamClient` would bury the eight most callers want.
  * Acquiring a handle performs no I/O.
  *
  * ## Four things worth knowing before you call anything
@@ -28,14 +28,18 @@
  * invalidates the secret the first call returned and you already stored — so
  * no write here is retried, including the ones that look idempotent.
  *
- * **Some `PUT`s replace rather than patch.** Seventeen update bodies are
- * sparse: set the field you mean and nothing else changes. Four are
- * replacements — `settings.setOrg`, the organization email config, the
- * WebAuthn attestation policy and the mTLS trust anchor — where omitted fields
- * are not preserved. Their types have required fields, so a half-filled one
- * does not typecheck.
+ * **Some updates replace rather than patch.** Eighteen update bodies are
+ * sparse: set the field you mean and nothing else changes (and where a member
+ * says so, `null` clears it). Eight are replacements — `settings.setOrg`, the
+ * organization email config, the WebAuthn attestation policy, the mTLS trust
+ * anchor, `directory.set`, `saml.updateServiceProvider`, `ssf.updateStream`
+ * and `scimTargets.update` — where omitted fields take their defaults rather
+ * than keeping their stored values. Their types have required fields, so a
+ * half-filled one does not typecheck; the read-modify-write helpers
+ * (`setDirectoryConfigFrom`, `samlServiceProviderInputFrom`,
+ * `ssfStreamInputFrom`, `scimTargetInputFrom`) turn a read back into one.
  *
- * **Seven operations return a secret exactly once.** No later `get` returns
+ * **Nine operations return a secret exactly once.** No later `get` returns
  * that material again, and the `get` projection has no field where it was — so
  * nothing tells you it is missing.
  *
@@ -53,11 +57,12 @@
  *
  * `models.ts` and `ops/` are **generated** by `scripts/gen-management.mjs`
  * from the vendored `management-registry.json` — §27.8 requires that, because
- * a hand-maintained table of 147 names is wrong by the next release. Everything
+ * a hand-maintained table of 190 names is wrong by the next release. Everything
  * else here is written by hand. CI regenerates and diffs.
  */
 
 export * from './errors.js';
+export * from './checks.js';
 export * from './models.js';
 export * from './ops/index.js';
 export * from './page.js';
