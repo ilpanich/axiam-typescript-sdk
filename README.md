@@ -25,12 +25,31 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to **contract 1.58**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
+This SDK conforms to **contract 1.59**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
 §20, §21, §22, §23, §24, §25, §26, §27, §28, §28.12, §29, §30, §31, §32 and §33, with §32.7 and
 §33.2 signed (including §6.1 mTLS client certificates, the
 §10.1 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
 `verifyWebhook` signature verifier). §12 is implemented in full at its 1.38 shape: all
 **thirteen** operations, including the four public "Sign in with X" entry points.
+
+### Contract 1.59 — the Phase 23 ports review (§34)
+
+Contract 1.59 changes no wire shape; it clarifies §28.12 and §29 – §33 (§34.2 P1 – P12) and
+lists what the review of this SDK found (follow-up F-59-02). What changed here:
+
+| Row | Rule | What changed |
+|---|---|---|
+| R-18 | §30.5, §31.5, §32.5, §7 rule 1 | A management write that fails with a `5xx` or a transport error no longer carries its request — and so its `bind_secret`, `credential`, `authorization_header`, or §27.5 secret — in `NetworkError.cause`: the cause is rebuilt from an allow-list of diagnostics. |
+| R-1 | §32.7, P1 | `SsfReceiver.poll` returns the SETs it judged and leaves one it could not judge unrecorded, listed in `unjudged`; it never keeps a `jti` it does not return. |
+| R-7 | §32.7, P7 | The SSF section says `poll` is retried on `408` and `429`, as it always was. |
+| R-20 | §29.5, §31.2, P12.1 | Every `directory`, `saml`, `scimTargets` and `ssf` response keeps only the members its type declares, at every depth; an unknown union arm keeps only its `type`. |
+| R-23 | §28.12.2 rule 4, P12.4 | `updateClientRegistration` sends no list the read lacked, and a list of an unexpected shape as read; `redirect_uris`, `grant_types` and `response_types` are optional on `ClientRegistration`. |
+| R-28 | §27.4 rule 5, §29.2, §21.3.1 | Generated docs no longer call every replacement body all-required or every all-optional type sparse; seven mTLS aliases, not six. |
+| §33.8 t8 | §33.7 rule 5, P8 | `cibaPoll` retries a `5xx` whatever its body, `500 {"error":"server_error"}` included. |
+
+The choice P1 leaves open: `poll` takes the second form — return what was judged, leave the
+unjudged unrecorded and list their `jti`s — and, when it accepted nothing, records nothing and
+throws the failure (the first form's outcome).
 
 ### Contracts 1.53 – 1.58
 
@@ -325,6 +344,7 @@ name wherever the document publishes one:
 | `revoke` | `revocation_endpoint` |
 | `deviceAuthorize` | `device_authorization_endpoint` |
 | `oidcPar` | `pushed_authorization_request_endpoint` |
+| `cibaInitiate` | `backchannel_authentication_endpoint` |
 
 Three things this deliberately does **not** do:
 
@@ -332,8 +352,11 @@ Three things this deliberately does **not** do:
   terminates mutual TLS on the issuer's own host", so the conventional endpoints keep
   being used. A deployment running `client_auth = optional` on one listener serves both
   populations there and correctly publishes nothing.
-- **No alias is ever synthesised.** Only the six endpoints RFC 8705 §5 lists can be
-  aliased — never `authorization_endpoint`, `end_session_endpoint` or `jwks_uri`. The
+- **No alias is ever synthesised.** Only the seven endpoints CONTRACT.md §21.3.1's vector
+  aliases can be — `token_endpoint`, `introspection_endpoint`, `revocation_endpoint`,
+  `device_authorization_endpoint`, `pushed_authorization_request_endpoint`,
+  `userinfo_endpoint` and CIBA's `backchannel_authentication_endpoint` — never
+  `authorization_endpoint`, `end_session_endpoint` or `jwks_uri`. The
   first two are front-channel and the third is public key material; sending a browser to
   an mTLS host raises a native certificate-chooser dialog most users cannot answer.
 - **`issuer` does not move.** It is an identifier, not an endpoint. §12.4 rule 3 still
@@ -2227,8 +2250,12 @@ let setErrs = {};
 for (;;) {
   const { events, refused, moreAvailable } = await receiver.poll(streamId, { ack, setErrs });
   for (const event of events) await handle(event);
-  ack = events.map((e) => e.jti);
-  setErrs = Object.fromEntries(refused.map((r) => [r.jti, setErrFromReason(r.reason)]));
+  // A `replayed` SET was accepted earlier: acknowledge it, do not report it (§34.2 P2).
+  ack = [...events.map((e) => e.jti), ...refused.filter((r) => r.reason === 'replayed').map((r) => r.jti)];
+  setErrs = Object.fromEntries(
+    refused.filter((r) => r.reason !== 'replayed').map((r) => [r.jti, setErrFromReason(r.reason)]),
+  );
+  // `unjudged` SETs are neither: the transmitter offers them again.
   if (!moreAvailable) await sleep(1000);
 }
 ```
@@ -2239,8 +2266,19 @@ signature, `iss`, `aud`, the SET claim rules (no `exp`/`sub`; `jti`, `iat`, `sub
 event) and replay. A refusal is a `SetRefusedError` (an `AuthError`) with a typed `reason`;
 `pushErrorCode` maps `malformed`, `invalid_type` and `replayed` to `invalid_request`, the
 others to themselves. **A SET that verifies has been recorded**: acknowledge it once
-processed, or a re-offer reads as `replayed`. `poll` never acknowledges anything itself, is
-not retried on a `4xx`, and sends no SDK cookie or session token.
+processed, or a re-offer reads as `replayed`. **`poll` never keeps a `jti` it does not
+return** (contract 1.59, §34.2 P1): a SET it cannot judge — the JWKS or discovery fetch
+failed, or the replay store threw — is left unrecorded and listed by `jti` in `unjudged`
+(neither acknowledge nor refuse it; the transmitter offers it again), while the SETs judged
+in the same batch are returned as usual. When a poll accepts no SET at all it records
+nothing and throws that failure instead. The default `MemoryReplayStore` is per process and
+**unbounded in count** — an entry leaves only when its window expires (§34.2 P4); a
+`ReplayStore` that cannot answer must throw or reject, and the SET is then not accepted
+(fail closed). A SET refused as `replayed` was accepted by this
+receiver on an earlier poll: acknowledge it in `ack` rather than reporting it in `setErrs`
+(§34.2 P2). `poll` never acknowledges anything itself, is not retried on a `4xx` other than
+`408` and `429` — which §16 retries, as it does a transport failure and a `5xx` — and sends
+no SDK cookie or session token.
 
 ## CIBA (`axiam-sdk/node`, contract 1.58, §33)
 
@@ -2299,7 +2337,8 @@ await oidc.cibaInitiate({ scope: 'openid', loginHint: 'ada', bindingMessage: 'W4
 - `cibaInitiate` is **never retried** — each accepted call may notify a person. A success
   proves nothing about the user: AXIAM answers an unknown, locked and real user alike.
 - `cibaPoll` surfaces every protocol answer as an `OAuthProtocolError` and retries only
-  transport failures, `5xx`, `408` and a bodiless `429`. Store its tokens before anything else:
+  transport failures, `408`, a bodiless `429` and a `5xx` — whatever its body, so the server's
+  own `500 {"error":"server_error"}` is retried and never ends `cibaAwait` (§34.2 P8). Store its tokens before anything else:
   a request is redeemed once. Neither helper adopts the tokens as the client's credential.
 - `authReqId`, `clientNotificationToken`, the signing key and the `request` JWT are
   `Sensitive` / never rendered. `CibaRequestSigner` supports PS256, ES256 and EdDSA, signs

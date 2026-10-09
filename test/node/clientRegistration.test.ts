@@ -309,6 +309,32 @@ describe('§28.12.6 (3) — update', () => {
     expect(seen).toHaveLength(1);
   });
 
+  // Contract 1.59 §34.2 P12.4 (R-23, review F-5b): the replacement is built
+  // from what the read carried. A list the read lacked is not sent — never as
+  // `[]`, which the server would store as "no redirect URIs" — and a list of an
+  // unexpected shape goes back exactly as read.
+  it('sends no list the read lacked, and a list of an unexpected shape as read', async () => {
+    responders.set(`PUT ${registrationPath}`, respondJson(200, registrationBody()));
+    const sparse = clientRegistrationFromJson({ client_id: CLIENT, client_name: 'Agent' });
+    await plainClient().updateClientRegistration(registrationUri(), freshSecret(), sparse);
+    const sent = JSON.parse(seen[0]!.body) as Record<string, unknown>;
+    for (const absent of ['redirect_uris', 'grant_types', 'response_types']) {
+      expect(absent in sent, `${absent} was sent although the read lacked it`).toBe(false);
+    }
+    expect(sent).toEqual({ client_id: CLIENT, client_name: 'Agent' });
+
+    const odd = clientRegistrationFromJson({
+      client_id: CLIENT,
+      redirect_uris: ['https://agent.example.test/cb', 7],
+      grant_types: 'authorization_code',
+      response_types: ['code'],
+    });
+    const body = clientRegistrationUpdateBody(odd);
+    expect(body.redirect_uris).toEqual(['https://agent.example.test/cb', 7]);
+    expect(body.grant_types).toBe('authorization_code');
+    expect(body.response_types).toEqual(['code']);
+  });
+
   it('decodes tolerantly: unknown and mistyped members are kept, the two secrets wrapped', () => {
     const r = clientRegistrationFromJson({
       client_id: 'c1',
@@ -322,7 +348,9 @@ describe('§28.12.6 (3) — update', () => {
     });
     expect(r.extra.backchannel_token_delivery_mode).toBe('poll');
     expect(r.extra.client_id_issued_at).toBe('not-a-number');
-    expect(r.redirect_uris).toEqual(['https://a']);
+    // §34.2 P12.4: a list with an item of an unexpected type is kept as read, not filtered.
+    expect(r.redirect_uris).toBeUndefined();
+    expect(r.extra.redirect_uris).toEqual(['https://a', 7]);
     expect(r.client_secret).toBeInstanceOf(Sensitive);
     expect(r.registration_access_token).toBeInstanceOf(Sensitive);
     const body = clientRegistrationUpdateBody(r);

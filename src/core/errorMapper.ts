@@ -170,47 +170,77 @@ const SAFE_RESPONSE_HEADERS = new Set([
 const REDACTED_HEADER = '[REDACTED]';
 
 /**
- * Redact every non-allowlisted response header from an axios-error-shaped
- * `err` before it is attached as `NetworkError.cause` (CR-04, D-16, X-3). On
- * login/refresh error paths the server may have already issued Set-Cookie
- * headers containing raw `axiam_access`/`axiam_refresh` values (and callers may
- * set custom sensitive headers such as `X-Auth-Token`); none of these must be
- * reachable via `console.log`/`JSON.stringify`/`util.inspect` of the thrown
- * error. Only headers on `SAFE_RESPONSE_HEADERS` keep their value; all others
- * are replaced with `[REDACTED]`.
+ * Reduce an axios-error-shaped `err` to the diagnostics that are safe to keep
+ * as `NetworkError.cause` (CR-04, D-16, X-3; contract 1.59 R-18).
  *
- * Returns a new, shallow-cloned object for any input shaped like
- * `{ response: { headers: {...} } }` — the caller's original axios error
- * object is left untouched. Non-object inputs (plain Error, string,
- * undefined) and objects with no `response.headers` are returned unchanged.
+ * An axios error is a map of everything the request touched: `config` holds
+ * the serialized request body (`config.data` — a password, a `bind_secret`, a
+ * SCIM `credential`, an SSF `authorization_header`, a form-encoded client
+ * secret) and the request headers (the session's bearer and CSRF token);
+ * `request` is the live `ClientRequest`, whose buffered output holds the same
+ * body; and `response` carries both again (`response.config`,
+ * `response.request`) beside the server's headers, which may set cookies. A
+ * shallow copy that redacted only the response headers left all of that
+ * reachable from `console.log(err)` on any `5xx` or transport failure.
+ *
+ * So the cause is **rebuilt from an allow-list**, never copied: `name`,
+ * `message` and `code` when they are strings, `status` when it is a number,
+ * and a `response` of `status`, `statusText`, the server's `data` and its
+ * headers with every value not on `SAFE_RESPONSE_HEADERS` replaced by
+ * `[REDACTED]`. Nothing else survives — no `config`, no `request`, no stack.
+ *
+ * Applies to anything carrying `response`, `config` or `request`, or flagged
+ * `isAxiosError`, including a transport failure that has no response at all.
+ * The caller's original object is never mutated. Other inputs — a plain
+ * `Error`, a string, `undefined` — are returned unchanged.
  */
 export function sanitizeAxiosError(err: unknown): unknown {
   if (err === null || typeof err !== 'object') {
     return err;
   }
-  const candidate = err as { response?: unknown };
-  if (candidate.response === null || typeof candidate.response !== 'object') {
-    return err;
-  }
-  const response = candidate.response as { headers?: unknown };
-  if (response.headers === null || typeof response.headers !== 'object') {
-    return err;
-  }
-
-  const sanitizedHeaders: Record<string, unknown> = { ...(response.headers as Record<string, unknown>) };
-  for (const key of Object.keys(sanitizedHeaders)) {
-    if (!SAFE_RESPONSE_HEADERS.has(key.toLowerCase())) {
-      sanitizedHeaders[key] = REDACTED_HEADER;
-    }
-  }
-
-  return {
-    ...err,
-    response: {
-      ...response,
-      headers: sanitizedHeaders,
-    },
+  const candidate = err as {
+    name?: unknown;
+    message?: unknown;
+    code?: unknown;
+    status?: unknown;
+    response?: unknown;
+    isAxiosError?: unknown;
   };
+  const hasResponse = candidate.response !== null && typeof candidate.response === 'object';
+  const isRequestError =
+    hasResponse || 'config' in candidate || 'request' in candidate || candidate.isAxiosError === true;
+  if (!isRequestError) {
+    return err;
+  }
+
+  const sanitized: Record<string, unknown> = {};
+  for (const key of ['name', 'message', 'code'] as const) {
+    const value = candidate[key];
+    if (typeof value === 'string') sanitized[key] = value;
+  }
+  if (typeof candidate.status === 'number') sanitized.status = candidate.status;
+
+  if (hasResponse) {
+    const response = candidate.response as {
+      status?: unknown;
+      statusText?: unknown;
+      headers?: unknown;
+      data?: unknown;
+    };
+    const kept: Record<string, unknown> = {};
+    if (typeof response.status === 'number') kept.status = response.status;
+    if (typeof response.statusText === 'string') kept.statusText = response.statusText;
+    if (response.headers !== null && typeof response.headers === 'object') {
+      const headers: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(response.headers as Record<string, unknown>)) {
+        headers[key] = SAFE_RESPONSE_HEADERS.has(key.toLowerCase()) ? value : REDACTED_HEADER;
+      }
+      kept.headers = headers;
+    }
+    if ('data' in response) kept.data = response.data;
+    sanitized.response = kept;
+  }
+  return sanitized;
 }
 
 /**

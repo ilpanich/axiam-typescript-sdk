@@ -82,20 +82,28 @@ const EXPLICIT_NULL_FIELDS = {
   SamlIdpInfo: new Set(['active_credential_id', 'next_credential_id']),
 };
 
-// Members a response type must NOT surface even if a (misbehaving) server
-// sends them: §29.2 (`private_key_pem`), §30.2 (`bind_secret`), §31.2
-// (`credential`), §32.5 (`authorization_header`). This SDK applies no runtime
-// decoder to a response — the parsed JSON object reaches the caller as sent —
-// so an undeclared member would otherwise ride along into every `console.log`
-// and `JSON.stringify` of the result. The generated operations run every such
-// response (and every response that nests one) through a `scrub<Type>` that
-// drops these keys.
-const RESPONSE_SCRUB = {
-  DirectoryConfig: ['bind_secret'],
-  SamlIdpCredential: ['private_key_pem'],
-  ScimTargetResponse: ['credential'],
-  SsfStream: ['authorization_header'],
-};
+// Namespaces whose responses keep **only the members their type declares**
+// (§29.5, and contract 1.59 §34.2 P12.1 for §30's, §31's and §32's): a
+// `private_key_pem`, `bind_secret`, `credential` or `authorization_header` —
+// or any other member the type does not declare, under any name, at any depth
+// — never reaches the caller, and an unknown arm of a tagged union keeps its
+// discriminator and nothing else. This SDK applies no other runtime decoder to
+// a response (the parsed JSON object would reach the caller as sent), so every
+// response of these namespaces goes through a generated `scrub<Type>` that
+// rebuilds it from the schema's members — an allow-list. Contract 1.58's
+// version dropped one named key per type (a denylist), which let every other
+// undeclared member through (R-20).
+const DECLARED_ONLY_NAMESPACES = new Set(['directory', 'saml', 'scim_targets', 'ssf']);
+
+// The request bodies of the registry's `sparse` updates — the only types whose
+// documentation may say that what is left out is left unchanged.
+const SPARSE_BODIES = new Set(
+  Object.values(REGISTRY.namespaces).flatMap((ns) =>
+    Object.values(ns.operations)
+      .filter((op) => op.update_style === 'sparse' && op.request_schema)
+      .map((op) => op.request_schema),
+  ),
+);
 
 // Call-site documentation the contract makes an SDK repeat (§29.3, §30.3,
 // §31.3, §32.2). Generated rather than hand-written because the methods are
@@ -620,79 +628,156 @@ export function roleAssignmentInherits(assignment: { inherit?: boolean }): boole
   return out.join('\n');
 }
 
-/** The response schemas whose values need a `scrub<Type>` pass, nested ones included. */
+/** The response schemas of {@link DECLARED_ONLY_NAMESPACES}: each gets an exported `scrub<Type>`. */
 function scrubbable() {
-  const names = new Set(Object.keys(RESPONSE_SCRUB));
-  let grew = true;
-  while (grew) {
-    grew = false;
-    for (const name of schemaClosure()) {
-      if (names.has(name) || !SCHEMAS[name]?.properties) continue;
-      if (scrubFields(name, names).length) {
-        names.add(name);
-        grew = true;
-      }
+  const names = new Set();
+  for (const [ns, nsdef] of Object.entries(REGISTRY.namespaces)) {
+    if (!DECLARED_ONLY_NAMESPACES.has(ns)) continue;
+    for (const op of Object.values(nsdef.operations)) {
+      if (op.response.kind !== 'none' && op.response.schema) names.add(op.response.schema.replace(/^\[\]/, ''));
     }
   }
   return names;
 }
 
-/** `[{ name, array }]` — the members of `name` whose type is (an array of) a scrubbable schema. */
-function scrubFields(name, names) {
-  const out = [];
-  for (const [pname, pschema] of Object.entries(flatten(name).props)) {
-    const direct = pschema.$ref?.split('/').pop() ?? nullableRef(pschema);
-    const item = pschema.items?.$ref?.split('/').pop();
-    if (direct && names.has(direct)) out.push({ name: pname, target: direct, array: false });
-    else if (item && names.has(item)) out.push({ name: pname, target: item, array: true });
+/**
+ * The declared shape of a schema node, for the generated allow-list decoder:
+ * `null` (keep the value as read — a scalar, an enum, a free-form object),
+ * `{ ref }` (a named object or union, described in `pending`), `{ array }`, or
+ * `{ members }` (an inline object).
+ */
+function shapeOf(schema, pending) {
+  if (!schema || Object.keys(schema).length === 0) return null;
+  const named = schema.$ref ? schema.$ref.split('/').pop() : nullableRef(schema);
+  if (named) {
+    const target = SCHEMAS[named];
+    if (!target || target.enum) return null;
+    if (discriminated(target) || externallyTagged(target) || Object.keys(flatten(named).props).length) {
+      pending.add(named);
+      return { ref: named };
+    }
+    return null;
   }
+  if (schema.oneOf || schema.anyOf) return null;
+  const type = Array.isArray(schema.type) ? schema.type.find((t) => t !== 'null') : schema.type;
+  if (type === 'array') {
+    const item = shapeOf(schema.items ?? {}, pending);
+    return item === null ? null : { array: item };
+  }
+  if (type === 'object' && schema.properties) {
+    return { members: membersOf(schema.properties, pending) };
+  }
+  return null;
+}
+
+function membersOf(props, pending) {
+  const out = {};
+  for (const name of Object.keys(props).sort()) out[name] = shapeOf(props[name], pending);
   return out;
 }
 
+/** The declared shape of the named schema `name`. */
+function namedShape(name, pending) {
+  const schema = SCHEMAS[name];
+  const union = discriminated(schema);
+  if (union) {
+    const arms = {};
+    for (const { value, payload } of union.arms) {
+      const props = payload.$ref ? flatten(payload.$ref.split('/').pop()).props : payload.properties ?? {};
+      arms[value] = { members: { [union.tag]: null, ...membersOf(props, pending) } };
+    }
+    return { tag: union.tag, arms };
+  }
+  const tagged = externallyTagged(schema);
+  if (tagged) {
+    const members = {};
+    for (const arm of tagged) members[arm.key] = shapeOf(arm.schema, pending);
+    return { members };
+  }
+  const props = { ...flatten(name).props };
+  for (const add of projectionMap().get(name) ?? []) props[add.name] ??= { type: add.type };
+  return { members: membersOf(props, pending) };
+}
+
+/** Render a shape as a TypeScript literal, one member per line. */
+function shapeLiteral(shape, indent) {
+  if (shape === null) return 'null';
+  if (shape.ref) return `{ ref: ${JSON.stringify(shape.ref)} }`;
+  if (shape.array) return `{ array: ${shapeLiteral(shape.array, indent)} }`;
+  const inner = `${indent}  `;
+  if (shape.tag) {
+    const arms = Object.entries(shape.arms).map(([v, a]) => `${inner}  ${JSON.stringify(v)}: ${shapeLiteral(a, `${inner}  `)},`);
+    return `{\n${inner}tag: ${JSON.stringify(shape.tag)},\n${inner}arms: {\n${arms.join('\n')}\n${inner}},\n${indent}}`;
+  }
+  const members = Object.entries(shape.members).map(([n, m]) => `${inner}${n}: ${shapeLiteral(m, inner)},`);
+  return members.length ? `{\n${indent}  members: {\n${members.map((l) => `  ${l}`).join('\n')}\n${indent}  },\n${indent}}` : '{ members: {} }';
+}
+
 function emitScrubbers() {
-  const names = scrubbable();
+  const roots = scrubbable();
+  const pending = new Set(roots);
+  const shapes = new Map();
+  while (pending.size) {
+    const [name] = pending;
+    pending.delete(name);
+    if (shapes.has(name)) continue;
+    const local = new Set();
+    shapes.set(name, namedShape(name, local));
+    for (const n of local) if (!shapes.has(n)) pending.add(n);
+  }
   const lines = [
     ...doc(
-      'Drop `keys` from a decoded response object, returning a shallow copy.\n\n@internal — the generated `scrub<Type>` functions are built on it.',
+      'The members a response type declares, as data for {@link keepDeclared}: `null` keeps a value as read (a scalar, an enum, a free-form object); `ref` names another entry of `DECLARED_SHAPES`; `array` applies a shape to every item; `members` is an object\'s allow-list; `tag` and `arms` are a tagged union.\n\n@internal',
     ),
-    'function dropMembers<T>(value: T, keys: readonly string[]): T {',
-    "  if (value === null || typeof value !== 'object') return value;",
-    '  const copy = { ...(value as Record<string, unknown>) };',
-    '  for (const key of keys) delete copy[key];',
-    '  return copy as T;',
+    'type DeclaredShape =',
+    '  | null',
+    '  | { readonly ref: string }',
+    '  | { readonly array: DeclaredShape }',
+    '  | { readonly members: Readonly<Record<string, DeclaredShape>> }',
+    '  | { readonly tag: string; readonly arms: Readonly<Record<string, DeclaredShape>> };',
+    '',
+    ...doc('Generated from openapi.json: the declared shape of every response {@link keepDeclared} rebuilds, and of the objects they nest.\n\n@internal'),
+    'const DECLARED_SHAPES: Readonly<Record<string, DeclaredShape>> = {',
+  ];
+  for (const name of [...shapes.keys()].sort()) {
+    lines.push(`  ${name}: ${shapeLiteral(shapes.get(name), '  ')},`);
+  }
+  lines.push('};');
+  lines.push('');
+  lines.push(
+    ...doc(
+      'Rebuild a decoded response from the members its type declares (CONTRACT §29.5; contract 1.59 §34.2 P12.1).\n\nAn object keeps only its declared members, each rebuilt by its own shape; an array, each item; a tagged union, the members of the arm its tag names — and an **unknown** arm only its tag. A value whose shape does not match the declaration (a scalar where an object was declared) is kept as read. Never mutates its input.\n\n@internal — the generated `scrub<Type>` functions are built on it.',
+    ),
+  );
+  lines.push(
+    'function keepDeclared(value: unknown, shape: DeclaredShape): unknown {',
+    '  if (shape === null || value === null || typeof value !== \'object\') return value;',
+    "  if ('ref' in shape) return keepDeclared(value, DECLARED_SHAPES[shape.ref] ?? null);",
+    "  if ('array' in shape) return Array.isArray(value) ? value.map((item) => keepDeclared(item, shape.array)) : value;",
+    '  if (Array.isArray(value)) return value;',
+    '  const record = value as Record<string, unknown>;',
+    "  if ('tag' in shape) {",
+    '    const tag = record[shape.tag];',
+    '    const arm = typeof tag === \'string\' && Object.hasOwn(shape.arms, tag) ? shape.arms[tag] : undefined;',
+    '    return arm === undefined ? { [shape.tag]: tag } : keepDeclared(value, arm);',
+    '  }',
+    '  const out: Record<string, unknown> = {};',
+    '  for (const [name, member] of Object.entries(shape.members)) {',
+    '    if (Object.hasOwn(record, name)) out[name] = keepDeclared(record[name], member);',
+    '  }',
+    '  return out;',
     '}',
     '',
-  ];
-  for (const name of [...names].sort()) {
+  );
+  for (const name of [...roots].sort()) {
     const rname = pascal(name);
-    const own = RESPONSE_SCRUB[name] ?? [];
-    const nested = scrubFields(name, names);
     lines.push(
       ...doc(
-        own.length
-          ? `Drop ${own.map((k) => `\`${k}\``).join(', ')} from a \`${rname}\` response (CONTRACT §29.2, §30.2, §31.2, §32.5): the type declares no such member, and a value that (wrongly) carries one must not surface it in any rendering.`
-          : `Scrub the nested responses a \`${rname}\` carries (see the \`scrub\` function of each).`,
+        `Keep only the members \`${rname}\` declares, at every depth (CONTRACT §29.5; contract 1.59 §34.2 P12.1): a member the type does not declare — a key, a secret or a hash of one under any name — is dropped rather than surfaced in any rendering of the result.`,
       ),
     );
     lines.push(`export function scrub${rname}(value: ${rname}): ${rname} {`);
-    lines.push(`  const out = dropMembers(value, ${JSON.stringify(own)});`);
-    if (nested.length) {
-      lines.push("  if (out === null || typeof out !== 'object') return out;");
-      lines.push('  const record = out as unknown as Record<string, unknown>;');
-      for (const f of nested) {
-        const fn = `scrub${pascal(f.target)}`;
-        if (f.array) {
-          lines.push(
-            `  if (Array.isArray(record.${f.name})) record.${f.name} = (record.${f.name} as ${pascal(f.target)}[]).map(${fn});`,
-          );
-        } else {
-          lines.push(
-            `  if (record.${f.name} != null) record.${f.name} = ${fn}(record.${f.name} as ${pascal(f.target)});`,
-          );
-        }
-      }
-    }
-    lines.push('  return out;');
+    lines.push(`  return keepDeclared(value, DECLARED_SHAPES[${JSON.stringify(name)}] ?? null) as ${rname};`);
     lines.push('}');
     lines.push('');
   }
@@ -827,7 +912,10 @@ function emitInterface(rname, name, secrets, directions, projected = []) {
       explicitNull: EXPLICIT_NULL_FIELDS[name]?.has(pname) ?? false,
     }));
 
-  const allOptional = fields.length > 0 && fields.every((f) => f.optional);
+  // The sparse-body sentence belongs to the body of a sparse update only (R-28):
+  // an all-optional type that is no update — `ParseSamlSpMetadata`'s
+  // exactly-one-of, a nested config — leaves nothing "unchanged".
+  const allOptional = SPARSE_BODIES.has(name) && fields.length > 0 && fields.every((f) => f.optional);
   const lines = doc(
     (description ?? `\`${rname}\` (generated from openapi.json).`) +
       (allOptional
@@ -1190,8 +1278,12 @@ function emitOperation(namespace, opname, op, secrets) {
     // nothing to return
   } else if (scrub) {
     if (resp.kind === 'array') lines.push(`    return wire.map(${scrub});`);
-    else if (resp.kind === 'page') lines.push(`    return { ...wire, items: wire.items.map(${scrub}) };`);
-    else lines.push(`    return ${scrub}(wire);`);
+    else if (resp.kind === 'page') {
+      // The envelope keeps only `Page`'s own members too (§34.2 P12.1).
+      lines.push(
+        `    return { items: wire.items.map(${scrub}), total: wire.total, offset: wire.offset, limit: wire.limit };`,
+      );
+    } else lines.push(`    return ${scrub}(wire);`);
   } else if (resp.wire === resp.public) {
     lines.push('    return wire;');
   } else {
@@ -1230,8 +1322,14 @@ function buildOperationDoc(op, canonical) {
   let text = `\`${op.method} ${op.path}\``;
   if (CALL_SITE_NOTES[canonical]) text += `\n\n${CALL_SITE_NOTES[canonical]}`;
   if (op.update_style === 'replace') {
-    text +=
-      '\n\n**This is a replacement, not a patch** (§27.4 rule 5). Every field of the body is required, and what you do not carry over from a prior read is not preserved — it is overwritten. Read first, change the field you mean, send the whole thing back.';
+    // Only a body whose every member is required may say so (R-28): a
+    // replacement overwrites what it leaves out, it does not make an optional
+    // member mandatory.
+    const { props, required } = flatten(op.request_schema);
+    const allRequired = Object.keys(props).every((p) => required.has(p));
+    text += allRequired
+      ? '\n\n**This is a replacement, not a patch** (§27.4 rule 5). Every field of the body is required, and what you do not carry over from a prior read is not preserved — it is overwritten. Read first, change the field you mean, send the whole thing back.'
+      : '\n\n**This is a replacement, not a patch** (§27.4 rule 5). Only the required members must be set, but what you do not carry over from a prior read is not preserved: an optional member left out is overwritten with its default, not kept (except where noted above). Read first, change the field you mean, send the whole thing back.';
   }
   if (op.sensitive_response_fields.length) {
     text += `\n\n**Returns secret material, once.** \`${op.sensitive_response_fields.join(

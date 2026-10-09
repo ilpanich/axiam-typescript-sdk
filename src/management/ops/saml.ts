@@ -65,7 +65,7 @@ export class SamlApi {
       pathTemplate: '/api/v1/tenants/{tenant_id}/saml/idp',
       path: `/api/v1/tenants/${tenantId}/saml/idp`,
     });
-    return wire;
+    return models.scrubSamlIdpInfo(wire);
   }
 
   /** `GET /api/v1/tenants/{tenant_id}/saml/service-providers` */
@@ -78,7 +78,7 @@ export class SamlApi {
       path: `/api/v1/tenants/${tenantId}/saml/service-providers`,
       query: { ...pageQuery(page) },
     });
-    return wire;
+    return { items: wire.items.map(models.scrubSamlServiceProvider), total: wire.total, offset: wire.offset, limit: wire.limit };
   }
 
   /**
@@ -114,7 +114,7 @@ export class SamlApi {
       path: `/api/v1/tenants/${tenantId}/saml/service-providers`,
       body: body,
     });
-    return wire;
+    return models.scrubSamlServiceProvider(wire);
   }
 
   /** `GET /api/v1/tenants/{tenant_id}/saml/service-providers/{sp_id}` */
@@ -126,7 +126,7 @@ export class SamlApi {
       pathTemplate: '/api/v1/tenants/{tenant_id}/saml/service-providers/{sp_id}',
       path: `/api/v1/tenants/${tenantId}/saml/service-providers/${encodeURIComponent(spId)}`,
     });
-    return wire;
+    return models.scrubSamlServiceProvider(wire);
   }
 
   /**
@@ -141,10 +141,11 @@ export class SamlApi {
    * provider instead (§29.3 rule 3). An ECDSA `sp_signing_cert_pem` verifies
    * HTTP-POST requests only; HTTP-Redirect is RSA-only.
    *
-   * **This is a replacement, not a patch** (§27.4 rule 5). Every field of the
-   * body is required, and what you do not carry over from a prior read is not
-   * preserved — it is overwritten. Read first, change the field you mean, send
-   * the whole thing back.
+   * **This is a replacement, not a patch** (§27.4 rule 5). Only the required
+   * members must be set, but what you do not carry over from a prior read is
+   * not preserved: an optional member left out is overwritten with its
+   * default, not kept (except where noted above). Read first, change the field
+   * you mean, send the whole thing back.
    *
    * Not retried on failure (§27.4 rule 8): every write on this surface is
    * issued exactly once, including the ones that look idempotent.
@@ -158,7 +159,7 @@ export class SamlApi {
       path: `/api/v1/tenants/${tenantId}/saml/service-providers/${encodeURIComponent(spId)}`,
       body: body,
     });
-    return wire;
+    return models.scrubSamlServiceProvider(wire);
   }
 
   /**
@@ -203,7 +204,7 @@ export class SamlApi {
       path: `/api/v1/tenants/${tenantId}/saml/parse-sp-metadata`,
       body: body,
     });
-    return wire;
+    return models.scrubSamlSpMetadataDraft(wire);
   }
 
   /** `GET /api/v1/tenants/{tenant_id}/saml/idp-credentials` */

@@ -90,10 +90,9 @@ export type SetFailureReason =
  * The reason itself where RFC 8935 defines it (`invalid_key`,
  * `invalid_issuer`, `invalid_audience`, `invalid_request`), and
  * `invalid_request` for `malformed`, `invalid_type` and `replayed`, which it
- * does not — so only RFC-defined codes reach the wire. (§32.7 says the codes
- * "match RFC 8935" and names only `replayed` as mapped; `malformed` and
- * `invalid_type` are not RFC 8935 codes either, and this SDK maps them the same
- * way — the conservative reading.)
+ * does not — so only RFC-defined codes reach the wire (contract 1.59, §34.2
+ * P5). A `replayed` SET on a poll is acknowledged rather than sent in
+ * `setErrs` (§34.2 P2); its code here serves a push endpoint.
  */
 export function pushErrorCode(reason: SetFailureReason): string {
   return reason === 'malformed' || reason === 'invalid_type' || reason === 'replayed'
@@ -142,12 +141,14 @@ export interface ReplayStore {
   /**
    * Record `jti` for `windowMs` and return `true`, or return `false` without
    * recording when it is already held. Must be atomic: two concurrent calls
-   * with one `jti` must not both see `true`.
+   * with one `jti` must not both see `true`. A store that cannot answer must
+   * throw (or reject) without recording: the SET is then not accepted, and
+   * `poll` leaves it unjudged (contract 1.59, §34.2 P1, P4 — fail closed).
    */
   checkAndRecord(jti: string, windowMs: number): boolean | Promise<boolean>;
 }
 
-/** The in-memory {@link ReplayStore}: one process, lost on restart; entries expire after their window. */
+/** The in-memory {@link ReplayStore}: one process, lost on restart; entries expire after their window and are otherwise unbounded in count (§34.2 P4). */
 export class MemoryReplayStore implements ReplayStore {
   readonly #seen = new Map<string, number>();
   readonly #now: () => number;
@@ -245,6 +246,14 @@ export interface SsfPollResult {
   moreAvailable: boolean;
   /** The SETs that did not verify. */
   refused: RefusedSet[];
+  /**
+   * The `jti`s of SETs this poll could not judge — the JWKS or discovery
+   * fetch failed, or the replay store could not answer (§34.2 P1, P3). They
+   * are in neither `events` nor `refused` and were **not** recorded:
+   * acknowledge them not, refuse them not, and the transmitter offers them
+   * again. Empty when every SET was judged.
+   */
+  unjudged: string[];
 }
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -391,16 +400,25 @@ export class SsfReceiver {
    * `ack` and `setErrs` are sent exactly as given, and only the members you
    * set (`{}` when none). **Nothing is acknowledged on your behalf**:
    * acknowledge, on the next call, the `jti`s you processed, and pass each
-   * refused one in `setErrs` (`setErrFromReason(r.reason)`). A SET you neither
-   * acknowledge nor refuse is re-offered and — having been recorded when it
-   * verified — then reads as `replayed`.
+   * refused one in `setErrs` (`setErrFromReason(r.reason)`) — except a
+   * `replayed` one, which this receiver accepted on an earlier poll: acknowledge
+   * that one (contract 1.59, §34.2 P2). A SET you neither acknowledge nor
+   * refuse is re-offered and — having been recorded when it verified — then
+   * reads as `replayed`.
    *
    * Retried per §16 on a transport failure, `408`, `429` or `5xx`; never on
-   * another `4xx` (`400` is a `ValidationError`, `404` a `NotFoundError`). A
+   * another `4xx` (§34.2 P7) (`400` is a `ValidationError`, `404` a `NotFoundError`). A
    * SET whose verified `jti` differs from the key it was returned under is
-   * refused `invalid_request`; a non-string SET `malformed`. A JWKS fetch
-   * failure aborts the poll with that error rather than refusing SETs it
-   * could not judge.
+   * refused `invalid_request`; a non-string SET `malformed`.
+   *
+   * **A SET it cannot judge is never recorded** (contract 1.59, §34.2 P1). A
+   * JWKS or discovery fetch that fails, or a replay store that throws, is no
+   * verdict: that SET goes in neither `events` nor `refused` but in
+   * `unjudged`, its `jti` unrecorded, so the transmitter offers it again. The
+   * SETs judged before and after it are returned as usual — the ones in
+   * `events` are recorded and must be processed and acknowledged, or they are
+   * lost. When the poll accepted no SET at all, nothing was recorded and the
+   * first such failure is thrown instead (a `NetworkError` for a failed fetch).
    *
    * @throws AuthError (local, no request) when no `accessTokenProvider` was configured.
    */
@@ -458,7 +476,13 @@ export class SsfReceiver {
       }
     }
     const record = isPlainObject(reply) ? reply : {};
-    const result: SsfPollResult = { events: [], moreAvailable: record.moreAvailable === true, refused: [] };
+    const result: SsfPollResult = {
+      events: [],
+      moreAvailable: record.moreAvailable === true,
+      refused: [],
+      unjudged: [],
+    };
+    let firstFailure: { error: unknown } | undefined;
     const sets = isPlainObject(record.sets) ? record.sets : {};
     for (const [jti, set] of Object.entries(sets)) {
       if (typeof set !== 'string') {
@@ -468,10 +492,20 @@ export class SsfReceiver {
       try {
         result.events.push(await this.#verify(set, jti));
       } catch (err) {
-        if (err instanceof SetRefusedError) result.refused.push({ jti, reason: err.reason });
-        else throw err;
+        if (err instanceof SetRefusedError) {
+          result.refused.push({ jti, reason: err.reason });
+        } else {
+          // §34.2 P1: no verdict, so not recorded (#verify records only after
+          // steps 1 – 8 passed and the store answered). Keep judging the rest:
+          // a SET already accepted in this batch is recorded and must be
+          // returned, never dropped by a throw.
+          result.unjudged.push(jti);
+          firstFailure ??= { error: err };
+        }
       }
     }
+    // Nothing accepted means nothing recorded: raising loses no event.
+    if (firstFailure && result.events.length === 0) throw firstFailure.error;
     return result;
   }
 

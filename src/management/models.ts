@@ -134,10 +134,6 @@ export interface AddServiceAccountMemberRequest {
  *
  * `api_key` follows the same write-only + omit-preserving contract as
  * [`SmtpConfig::password`] (D-01/D-02).
- *
- * Every field is optional, so this is a **sparse** body: what you leave out
- * is left unchanged, and is omitted from the wire request entirely rather
- * than sent as `null` (§27.4 rule 5).
  */
 export interface ApiProviderConfig {
   /** Override base URL (useful for testing / self-hosted instances). */
@@ -721,10 +717,6 @@ export type CibaRequestSigningAlg =
  * that read may be repeated, and the ceiling on how long its result may be
  * trusted. Each is clamped again in code against the three constants above,
  * so a settings row written by hand cannot lift them.
- *
- * Every field is optional, so this is a **sparse** body: what you leave out
- * is left unchanged, and is omitted from the wire request entirely rather
- * than sent as `null` (§27.4 rule 5).
  */
 export interface CimdPolicy {
   /**
@@ -3243,13 +3235,7 @@ export interface Organization {
   updated_at: string;
 }
 
-/**
- * `POST …/saml/parse-sp-metadata` body: **exactly one** of the two members.
- *
- * Every field is optional, so this is a **sparse** body: what you leave out
- * is left unchanged, and is omitted from the wire request entirely rather
- * than sent as `null` (§27.4 rule 5).
- */
+/** `POST …/saml/parse-sp-metadata` body: **exactly one** of the two members. */
 export interface ParseSamlSpMetadata {
   /**
    * An `https` URL the server fetches the document from, once, through its
@@ -5335,10 +5321,6 @@ export type TenantStatus =
  * so the API surface can carry its own defaults: an admin PUTting a partial
  * block gets the documented default for anything they omitted, instead of a
  * deserialization error listing fields they have never heard of.
- *
- * Every field is optional, so this is a **sparse** body: what you leave out
- * is left unchanged, and is omitted from the wire request entirely rather
- * than sent as `null` (§27.4 rule 5).
  */
 export interface TokenExchangeTrustRequest {
   /**
@@ -6103,66 +6085,413 @@ export interface WebhookResponse {
 }
 
 /**
- * Drop `keys` from a decoded response object, returning a shallow copy.
+ * The members a response type declares, as data for {@link keepDeclared}:
+ * `null` keeps a value as read (a scalar, an enum, a free-form object);
+ * `ref` names another entry of `DECLARED_SHAPES`; `array` applies a shape to
+ * every item; `members` is an object's allow-list; `tag` and `arms` are a
+ * tagged union.
+ *
+ * @internal
+ */
+type DeclaredShape =
+  | null
+  | { readonly ref: string }
+  | { readonly array: DeclaredShape }
+  | { readonly members: Readonly<Record<string, DeclaredShape>> }
+  | { readonly tag: string; readonly arms: Readonly<Record<string, DeclaredShape>> };
+
+/**
+ * Generated from openapi.json: the declared shape of every response {@link
+ * keepDeclared} rebuilds, and of the objects they nest.
+ *
+ * @internal
+ */
+const DECLARED_SHAPES: Readonly<Record<string, DeclaredShape>> = {
+  AcsEndpoint: {
+    members: {
+      binding: null,
+      index: null,
+      is_default: null,
+      url: null,
+    },
+  },
+  AttributeMapping: {
+    members: {
+      name_format: null,
+      saml_name: null,
+      source: null,
+    },
+  },
+  DirectoryConfig: {
+    members: {
+      base_dn: null,
+      bind_dn: null,
+      created_at: null,
+      enabled: null,
+      group_base_dn: null,
+      group_filter: null,
+      group_mappings: { array: { ref: "GroupMapping" } },
+      group_member_attribute: null,
+      group_nesting_depth: null,
+      id: null,
+      jit_provisioning: null,
+      kind: null,
+      start_tls: null,
+      sync_interval_secs: null,
+      tenant_id: null,
+      trust_anchors_pem: null,
+      updated_at: null,
+      url: null,
+      user_attribute_map: { ref: "UserAttributeMap" },
+      user_filter: null,
+    },
+  },
+  DirectoryLinkResult: {
+    members: {
+      certificates_revoked: null,
+      directory_external_id: null,
+      user_id: null,
+      was_already_linked: null,
+      webauthn_credentials_deleted: null,
+    },
+  },
+  DirectorySyncStatus: {
+    members: {
+      full_required: null,
+      has_watermark: null,
+      last_attempt_at: null,
+      last_full_run_at: null,
+      last_result: null,
+    },
+  },
+  GroupMapping: {
+    members: {
+      directory_group_dn: null,
+      group_id: null,
+    },
+  },
+  SamlIdpCredential: {
+    members: {
+      certificate_pem: null,
+      created_at: null,
+      fingerprint: null,
+      id: null,
+      issuer_ca_id: null,
+      not_after: null,
+      not_before: null,
+      retired_at: null,
+      serial: null,
+      status: null,
+      tenant_id: null,
+    },
+  },
+  SamlIdpCredentialPromotion: {
+    members: {
+      active: { ref: "SamlIdpCredential" },
+      retired: { ref: "SamlIdpCredential" },
+    },
+  },
+  SamlIdpInfo: {
+    members: {
+      active_credential_id: null,
+      entity_id: null,
+      metadata_served: null,
+      metadata_url: null,
+      next_credential_id: null,
+      saml_available: null,
+      saml_idp_enabled: null,
+      slo_url: null,
+      sso_url: null,
+      tenant_id: null,
+    },
+  },
+  SamlServiceProvider: {
+    members: {
+      acs_urls: { array: { ref: "AcsEndpoint" } },
+      allow_idp_initiated: null,
+      allowed_groups: null,
+      attribute_mappings: { array: { ref: "AttributeMapping" } },
+      created_at: null,
+      display_name: null,
+      enabled: null,
+      encrypt_assertions: null,
+      entity_id: null,
+      id: null,
+      name_id_format: null,
+      sign_responses: null,
+      slo_binding: null,
+      slo_url: null,
+      sp_encryption_cert_pem: null,
+      sp_signing_cert_pem: null,
+      tenant_id: null,
+      updated_at: null,
+      want_authn_requests_signed: null,
+    },
+  },
+  SamlServiceProviderInput: {
+    members: {
+      acs_urls: { array: { ref: "AcsEndpoint" } },
+      allow_idp_initiated: null,
+      allowed_groups: null,
+      attribute_mappings: { array: { ref: "AttributeMapping" } },
+      display_name: null,
+      enabled: null,
+      encrypt_assertions: null,
+      entity_id: null,
+      name_id_format: null,
+      sign_responses: null,
+      slo_binding: null,
+      slo_url: null,
+      sp_encryption_cert_pem: null,
+      sp_signing_cert_pem: null,
+      want_authn_requests_signed: null,
+    },
+  },
+  SamlSpMetadataDraft: {
+    members: {
+      encryption_certificate_fingerprint: null,
+      service_provider: { ref: "SamlServiceProviderInput" },
+      signing_certificate_fingerprint: null,
+      warnings: null,
+    },
+  },
+  ScimReconcileAccepted: {
+    members: {
+      status: null,
+      target_id: null,
+    },
+  },
+  ScimTargetAuth: {
+    tag: "type",
+    arms: {
+      "bearer": {
+        members: {
+          type: null,
+        },
+      },
+      "oauth2_client_credentials": {
+        members: {
+          type: null,
+          client_id: null,
+          scope: null,
+          token_url: null,
+        },
+      },
+    },
+  },
+  ScimTargetDeliveryState: {
+    members: {
+      consecutive_failures: null,
+      dead_lettered_total: null,
+      last_failure_at: null,
+      last_failure_reason: null,
+      last_reconciled_at: null,
+      last_success_at: null,
+    },
+  },
+  ScimTargetResponse: {
+    members: {
+      auth: { ref: "ScimTargetAuth" },
+      base_url: null,
+      created_at: null,
+      deprovision: null,
+      enabled: null,
+      id: null,
+      name: null,
+      push_groups: null,
+      scope: { ref: "ScimTargetScope" },
+      state: { ref: "ScimTargetDeliveryState" },
+      tenant_id: null,
+      updated_at: null,
+      user_name_from: null,
+    },
+  },
+  ScimTargetScope: {
+    tag: "type",
+    arms: {
+      "all_users": {
+        members: {
+          type: null,
+        },
+      },
+      "groups": {
+        members: {
+          type: null,
+          group_ids: null,
+        },
+      },
+    },
+  },
+  SsfStream: {
+    members: {
+      audience: null,
+      authorization_header_set: null,
+      created_at: null,
+      delivery_method: null,
+      description: null,
+      endpoint_url: null,
+      events_allowed: null,
+      events_delivered: null,
+      events_requested: null,
+      id: null,
+      last_verification_at: null,
+      receiver_client_id: null,
+      status: null,
+      status_actor: null,
+      status_reason: null,
+      subject_format: null,
+      tenant_id: null,
+      transmitter_active: null,
+      transmitter_inactive_reason: null,
+      updated_at: null,
+    },
+  },
+  UserAttributeMap: {
+    members: {
+      display_name: null,
+      email: null,
+      external_id: null,
+      username: null,
+    },
+  },
+};
+
+/**
+ * Rebuild a decoded response from the members its type declares (CONTRACT
+ * §29.5; contract 1.59 §34.2 P12.1).
+ *
+ * An object keeps only its declared members, each rebuilt by its own shape;
+ * an array, each item; a tagged union, the members of the arm its tag names
+ * — and an **unknown** arm only its tag. A value whose shape does not match
+ * the declaration (a scalar where an object was declared) is kept as read.
+ * Never mutates its input.
  *
  * @internal — the generated `scrub<Type>` functions are built on it.
  */
-function dropMembers<T>(value: T, keys: readonly string[]): T {
-  if (value === null || typeof value !== 'object') return value;
-  const copy = { ...(value as Record<string, unknown>) };
-  for (const key of keys) delete copy[key];
-  return copy as T;
+function keepDeclared(value: unknown, shape: DeclaredShape): unknown {
+  if (shape === null || value === null || typeof value !== 'object') return value;
+  if ('ref' in shape) return keepDeclared(value, DECLARED_SHAPES[shape.ref] ?? null);
+  if ('array' in shape) return Array.isArray(value) ? value.map((item) => keepDeclared(item, shape.array)) : value;
+  if (Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  if ('tag' in shape) {
+    const tag = record[shape.tag];
+    const arm = typeof tag === 'string' && Object.hasOwn(shape.arms, tag) ? shape.arms[tag] : undefined;
+    return arm === undefined ? { [shape.tag]: tag } : keepDeclared(value, arm);
+  }
+  const out: Record<string, unknown> = {};
+  for (const [name, member] of Object.entries(shape.members)) {
+    if (Object.hasOwn(record, name)) out[name] = keepDeclared(record[name], member);
+  }
+  return out;
 }
 
 /**
- * Drop `bind_secret` from a `DirectoryConfig` response (CONTRACT §29.2,
- * §30.2, §31.2, §32.5): the type declares no such member, and a value that
- * (wrongly) carries one must not surface it in any rendering.
+ * Keep only the members `DirectoryConfig` declares, at every depth (CONTRACT
+ * §29.5; contract 1.59 §34.2 P12.1): a member the type does not declare — a
+ * key, a secret or a hash of one under any name — is dropped rather than
+ * surfaced in any rendering of the result.
  */
 export function scrubDirectoryConfig(value: DirectoryConfig): DirectoryConfig {
-  const out = dropMembers(value, ["bind_secret"]);
-  return out;
+  return keepDeclared(value, DECLARED_SHAPES["DirectoryConfig"] ?? null) as DirectoryConfig;
 }
 
 /**
- * Drop `private_key_pem` from a `SamlIdpCredential` response (CONTRACT
- * §29.2, §30.2, §31.2, §32.5): the type declares no such member, and a value
- * that (wrongly) carries one must not surface it in any rendering.
+ * Keep only the members `DirectoryLinkResult` declares, at every depth
+ * (CONTRACT §29.5; contract 1.59 §34.2 P12.1): a member the type does not
+ * declare — a key, a secret or a hash of one under any name — is dropped
+ * rather than surfaced in any rendering of the result.
+ */
+export function scrubDirectoryLinkResult(value: DirectoryLinkResult): DirectoryLinkResult {
+  return keepDeclared(value, DECLARED_SHAPES["DirectoryLinkResult"] ?? null) as DirectoryLinkResult;
+}
+
+/**
+ * Keep only the members `DirectorySyncStatus` declares, at every depth
+ * (CONTRACT §29.5; contract 1.59 §34.2 P12.1): a member the type does not
+ * declare — a key, a secret or a hash of one under any name — is dropped
+ * rather than surfaced in any rendering of the result.
+ */
+export function scrubDirectorySyncStatus(value: DirectorySyncStatus): DirectorySyncStatus {
+  return keepDeclared(value, DECLARED_SHAPES["DirectorySyncStatus"] ?? null) as DirectorySyncStatus;
+}
+
+/**
+ * Keep only the members `SamlIdpCredential` declares, at every depth
+ * (CONTRACT §29.5; contract 1.59 §34.2 P12.1): a member the type does not
+ * declare — a key, a secret or a hash of one under any name — is dropped
+ * rather than surfaced in any rendering of the result.
  */
 export function scrubSamlIdpCredential(value: SamlIdpCredential): SamlIdpCredential {
-  const out = dropMembers(value, ["private_key_pem"]);
-  return out;
+  return keepDeclared(value, DECLARED_SHAPES["SamlIdpCredential"] ?? null) as SamlIdpCredential;
 }
 
 /**
- * Scrub the nested responses a `SamlIdpCredentialPromotion` carries (see the
- * `scrub` function of each).
+ * Keep only the members `SamlIdpCredentialPromotion` declares, at every
+ * depth (CONTRACT §29.5; contract 1.59 §34.2 P12.1): a member the type does
+ * not declare — a key, a secret or a hash of one under any name — is dropped
+ * rather than surfaced in any rendering of the result.
  */
 export function scrubSamlIdpCredentialPromotion(value: SamlIdpCredentialPromotion): SamlIdpCredentialPromotion {
-  const out = dropMembers(value, []);
-  if (out === null || typeof out !== 'object') return out;
-  const record = out as unknown as Record<string, unknown>;
-  if (record.active != null) record.active = scrubSamlIdpCredential(record.active as SamlIdpCredential);
-  if (record.retired != null) record.retired = scrubSamlIdpCredential(record.retired as SamlIdpCredential);
-  return out;
+  return keepDeclared(value, DECLARED_SHAPES["SamlIdpCredentialPromotion"] ?? null) as SamlIdpCredentialPromotion;
 }
 
 /**
- * Drop `credential` from a `ScimTargetResponse` response (CONTRACT §29.2,
- * §30.2, §31.2, §32.5): the type declares no such member, and a value that
- * (wrongly) carries one must not surface it in any rendering.
+ * Keep only the members `SamlIdpInfo` declares, at every depth (CONTRACT
+ * §29.5; contract 1.59 §34.2 P12.1): a member the type does not declare — a
+ * key, a secret or a hash of one under any name — is dropped rather than
+ * surfaced in any rendering of the result.
+ */
+export function scrubSamlIdpInfo(value: SamlIdpInfo): SamlIdpInfo {
+  return keepDeclared(value, DECLARED_SHAPES["SamlIdpInfo"] ?? null) as SamlIdpInfo;
+}
+
+/**
+ * Keep only the members `SamlServiceProvider` declares, at every depth
+ * (CONTRACT §29.5; contract 1.59 §34.2 P12.1): a member the type does not
+ * declare — a key, a secret or a hash of one under any name — is dropped
+ * rather than surfaced in any rendering of the result.
+ */
+export function scrubSamlServiceProvider(value: SamlServiceProvider): SamlServiceProvider {
+  return keepDeclared(value, DECLARED_SHAPES["SamlServiceProvider"] ?? null) as SamlServiceProvider;
+}
+
+/**
+ * Keep only the members `SamlSpMetadataDraft` declares, at every depth
+ * (CONTRACT §29.5; contract 1.59 §34.2 P12.1): a member the type does not
+ * declare — a key, a secret or a hash of one under any name — is dropped
+ * rather than surfaced in any rendering of the result.
+ */
+export function scrubSamlSpMetadataDraft(value: SamlSpMetadataDraft): SamlSpMetadataDraft {
+  return keepDeclared(value, DECLARED_SHAPES["SamlSpMetadataDraft"] ?? null) as SamlSpMetadataDraft;
+}
+
+/**
+ * Keep only the members `ScimReconcileAccepted` declares, at every depth
+ * (CONTRACT §29.5; contract 1.59 §34.2 P12.1): a member the type does not
+ * declare — a key, a secret or a hash of one under any name — is dropped
+ * rather than surfaced in any rendering of the result.
+ */
+export function scrubScimReconcileAccepted(value: ScimReconcileAccepted): ScimReconcileAccepted {
+  return keepDeclared(value, DECLARED_SHAPES["ScimReconcileAccepted"] ?? null) as ScimReconcileAccepted;
+}
+
+/**
+ * Keep only the members `ScimTargetResponse` declares, at every depth
+ * (CONTRACT §29.5; contract 1.59 §34.2 P12.1): a member the type does not
+ * declare — a key, a secret or a hash of one under any name — is dropped
+ * rather than surfaced in any rendering of the result.
  */
 export function scrubScimTargetResponse(value: ScimTargetResponse): ScimTargetResponse {
-  const out = dropMembers(value, ["credential"]);
-  return out;
+  return keepDeclared(value, DECLARED_SHAPES["ScimTargetResponse"] ?? null) as ScimTargetResponse;
 }
 
 /**
- * Drop `authorization_header` from a `SsfStream` response (CONTRACT §29.2,
- * §30.2, §31.2, §32.5): the type declares no such member, and a value that
- * (wrongly) carries one must not surface it in any rendering.
+ * Keep only the members `SsfStream` declares, at every depth (CONTRACT
+ * §29.5; contract 1.59 §34.2 P12.1): a member the type does not declare — a
+ * key, a secret or a hash of one under any name — is dropped rather than
+ * surfaced in any rendering of the result.
  */
 export function scrubSsfStream(value: SsfStream): SsfStream {
-  const out = dropMembers(value, ["authorization_header"]);
-  return out;
+  return keepDeclared(value, DECLARED_SHAPES["SsfStream"] ?? null) as SsfStream;
 }

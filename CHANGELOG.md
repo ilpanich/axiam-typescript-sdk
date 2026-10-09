@@ -6,6 +6,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+Contract 1.59 — re-vendored `CONTRACT.md` (axiam `fe369eb`; `openapi.json`,
+`management-registry.json` and `proto/` unchanged) and fixed the rows of follow-up F-59-02
+(ilpanich/axiam#577) of the §34 review: R-18, R-1, R-7, R-20, R-23 and R-28, plus §33.8 test 8
+as amended by P8. The README's Contract conformance statement names contract 1.59 and the same
+sections as before: §1–§13 and §12.7, §14, §15, §17, §19, §20, §21, §22, §23, §24, §25, §26,
+§27, §28, §28.12, §29, §30, §31, §32 and §33, with §32.7 and §33.2 signed.
+
+### Fixed (contract 1.59)
+
+- **R-18 — a failed write no longer carries its secret** (§30.5, §31.5, §32.5, §7 rule 1). A
+  management write that failed with a `5xx` or a transport error threw a `NetworkError` whose
+  `cause` was the axios error with only its response headers redacted, so its `config.data`
+  — the serialized body with the plaintext `bind_secret`, `credential`,
+  `authorization_header`, or a §27.5 `password` / `secret` / `client_secret` /
+  `private_key_pem` — printed with `console.log(err)`. `sanitizeAxiosError` now rebuilds the
+  cause from an allow-list (`name`, `message`, `code`, `status`, and the response's `status`,
+  `statusText`, `data` and allow-listed headers); `config` and `request` never survive. Every
+  REST path routes through it.
+- **R-1 — `SsfReceiver.poll` no longer loses events** (§32.7, §34.2 P1). A JWKS fetch or replay
+  store failure on a later SET of a batch aborted the poll after earlier SETs had been recorded;
+  re-offered, they read `replayed`. P1's second form: `poll` returns what it judged and lists
+  the SETs it could not judge, unrecorded, in the new `SsfPollResult.unjudged`; when it
+  accepted none, it records nothing and throws.
+- **R-20 — responses keep only declared members** (§29.5, §31.2, §34.2 P12.1). The `scrub<Type>`
+  functions dropped one named key each; every `directory`, `saml`, `scimTargets` and `ssf`
+  response is now rebuilt from its declared members at every depth (generated from
+  `openapi.json`), an unknown `auth` / `scope` arm keeps only `type`, and a page keeps only
+  `Page`'s members. Six responses that had no scrubber gain one.
+- **R-23 — the RFC 7592 update sends what the read carried** (§28.12.2 rule 4, §34.2 P12.4). A
+  list the read lacked is no longer sent as `[]`, and a list of an unexpected shape is sent
+  back as read instead of filtered or overwritten.
+- **§33.8 test 8 (P8) — a `5xx` on `cibaPoll` is transient whatever its body.** The server's own
+  `500 {"error":"server_error"}` was an `OAuthProtocolError` that ended `cibaAwait`.
+
+### Changed (contract 1.59)
+
+- `ClientRegistration.redirect_uris`, `grant_types` and `response_types` are optional: absent
+  when the read did not carry a list of strings (R-23).
+- `SsfPollResult` gains `unjudged: string[]` (R-1).
+- **R-7, R-28 (documentation):** the README says `poll` is retried on `408` and `429` (P7) and
+  that a `replayed` SET is acknowledged rather than reported (P2), and that the default replay
+  store is unbounded in count and a store that cannot answer fails closed (P4); the generator
+  no longer writes "Every field of the body is required" on a replacement with optional members
+  or "sparse body" on a type that is no sparse update (`ParseSamlSpMetadata`); the mTLS section
+  counts seven aliases and lists `cibaInitiate`.
+
 Contract 1.58 — re-vendored `CONTRACT.md`, `openapi.json` and `management-registry.json`, and
 implemented contracts 1.53 – 1.58 (§28.12, §29, §30, §31, §32 with §32.7, §33 with §33.2
 signed, and the §21.3.1 amendment). Ported from the reference implementation,

@@ -2255,8 +2255,9 @@ export class OidcClient {
    * `authorization_pending` and `slow_down` (non-terminal), `access_denied` and
    * `expired_token` (terminal and distinct — {@link isAccessDenied},
    * {@link isExpiredToken}), `invalid_grant`, `rate_limit_exceeded`. None of
-   * them is retried. A transport failure, `5xx`, `408` or bodiless `429` is
-   * retried per §16 within the call; no other `4xx` is.
+   * them is retried. A transport failure, `408`, bodiless `429` or `5xx` —
+   * **whatever its body**, `500 {"error":"server_error"}` included (§34.2 P8)
+   * — is retried per §16 within the call; no other `4xx` is.
    *
    * A `200` is the §12 token set; its ID token is validated as for every other
    * grant (no nonce). **Store the returned tokens before anything else**: a
@@ -2287,6 +2288,12 @@ export class OidcClient {
             return { error: new NetworkError('ciba_poll: the response is not a TokenResponse') };
           }
           return { wire };
+        }
+        // §33.7 rule 5, §34.2 P8: a 5xx is transient whatever its body —
+        // AXIAM's own token endpoint answers `500 {"error":"server_error"}` —
+        // so it is retried under §16 before any `error` member is read.
+        if (response.status >= 500) {
+          throw transient(retryableNetworkError(`${operation}: HTTP ${response.status}`, response));
         }
         const protocol = oauth2ErrorFromBody(jsonBody(response.data));
         if (protocol) return { error: protocol }; // decisive, never retried

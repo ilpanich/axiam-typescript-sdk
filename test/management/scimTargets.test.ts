@@ -29,7 +29,14 @@ import {
   mockServer,
   retryingManagementClient,
 } from '../managementSupport.js';
-import { assertNoFragment, errorRenderings, freshId, freshSecret, renderings } from '../redaction.js';
+import {
+  assertNoFragment,
+  errorRenderings,
+  exhaustiveErrorRenderings,
+  freshId,
+  freshSecret,
+  renderings,
+} from '../redaction.js';
 
 const TARGETS = '/api/v1/scim-targets';
 
@@ -85,6 +92,34 @@ describe('§31.8 (1) — the credential is on the wire and in no rendering', () 
     expect(err).toBeInstanceOf(ValidationError);
     assertNoFragment(errorRenderings(err), credential, 'error');
     expect((seen[0]?.json as Record<string, unknown>).credential === credential, 'not sent').toBe(true);
+  });
+
+  // R-18 (contract 1.59): a 400 never held the request; a 5xx and a dropped
+  // connection reach NetworkError, whose cause carried the serialized body.
+  it('redacts the error raised by create and update on a 5xx and on a transport failure', async () => {
+    const server = mockServer();
+    const client = managementClient();
+    const id = freshId();
+    const failures = [
+      () => HttpResponse.json({ error: 'internal_error' }, { status: 500 }),
+      () => new HttpResponse(null, { status: 503 }),
+      () => HttpResponse.error(),
+    ];
+    for (const respond of failures) {
+      const credential = freshSecret();
+      server.use(
+        http.post(`${BASE_URL}${TARGETS}`, respond),
+        http.put(`${BASE_URL}${TARGETS}/${id}`, respond),
+      );
+      for (const err of [
+        await client.scimTargets.create(input(credential)).catch((e: unknown) => e),
+        await client.scimTargets.update(id, input(credential)).catch((e: unknown) => e),
+      ]) {
+        expect(err).toBeInstanceOf(NetworkError);
+        assertNoFragment(exhaustiveErrorRenderings(err), credential, 'error');
+      }
+      server.resetHandlers();
+    }
   });
 });
 

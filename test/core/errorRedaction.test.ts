@@ -136,3 +136,53 @@ describe('NetworkError never leaks raw Set-Cookie token material (CR-04, D-16)',
     expect(JSON.stringify(unsanitizedErr)).toContain(RAW_ACCESS_TOKEN);
   });
 });
+
+describe('R-18 (contract 1.59) — the cause is rebuilt from an allow-list, never copied', () => {
+  it('drops config, request, response.config and response.request, keeping only the diagnostics', () => {
+    const body = JSON.stringify({ bind_secret: 'request-body-marker' });
+    const cause = {
+      name: 'AxiosError',
+      message: 'Request failed with status code 503',
+      code: 'ERR_BAD_RESPONSE',
+      status: 503,
+      config: { data: body, headers: { 'X-CSRF-Token': 'csrf-marker' } },
+      request: { outputData: [{ data: body }] },
+      response: {
+        status: 503,
+        statusText: 'Service Unavailable',
+        headers: { 'content-type': 'text/plain', 'set-cookie': 'cookie-marker' },
+        data: 'unavailable',
+        config: { data: body },
+        request: { _header: 'Cookie: cookie-marker' },
+      },
+    };
+    const sanitized = sanitizeAxiosError(cause);
+    expect(sanitized).toEqual({
+      name: 'AxiosError',
+      message: 'Request failed with status code 503',
+      code: 'ERR_BAD_RESPONSE',
+      status: 503,
+      response: {
+        status: 503,
+        statusText: 'Service Unavailable',
+        headers: { 'content-type': 'text/plain', 'set-cookie': '[REDACTED]' },
+        data: 'unavailable',
+      },
+    });
+    const rendered = inspect(new NetworkError('x', sanitized), { depth: Infinity, showHidden: true });
+    for (const marker of ['request-body-marker', 'csrf-marker', 'cookie-marker']) {
+      expect(rendered).not.toContain(marker);
+    }
+  });
+
+  it('rebuilds a transport failure that has no response at all', () => {
+    const cause = {
+      isAxiosError: true,
+      message: 'socket hang up',
+      code: 'ECONNRESET',
+      config: { data: 'request-body-marker' },
+      request: {},
+    };
+    expect(sanitizeAxiosError(cause)).toEqual({ message: 'socket hang up', code: 'ECONNRESET' });
+  });
+});
