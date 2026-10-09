@@ -48,7 +48,7 @@ export class ScimTargetsApi {
       path: '/api/v1/scim-targets',
       query: { ...pageQuery(page) },
     });
-    return { ...wire, items: wire.items.map(models.scrubScimTargetResponse) };
+    return { items: wire.items.map(models.scrubScimTargetResponse), total: wire.total, offset: wire.offset, limit: wire.limit };
   }
 
   /**
@@ -165,7 +165,7 @@ export class ScimTargetsApi {
       pathTemplate: '/api/v1/scim-targets/{id}/reconcile',
       path: `/api/v1/scim-targets/${encodeURIComponent(id)}/reconcile`,
     });
-    return wire;
+    return models.scrubScimReconcileAccepted(wire);
   }
 
 }

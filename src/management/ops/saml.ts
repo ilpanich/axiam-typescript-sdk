@@ -65,7 +65,7 @@ export class SamlApi {
       pathTemplate: '/api/v1/tenants/{tenant_id}/saml/idp',
       path: `/api/v1/tenants/${tenantId}/saml/idp`,
     });
-    return wire;
+    return models.scrubSamlIdpInfo(wire);
   }
 
   /** `GET /api/v1/tenants/{tenant_id}/saml/service-providers` */
@@ -78,7 +78,7 @@ export class SamlApi {
       path: `/api/v1/tenants/${tenantId}/saml/service-providers`,
       query: { ...pageQuery(page) },
     });
-    return wire;
+    return { items: wire.items.map(models.scrubSamlServiceProvider), total: wire.total, offset: wire.offset, limit: wire.limit };
   }
 
   /**
@@ -114,7 +114,7 @@ export class SamlApi {
       path: `/api/v1/tenants/${tenantId}/saml/service-providers`,
       body: body,
     });
-    return wire;
+    return models.scrubSamlServiceProvider(wire);
   }
 
   /** `GET /api/v1/tenants/{tenant_id}/saml/service-providers/{sp_id}` */
@@ -126,7 +126,7 @@ export class SamlApi {
       pathTemplate: '/api/v1/tenants/{tenant_id}/saml/service-providers/{sp_id}',
       path: `/api/v1/tenants/${tenantId}/saml/service-providers/${encodeURIComponent(spId)}`,
     });
-    return wire;
+    return models.scrubSamlServiceProvider(wire);
   }
 
   /**
@@ -158,7 +158,7 @@ export class SamlApi {
       path: `/api/v1/tenants/${tenantId}/saml/service-providers/${encodeURIComponent(spId)}`,
       body: body,
     });
-    return wire;
+    return models.scrubSamlServiceProvider(wire);
   }
 
   /**
@@ -203,7 +203,7 @@ export class SamlApi {
       path: `/api/v1/tenants/${tenantId}/saml/parse-sp-metadata`,
       body: body,
     });
-    return wire;
+    return models.scrubSamlSpMetadataDraft(wire);
   }
 
   /** `GET /api/v1/tenants/{tenant_id}/saml/idp-credentials` */

@@ -61,7 +61,7 @@ export class SsfApi {
       path: `/api/v1/tenants/${tenantId}/ssf/streams`,
       query: { ...pageQuery(page) },
     });
-    return { ...wire, items: wire.items.map(models.scrubSsfStream) };
+    return { items: wire.items.map(models.scrubSsfStream), total: wire.total, offset: wire.offset, limit: wire.limit };
   }
 
   /**

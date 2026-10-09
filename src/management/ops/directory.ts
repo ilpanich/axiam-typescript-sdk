@@ -164,7 +164,7 @@ export class DirectoryApi {
       path: `/api/v1/tenants/${tenantId}/directory/links`,
       body: body,
     });
-    return wire;
+    return models.scrubDirectoryLinkResult(wire);
   }
 
   /** `GET /api/v1/tenants/{tenant_id}/directory/sync-status` */
@@ -176,7 +176,7 @@ export class DirectoryApi {
       pathTemplate: '/api/v1/tenants/{tenant_id}/directory/sync-status',
       path: `/api/v1/tenants/${tenantId}/directory/sync-status`,
     });
-    return wire;
+    return models.scrubDirectorySyncStatus(wire);
   }
 
 }
