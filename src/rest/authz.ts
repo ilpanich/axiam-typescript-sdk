@@ -7,7 +7,7 @@
 // interceptor on every call). No client-side cache (D-08) — plain stateless
 // async functions.
 
-import { mapHttpStatusToError, NetworkError } from '../core/index.js';
+import { mapHttpStatusToError, NetworkError, sanitizeAxiosError } from '../core/index.js';
 import { memoKey } from '../core/decisionMemo.js';
 import { withRetry } from './retry.js';
 import type { AxiamClient } from './client.js';
@@ -152,5 +152,7 @@ function mapAuthzError(err: unknown, action?: string, resourceId?: string): Erro
       });
     }
   }
-  return new NetworkError('authz request failed', err);
+  // The axios error carries the request (headers and body): only its
+  // sanitized diagnostics are kept (contract 1.59 R-18's choke point).
+  return new NetworkError('authz request failed', sanitizeAxiosError(err));
 }

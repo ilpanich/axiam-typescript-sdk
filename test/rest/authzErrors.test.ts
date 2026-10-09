@@ -5,6 +5,7 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { NetworkError } from '../../src/core/errors.js';
 import { AxiamClient } from '../../src/rest/client.js';
 
 const BASE_URL = 'https://axiam.test';
@@ -34,5 +35,19 @@ describe('authz error mapping', () => {
   it('maps a network error (no response) to a NetworkError', async () => {
     server.use(http.post(CHECK, () => HttpResponse.error()));
     await expect(client().checkAccess({ action: 'users:read', resourceId: 'r-1' })).rejects.toThrow();
+  });
+
+  // Contract 1.59 R-18's path: a transport failure's cause is the sanitized
+  // diagnostics, never the axios error with the request (its headers carry
+  // the session's CSRF token and bearer, its config the body).
+  it('a network error keeps no request in its cause', async () => {
+    server.use(http.post(CHECK, () => HttpResponse.error()));
+    const err = await client()
+      .checkAccess({ action: 'users:read', resourceId: 'r-1' })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NetworkError);
+    const cause = (err as NetworkError).cause as Record<string, unknown>;
+    expect(cause).toBeDefined();
+    for (const key of ['config', 'request', 'response']) expect(key in cause, `cause.${key}`).toBe(false);
   });
 });
