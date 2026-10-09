@@ -134,10 +134,6 @@ export interface AddServiceAccountMemberRequest {
  *
  * `api_key` follows the same write-only + omit-preserving contract as
  * [`SmtpConfig::password`] (D-01/D-02).
- *
- * Every field is optional, so this is a **sparse** body: what you leave out
- * is left unchanged, and is omitted from the wire request entirely rather
- * than sent as `null` (§27.4 rule 5).
  */
 export interface ApiProviderConfig {
   /** Override base URL (useful for testing / self-hosted instances). */
@@ -721,10 +717,6 @@ export type CibaRequestSigningAlg =
  * that read may be repeated, and the ceiling on how long its result may be
  * trusted. Each is clamped again in code against the three constants above,
  * so a settings row written by hand cannot lift them.
- *
- * Every field is optional, so this is a **sparse** body: what you leave out
- * is left unchanged, and is omitted from the wire request entirely rather
- * than sent as `null` (§27.4 rule 5).
  */
 export interface CimdPolicy {
   /**
@@ -3243,13 +3235,7 @@ export interface Organization {
   updated_at: string;
 }
 
-/**
- * `POST …/saml/parse-sp-metadata` body: **exactly one** of the two members.
- *
- * Every field is optional, so this is a **sparse** body: what you leave out
- * is left unchanged, and is omitted from the wire request entirely rather
- * than sent as `null` (§27.4 rule 5).
- */
+/** `POST …/saml/parse-sp-metadata` body: **exactly one** of the two members. */
 export interface ParseSamlSpMetadata {
   /**
    * An `https` URL the server fetches the document from, once, through its
@@ -5335,10 +5321,6 @@ export type TenantStatus =
  * so the API surface can carry its own defaults: an admin PUTting a partial
  * block gets the documented default for anything they omitted, instead of a
  * deserialization error listing fields they have never heard of.
- *
- * Every field is optional, so this is a **sparse** body: what you leave out
- * is left unchanged, and is omitted from the wire request entirely rather
- * than sent as `null` (§27.4 rule 5).
  */
 export interface TokenExchangeTrustRequest {
   /**

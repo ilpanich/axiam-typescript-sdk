@@ -220,9 +220,9 @@ describe('§21.3 rule 2 consequence 1 — absence means "no separate host"', () 
     expect(hits).toEqual([TOKEN_ENDPOINT, `${BASE_URL}/oauth2/revoke`]);
   });
 
-  it('falls back per endpoint when the alias object names only some of the six', async () => {
+  it('falls back per endpoint when the alias object names only some of the seven', async () => {
     const state = createMockState();
-    // RFC 8705 §5 does not require an OP to alias all six, and the shape of the
+    // RFC 8705 §5 does not require an OP to alias all seven, and the shape of the
     // member must never be why a client stops working: an object naming only
     // `token_endpoint` is valid, and every endpoint it omits falls back.
     const hits = setup(
@@ -292,7 +292,7 @@ describe('§21.3 rule 2 consequence 2 — no alias is ever synthesised', () => {
     });
 
     // jwks_uri is public key material and gains nothing from a handshake, so it
-    // is not in the aliasable six. `jwksHandler` only serves the conventional
+    // is not in the aliasable seven. `jwksHandler` only serves the conventional
     // origin; a synthesised alias would have made this an unhandled request.
     expect(state.jwksCalls).toBe(1);
     expect(JWKS_URI.startsWith(BASE_URL)).toBe(true);

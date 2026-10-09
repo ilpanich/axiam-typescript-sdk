@@ -325,6 +325,7 @@ name wherever the document publishes one:
 | `revoke` | `revocation_endpoint` |
 | `deviceAuthorize` | `device_authorization_endpoint` |
 | `oidcPar` | `pushed_authorization_request_endpoint` |
+| `cibaInitiate` | `backchannel_authentication_endpoint` |
 
 Three things this deliberately does **not** do:
 
@@ -332,8 +333,11 @@ Three things this deliberately does **not** do:
   terminates mutual TLS on the issuer's own host", so the conventional endpoints keep
   being used. A deployment running `client_auth = optional` on one listener serves both
   populations there and correctly publishes nothing.
-- **No alias is ever synthesised.** Only the six endpoints RFC 8705 §5 lists can be
-  aliased — never `authorization_endpoint`, `end_session_endpoint` or `jwks_uri`. The
+- **No alias is ever synthesised.** Only the seven endpoints CONTRACT.md §21.3.1's vector
+  aliases can be — `token_endpoint`, `introspection_endpoint`, `revocation_endpoint`,
+  `device_authorization_endpoint`, `pushed_authorization_request_endpoint`,
+  `userinfo_endpoint` and CIBA's `backchannel_authentication_endpoint` — never
+  `authorization_endpoint`, `end_session_endpoint` or `jwks_uri`. The
   first two are front-channel and the third is public key material; sending a browser to
   an mTLS host raises a native certificate-chooser dialog most users cannot answer.
 - **`issuer` does not move.** It is an identifier, not an endpoint. §12.4 rule 3 still

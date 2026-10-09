@@ -95,6 +95,16 @@ const EXPLICIT_NULL_FIELDS = {
 // undeclared member through (R-20).
 const DECLARED_ONLY_NAMESPACES = new Set(['directory', 'saml', 'scim_targets', 'ssf']);
 
+// The request bodies of the registry's `sparse` updates — the only types whose
+// documentation may say that what is left out is left unchanged.
+const SPARSE_BODIES = new Set(
+  Object.values(REGISTRY.namespaces).flatMap((ns) =>
+    Object.values(ns.operations)
+      .filter((op) => op.update_style === 'sparse' && op.request_schema)
+      .map((op) => op.request_schema),
+  ),
+);
+
 // Call-site documentation the contract makes an SDK repeat (§29.3, §30.3,
 // §31.3, §32.2). Generated rather than hand-written because the methods are
 // generated; keyed by the registry's namespace-qualified operation name.
@@ -902,7 +912,10 @@ function emitInterface(rname, name, secrets, directions, projected = []) {
       explicitNull: EXPLICIT_NULL_FIELDS[name]?.has(pname) ?? false,
     }));
 
-  const allOptional = fields.length > 0 && fields.every((f) => f.optional);
+  // The sparse-body sentence belongs to the body of a sparse update only (R-28):
+  // an all-optional type that is no update — `ParseSamlSpMetadata`'s
+  // exactly-one-of, a nested config — leaves nothing "unchanged".
+  const allOptional = SPARSE_BODIES.has(name) && fields.length > 0 && fields.every((f) => f.optional);
   const lines = doc(
     (description ?? `\`${rname}\` (generated from openapi.json).`) +
       (allOptional
@@ -1309,8 +1322,14 @@ function buildOperationDoc(op, canonical) {
   let text = `\`${op.method} ${op.path}\``;
   if (CALL_SITE_NOTES[canonical]) text += `\n\n${CALL_SITE_NOTES[canonical]}`;
   if (op.update_style === 'replace') {
-    text +=
-      '\n\n**This is a replacement, not a patch** (§27.4 rule 5). Every field of the body is required, and what you do not carry over from a prior read is not preserved — it is overwritten. Read first, change the field you mean, send the whole thing back.';
+    // Only a body whose every member is required may say so (R-28): a
+    // replacement overwrites what it leaves out, it does not make an optional
+    // member mandatory.
+    const { props, required } = flatten(op.request_schema);
+    const allRequired = Object.keys(props).every((p) => required.has(p));
+    text += allRequired
+      ? '\n\n**This is a replacement, not a patch** (§27.4 rule 5). Every field of the body is required, and what you do not carry over from a prior read is not preserved — it is overwritten. Read first, change the field you mean, send the whole thing back.'
+      : '\n\n**This is a replacement, not a patch** (§27.4 rule 5). Only the required members must be set, but what you do not carry over from a prior read is not preserved: an optional member left out is overwritten with its default, not kept (except where noted above). Read first, change the field you mean, send the whole thing back.';
   }
   if (op.sensitive_response_fields.length) {
     text += `\n\n**Returns secret material, once.** \`${op.sensitive_response_fields.join(

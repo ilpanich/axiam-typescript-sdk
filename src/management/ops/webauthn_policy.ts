@@ -58,10 +58,11 @@ export class WebauthnPolicyApi {
   /**
    * `PUT /api/v1/tenants/{tenant_id}/webauthn/attestation-policy`
    *
-   * **This is a replacement, not a patch** (§27.4 rule 5). Every field of the
-   * body is required, and what you do not carry over from a prior read is not
-   * preserved — it is overwritten. Read first, change the field you mean, send
-   * the whole thing back.
+   * **This is a replacement, not a patch** (§27.4 rule 5). Only the required
+   * members must be set, but what you do not carry over from a prior read is
+   * not preserved: an optional member left out is overwritten with its
+   * default, not kept (except where noted above). Read first, change the field
+   * you mean, send the whole thing back.
    *
    * Not retried on failure (§27.4 rule 8): every write on this surface is
    * issued exactly once, including the ones that look idempotent.
