@@ -11,7 +11,7 @@ and a breaking change to its public API waits for a new major version. One packa
 Node (`axiam-sdk`, `axiam-sdk/node`) and the browser (`axiam-sdk/browser`, `axiam-sdk/rest`),
 with three transports — REST, gRPC (`axiam-sdk/grpc`) and AMQP (`axiam-sdk/amqp`, with the
 §8 HMAC verifier) — and Express, Fastify (`axiam-sdk/middleware`) and NestJS
-(`axiam-sdk/nestjs`) integrations. It conforms to **contract 1.60** (axiam `3ed6547`):
+(`axiam-sdk/nestjs`) integrations. It conforms to **contract 1.60** (axiam `8df0e11`):
 CONTRACT.md §1 – §13 and §12.7, §14, §15, §17, §19, §20, §21, §22, §23, §24, §25, §26, §27 (the
 190-operation management surface and the §27.6 declarative manifest), §28, §28.12, §29, §30,
 §31, §32 with the §32.7 receiver helper, and §33 with §33.2's signed request — and every §34.4
