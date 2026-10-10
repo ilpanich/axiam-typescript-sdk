@@ -23,6 +23,7 @@
 import { createPublicKey, verify as verifySignature, type KeyObject } from 'node:crypto';
 import type { AxiosResponse } from 'axios';
 import { AuthError, AxiamError, mapHttpStatusToError, NetworkError } from '../core/index.js';
+import type { SsfUnjudgedCategory } from '../core/telemetry.js';
 import type { Sensitive } from '../core/index.js';
 import { ConflictError, NotFoundError, ValidationError, parseFieldErrors } from '../management/errors.js';
 import { bareRequest, retryableNetworkError, statusIsRetryable } from '../rest/bareTransport.js';
@@ -278,6 +279,23 @@ export interface SsfPollResult {
 }
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/** One `poll` batch's state: whether the replay store has failed in it (§34.2 P1, contract 1.60). */
+interface PollBatch {
+  storeFailed: boolean;
+}
+
+/** The errors that came from the replay store (or from not asking it again), for `ssfUnjudged`'s category. */
+const STORE_FAILURES = new WeakSet<object>();
+
+function markStoreFailure(err: unknown): unknown {
+  if (typeof err === 'object' && err !== null) STORE_FAILURES.add(err);
+  return err;
+}
+
+function isStoreFailure(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && STORE_FAILURES.has(err);
+}
 const B64URL = /^[A-Za-z0-9_-]*$/;
 
 function refuseConfig(field: string, message: string): never {
@@ -449,6 +467,12 @@ export class SsfReceiver {
    * lost. When the poll accepted no SET at all, nothing was recorded and the
    * first such failure is thrown instead (a `NetworkError` for a failed fetch).
    *
+   * After the replay store fails once, it is **not asked again** in that
+   * batch (contract 1.60, §34.2 P1): every later SET that passes steps 1 – 8
+   * is unjudged as well, and one failing them is still refused. A poll that
+   * returns leaving SETs unjudged emits the §19 `ssfUnjudged` telemetry event
+   * (one per failure category, `key_fetch` or `replay_store`, with a count).
+   *
    * @throws AuthError (local, no request) when no `accessTokenProvider` was configured.
    */
   async poll(streamId: string, options: SsfPollOptions = {}): Promise<SsfPollResult> {
@@ -512,6 +536,8 @@ export class SsfReceiver {
       unjudged: [],
     };
     let firstFailure: { error: unknown } | undefined;
+    const batch: PollBatch = { storeFailed: false };
+    const unjudgedBy: Record<SsfUnjudgedCategory, number> = { key_fetch: 0, replay_store: 0 };
     const sets = isPlainObject(record.sets) ? record.sets : {};
     for (const [jti, set] of Object.entries(sets)) {
       if (typeof set !== 'string') {
@@ -519,7 +545,7 @@ export class SsfReceiver {
         continue;
       }
       try {
-        result.events.push(await this.#verify(set, jti));
+        result.events.push(await this.#verify(set, jti, batch));
       } catch (err) {
         if (err instanceof SetRefusedError) {
           result.refused.push({ jti, reason: err.reason });
@@ -529,16 +555,23 @@ export class SsfReceiver {
           // a SET already accepted in this batch is recorded and must be
           // returned, never dropped by a throw.
           result.unjudged.push(jti);
+          unjudgedBy[isStoreFailure(err) ? 'replay_store' : 'key_fetch'] += 1;
           firstFailure ??= { error: err };
         }
       }
     }
     // Nothing accepted means nothing recorded: raising loses no event.
     if (firstFailure && result.events.length === 0) throw firstFailure.error;
+    // Contract 1.60 §19.1 (SHOULD): returning with SETs unjudged hides an
+    // outage in a list the caller may never read — say so, with counts only.
+    for (const category of ['key_fetch', 'replay_store'] as const) {
+      const count = unjudgedBy[category];
+      if (count > 0) this.#client.telemetry.dispatcher.emit({ type: 'ssfUnjudged', operation, count, category });
+    }
     return result;
   }
 
-  async #verify(set: string, expectedJti: string | undefined): Promise<SecurityEvent> {
+  async #verify(set: string, expectedJti: string | undefined, batch?: PollBatch): Promise<SecurityEvent> {
     // 1.
     const parts = typeof set === 'string' ? set.split('.') : [];
     if (parts.length !== 3 || !B64URL.test(parts[2]!)) {
@@ -618,8 +651,21 @@ export class SsfReceiver {
       throw new SetRefusedError('invalid_request', 'the poll key is not the SET jti');
     }
     const [eventType, event] = Object.entries(events)[0]!;
-    // 9.
-    if (!(await this.#recordJti(jti))) {
+    // 9. Contract 1.60 (§34.2 P1): once the store failed in this poll batch
+    // it is not asked again; a later SET that passed 1 – 8 is unjudged too.
+    if (batch?.storeFailed) {
+      throw markStoreFailure(
+        new NetworkError('the SSF replay store failed earlier in this poll and was not asked again (no verdict on the SET)'),
+      );
+    }
+    let fresh: boolean;
+    try {
+      fresh = await this.#recordJti(jti);
+    } catch (err) {
+      if (batch) batch.storeFailed = true;
+      throw markStoreFailure(err);
+    }
+    if (!fresh) {
       throw new SetRefusedError('replayed', 'jti already seen');
     }
     return {

@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { AuthError, NetworkError } from '../../src/core/index.js';
+import { AuthError, NetworkError, type TelemetryEvent } from '../../src/core/index.js';
 import { ValidationError } from '../../src/management/errors.js';
 import {
   JWKS_CACHE_MAX_AGE_MS,
@@ -391,6 +391,11 @@ describe('§32.8 receiver (7) — an unknown kid costs one refetch, a second one
 
   // Contract 1.60 §34.2 P6's SHOULD: the key cache expires as §10's JWKS cache
   // does, so a key the transmitter has removed stops verifying.
+  it('the key cache expires no later than 10 minutes after the fill that filled it (contract 1.60, P6 MUST)', () => {
+    expect(JWKS_CACHE_MAX_AGE_MS).toBeGreaterThan(0);
+    expect(JWKS_CACHE_MAX_AGE_MS).toBeLessThanOrEqual(10 * 60 * 1000);
+  });
+
   it('the key cache expires after JWKS_CACHE_MAX_AGE_MS: a removed key stops verifying; the refill is not a refetch', async () => {
     const oldKey = generateKey();
     const newKey = generateKey();
@@ -589,6 +594,91 @@ describe('§32.8 receiver (8) — poll passes ack and setErrs through and sorts 
     expect(result.refused).toEqual([]);
     expect(result.unjudged).toEqual([second.jti]);
     expect(memory.checkAndRecord(second.jti as string, MIN_REPLAY_WINDOW_MS), 'the unjudged jti was recorded').toBe(true);
+  });
+
+  // Contract 1.60 §34.2 P1 (C-3) and §19.1 (C-4): after the first store
+  // failure the store is asked nothing more in the batch; every later SET
+  // that passes steps 1 – 8 is unjudged, one that fails them is still
+  // refused, and the poll returns (it recorded one) with one `ssfUnjudged`.
+  it('after a store failure the batch asks the store nothing more, and the poll reports ssfUnjudged', async () => {
+    const key = generateKey();
+    serveJwks([key.jwk]);
+    const batch = [claims(), claims(), claims(), claims({ aud: 'https://someone-else.test' })];
+    server.use(
+      http.post(`${BASE_URL}/ssf/v1/poll/s-8`, () =>
+        HttpResponse.json({
+          sets: Object.fromEntries(batch.map((c) => [c.jti as string, signSet(key, c)])),
+          moreAvailable: false,
+        }),
+      ),
+    );
+    const asked: string[] = [];
+    const memory = new MemoryReplayStore();
+    const store: ReplayStore = {
+      checkAndRecord: (jti, windowMs) => {
+        asked.push(jti);
+        if (jti === batch[1]!.jti) throw new Error('store down');
+        return memory.checkAndRecord(jti, windowMs);
+      },
+    };
+    const seen: TelemetryEvent[] = [];
+    const r = new SsfReceiver(
+      new AxiamClient({ baseUrl: BASE_URL, tenantId: randomUUID(), telemetryHook: (e) => seen.push(e) }),
+      { issuer: ISSUER, audience: AUDIENCE, jwksUri: JWKS_URI, accessTokenProvider: async () => pollToken, replayStore: store },
+    );
+
+    const result = await r.poll('s-8');
+
+    expect(asked, 'the store was asked again after it failed').toEqual([batch[0]!.jti, batch[1]!.jti]);
+    expect(result.events.map((e) => e.jti)).toEqual([batch[0]!.jti]);
+    expect(result.unjudged).toEqual([batch[1]!.jti, batch[2]!.jti]);
+    expect(result.refused).toEqual([{ jti: batch[3]!.jti, reason: 'invalid_audience' }]);
+    const unjudged = seen.filter((e) => e.type === 'ssfUnjudged');
+    expect(unjudged).toEqual([{ type: 'ssfUnjudged', operation: 'ssf.poll', count: 2, category: 'replay_store' }]);
+    for (const c of batch) expect(JSON.stringify(seen)).not.toContain(c.jti as string);
+  });
+
+  it('a key-fetch outage that leaves SETs unjudged is reported as key_fetch; a fully judged poll reports nothing', async () => {
+    const key = generateKey();
+    let jwksHits = 0;
+    server.use(
+      http.get(JWKS_URI, () => {
+        jwksHits += 1;
+        return jwksHits === 1 ? HttpResponse.json({ keys: [key.jwk] }) : new HttpResponse(null, { status: 503 });
+      }),
+    );
+    const first = claims();
+    const second = claims();
+    const third = claims();
+    server.use(
+      http.post(`${BASE_URL}/ssf/v1/poll/s-9`, () =>
+        HttpResponse.json({
+          sets: {
+            [first.jti as string]: signSet(key, first),
+            [second.jti as string]: signSet(generateKey(), second),
+          },
+          moreAvailable: false,
+        }),
+      ),
+      http.post(`${BASE_URL}/ssf/v1/poll/s-10`, () =>
+        HttpResponse.json({ sets: { [third.jti as string]: signSet(key, third) }, moreAvailable: false }),
+      ),
+    );
+    const seen: TelemetryEvent[] = [];
+    const r = new SsfReceiver(
+      new AxiamClient({ baseUrl: BASE_URL, tenantId: randomUUID(), telemetryHook: (e) => seen.push(e) }),
+      { issuer: ISSUER, audience: AUDIENCE, jwksUri: JWKS_URI, accessTokenProvider: async () => pollToken },
+    );
+
+    const result = await r.poll('s-9');
+    expect(result.unjudged).toEqual([second.jti]);
+    expect(seen.filter((e) => e.type === 'ssfUnjudged')).toEqual([
+      { type: 'ssfUnjudged', operation: 'ssf.poll', count: 1, category: 'key_fetch' },
+    ]);
+
+    seen.length = 0;
+    expect((await r.poll('s-10')).unjudged).toEqual([]);
+    expect(seen.filter((e) => e.type === 'ssfUnjudged')).toEqual([]);
   });
 
   it('a JWKS failure during a poll aborts it; no provider is a local AuthError', async () => {
