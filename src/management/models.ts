@@ -985,6 +985,14 @@ export interface CreateCertificateRequest {
 /** `CreateFederationConfigRequest` (generated from openapi.json). */
 export interface CreateFederationConfigRequest {
   /**
+   * SAML only: accept IdP responses signed with SHA-1 (`rsa-sha1`). Default
+   * `false` — since 1.0.0 the SP verifier accepts only SHA-2 signatures. The
+   * escape hatch for an IdP that cannot sign with SHA-2 yet; refused on a
+   * non-SAML config, and audited (`federation.sha1_signatures_allowed`) when
+   * set to `true`.
+   */
+  allow_sha1_signatures?: boolean | null;
+  /**
    * Whether tenants of this organization may inherit this provider. Only
    * meaningful on a config in the organization-scope tenant.
    */
@@ -1032,6 +1040,13 @@ export interface CreateFederationConfigRequest {
    */
   client_secret: Sensitive<string>;
   /**
+   * SAML only: the PEM certificate the IdP signs its metadata document with
+   * (#530). When set, the metadata must carry one SHA-2 signature on its
+   * `EntityDescriptor` root that verifies against it, or no sign-in starts.
+   * Omitted: the metadata is not signature-checked.
+   */
+  idp_metadata_signing_cert_pem?: string | null;
+  /**
    * PEM-encoded X.509 certificate for verifying SAML assertions or OIDC
    * signatures (CQ-B40/REQ-14 AC-5). Required for SAML configs.
    */
@@ -1077,6 +1092,7 @@ export interface CreateFederationConfigRequest {
  * because a consumer should read it.
  */
 export interface CreateFederationConfigRequestWire {
+  allow_sha1_signatures?: boolean | null;
   allow_tenant_inheritance?: boolean | null;
   allowed_algorithms?: string[] | null;
   allowed_issuer_tenants?: string[] | null;
@@ -1087,6 +1103,7 @@ export interface CreateFederationConfigRequestWire {
   button_icon?: string | null;
   client_id: string;
   client_secret: string;
+  idp_metadata_signing_cert_pem?: string | null;
   idp_signing_cert_pem?: string | null;
   metadata_url?: string | null;
   protocol: string;
@@ -1151,6 +1168,12 @@ export interface CreateNotificationRuleRequest {
   name: string;
   /** Email addresses to notify. */
   recipient_emails: string[];
+  /**
+   * Minutes in which one event type mails each recipient at most once: the
+   * first event of a window is mailed, the rest are counted and the next mail
+   * says how many were not sent (#551). 1 … 1440; 15 when omitted.
+   */
+  window_minutes?: number | null;
 }
 
 /** `CreateOAuth2ClientRequest` (generated from openapi.json). */
@@ -1887,6 +1910,11 @@ export type FailurePolicy =
 
 /** Federation config response -- omits client_secret. */
 export interface FederationConfigResponse {
+  /**
+   * SAML only: whether IdP responses signed with SHA-1 are accepted (default
+   * `false`; #531).
+   */
+  allow_sha1_signatures: boolean;
   /** Whether tenants of this organization may inherit this provider. */
   allow_tenant_inheritance: boolean;
   /**
@@ -1926,6 +1954,11 @@ export interface FederationConfigResponse {
   has_bundled_mark: boolean;
   /** `id`. */
   id: string;
+  /**
+   * SAML only: the certificate the IdP's metadata must be signed with (#530);
+   * `null` when the metadata is not signature-checked.
+   */
+  idp_metadata_signing_cert_pem?: string | null;
   /** `metadata_url`. */
   metadata_url?: string | null;
   /**
@@ -2747,6 +2780,11 @@ export interface NotificationRuleResponse {
   tenant_id: string;
   /** `updated_at`. */
   updated_at: string;
+  /**
+   * Minutes in which one event type mails each recipient at most once; further
+   * events are counted and reported by the next mail (#551).
+   */
+  window_minutes: number;
 }
 
 /** Response for client creation -- includes the one-time plaintext secret. */
@@ -4189,6 +4227,16 @@ export interface ScimTargetInput {
   deprovision?: DeprovisionPolicy;
   /** `true` by default. A disabled target receives nothing. */
   enabled?: boolean;
+  /**
+   * The `updated_at` of the target as the client read it (P23W5-09, T-416).
+   * **Update only; create ignores it.** When present, the replacement lands
+   * only if the target still has that version, else `409` (reload and retry):
+   * two administrators who opened the form at the same version cannot silently
+   * overwrite each other. When absent the replacement is conditional on the
+   * version the server reads during the request — last-writer-wins between
+   * administrators, as before.
+   */
+  expected_updated_at?: string | null;
   /** 1–128 bytes. */
   name: string;
   /**
@@ -4217,6 +4265,7 @@ export interface ScimTargetInputWire {
   credential?: string;
   deprovision?: DeprovisionPolicy;
   enabled?: boolean;
+  expected_updated_at?: string | null;
   name: string;
   push_groups?: boolean;
   scope: ScimTargetScope;
@@ -5503,21 +5552,26 @@ export function updateDirectoryConfigToWire(v: UpdateDirectoryConfig): UpdateDir
  * than sent as `null` (§27.4 rule 5).
  */
 export interface UpdateFederationConfigRequest {
+  /**
+   * SAML only: accept IdP responses signed with SHA-1. Refused on a non-SAML
+   * config; turning it on is audited (`federation.sha1_signatures_allowed`).
+   */
+  allow_sha1_signatures?: boolean | null;
   /** Whether tenants may inherit this organization-level provider. */
   allow_tenant_inheritance?: boolean | null;
   /** Accepted signature algorithms (CQ-B40/REQ-14 AC-5). */
   allowed_algorithms?: string[] | null;
   /** Accepted external IdP tenants for a templated issuer. Replaced wholesale. */
   allowed_issuer_tenants?: string[] | null;
-  /** Apple Key ID. `Some(None)` clears it. */
+  /** Apple Key ID. Explicit `null` clears it. */
   apple_key_id?: string | null;
-  /** Apple Team ID. `Some(None)` clears it. */
+  /** Apple Team ID. Explicit `null` clears it. */
   apple_team_id?: string | null;
   /** `attribute_map`. */
   attribute_map?: unknown;
-  /** OAuth2-variant authorization endpoint. `Some(None)` clears it. */
+  /** OAuth2-variant authorization endpoint. Explicit `null` clears it. */
   authorization_endpoint?: string | null;
-  /** Sign-in-button icon for a generic provider. `Some(None)` clears it. */
+  /** Sign-in-button icon for a generic provider. Explicit `null` clears it. */
   button_icon?: string | null;
   /** `client_id`. */
   client_id?: string | null;
@@ -5531,15 +5585,28 @@ export interface UpdateFederationConfigRequest {
   /** `enabled`. */
   enabled?: boolean | null;
   /**
+   * SAML only: the IdP metadata signing certificate (#530). Explicit `null`
+   * clears it; omitted leaves it. Clearing it is audited
+   * (`federation.metadata_signing_cert_cleared`), and so is replacing it with
+   * a different certificate (`federation.metadata_signing_cert_changed`).
+   */
+  idp_metadata_signing_cert_pem?: string | null;
+  /**
    * PEM-encoded X.509 certificate for verifying SAML assertions (CQ-B40/REQ-14
-   * AC-5). `Some(None)` clears the stored cert.
+   * AC-5). Explicit `null` clears the stored cert; omitted leaves it.
    */
   idp_signing_cert_pem?: string | null;
-  /** `metadata_url`. */
+  /**
+   * OIDC discovery or SAML metadata URL. Explicit `null` clears it; omitted
+   * leaves it.
+   */
   metadata_url?: string | null;
   /** `provider`. */
   provider?: string | null;
-  /** Operator-chosen identifier for a `generic_*` kind. `Some(None)` clears it. */
+  /**
+   * Operator-chosen identifier for a `generic_*` kind. Explicit `null` clears
+   * it.
+   */
   provider_slug?: string | null;
   /** Send PKCE on the authorization request. */
   require_pkce?: boolean | null;
@@ -5548,11 +5615,11 @@ export interface UpdateFederationConfigRequest {
    * default.
    */
   scopes?: string[] | null;
-  /** OAuth2-variant token endpoint. `Some(None)` clears it. */
+  /** OAuth2-variant token endpoint. Explicit `null` clears it. */
   token_endpoint?: string | null;
   /** `token_exchange`. */
   token_exchange?: TokenExchangeTrustRequest | null;
-  /** OAuth2-variant userinfo endpoint. `Some(None)` clears it. */
+  /** OAuth2-variant userinfo endpoint. Explicit `null` clears it. */
   userinfo_endpoint?: string | null;
 }
 
@@ -5564,6 +5631,7 @@ export interface UpdateFederationConfigRequest {
  * because a consumer should read it.
  */
 export interface UpdateFederationConfigRequestWire {
+  allow_sha1_signatures?: boolean | null;
   allow_tenant_inheritance?: boolean | null;
   allowed_algorithms?: string[] | null;
   allowed_issuer_tenants?: string[] | null;
@@ -5575,6 +5643,7 @@ export interface UpdateFederationConfigRequestWire {
   client_id?: string | null;
   client_secret?: string;
   enabled?: boolean | null;
+  idp_metadata_signing_cert_pem?: string | null;
   idp_signing_cert_pem?: string | null;
   metadata_url?: string | null;
   provider?: string | null;
@@ -5634,6 +5703,8 @@ export interface UpdateNotificationRuleRequest {
   name?: string | null;
   /** `recipient_emails`. */
   recipient_emails?: string[] | null;
+  /** The rule's notification window in minutes, 1 … 1440 (#551). */
+  window_minutes?: number | null;
 }
 
 /**
