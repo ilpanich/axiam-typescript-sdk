@@ -12,9 +12,10 @@
  *   *absent from the wire body* rather than sent as `null` — so a body
  *   carrying one field changes one field (§27.4 rule 5). `null` is not
  *   absent: where a member's documentation says so (contract 1.54's
- *   `UpdateDirectoryConfig.group_base_dn` / `group_filter`), `null` is sent
- *   as `null` and clears the stored value; leave a member `undefined` to
- *   keep it.
+ *   `UpdateDirectoryConfig.group_base_dn` / `group_filter`, and contract
+ *   1.60's ten nullable strings of `UpdateFederationConfigRequest`), `null`
+ *   is sent as `null` and clears the stored value; leave a member
+ *   `undefined` to keep it.
  * - **Replacement bodies.** `SetOrgSettings`, the organization email config,
  *   `WebauthnAttestationPolicy` and `SetMtlsTrustAnchor` have required
  *   fields, because a `PUT` on those routes replaces rather than patches.
@@ -1998,6 +1999,22 @@ export interface FederationConfigResponse {
   updated_at: string;
   /** OAuth2-variant userinfo endpoint. */
   userinfo_endpoint?: string | null;
+}
+
+/**
+ * Fill the members of a decoded `FederationConfigResponse` that a server
+ * before contract 1.60 omits: `allow_sha1_signatures` absent reads as
+ * `false` (§27.15). A member the server sent is kept as sent. Never mutates
+ * its input.
+ *
+ * @internal — every operation answering this type runs it.
+ */
+export function withFederationConfigResponseDefaults(value: FederationConfigResponse): FederationConfigResponse {
+  const read = value as Partial<FederationConfigResponse>;
+  return {
+    ...value,
+    allow_sha1_signatures: read.allow_sha1_signatures ?? false,
+  };
 }
 
 /** `FederationLinkResponse` (generated from openapi.json). */
@@ -5563,15 +5580,39 @@ export interface UpdateFederationConfigRequest {
   allowed_algorithms?: string[] | null;
   /** Accepted external IdP tenants for a templated issuer. Replaced wholesale. */
   allowed_issuer_tenants?: string[] | null;
-  /** Apple Key ID. Explicit `null` clears it. */
+  /**
+   * Apple Key ID. Explicit `null` clears it.
+   *
+   * **`null` is not absent** (§27.4 rule 5, §27.15 note 8): leave it
+   * `undefined` to keep the stored value; set it to `null` to send `null` and
+   * clear it.
+   */
   apple_key_id?: string | null;
-  /** Apple Team ID. Explicit `null` clears it. */
+  /**
+   * Apple Team ID. Explicit `null` clears it.
+   *
+   * **`null` is not absent** (§27.4 rule 5, §27.15 note 8): leave it
+   * `undefined` to keep the stored value; set it to `null` to send `null` and
+   * clear it.
+   */
   apple_team_id?: string | null;
   /** `attribute_map`. */
   attribute_map?: unknown;
-  /** OAuth2-variant authorization endpoint. Explicit `null` clears it. */
+  /**
+   * OAuth2-variant authorization endpoint. Explicit `null` clears it.
+   *
+   * **`null` is not absent** (§27.4 rule 5, §27.15 note 8): leave it
+   * `undefined` to keep the stored value; set it to `null` to send `null` and
+   * clear it.
+   */
   authorization_endpoint?: string | null;
-  /** Sign-in-button icon for a generic provider. Explicit `null` clears it. */
+  /**
+   * Sign-in-button icon for a generic provider. Explicit `null` clears it.
+   *
+   * **`null` is not absent** (§27.4 rule 5, §27.15 note 8): leave it
+   * `undefined` to keep the stored value; set it to `null` to send `null` and
+   * clear it.
+   */
   button_icon?: string | null;
   /** `client_id`. */
   client_id?: string | null;
@@ -5589,16 +5630,28 @@ export interface UpdateFederationConfigRequest {
    * clears it; omitted leaves it. Clearing it is audited
    * (`federation.metadata_signing_cert_cleared`), and so is replacing it with
    * a different certificate (`federation.metadata_signing_cert_changed`).
+   *
+   * **`null` is not absent** (§27.4 rule 5, §27.15 note 8): leave it
+   * `undefined` to keep the stored value; set it to `null` to send `null` and
+   * clear it.
    */
   idp_metadata_signing_cert_pem?: string | null;
   /**
    * PEM-encoded X.509 certificate for verifying SAML assertions (CQ-B40/REQ-14
    * AC-5). Explicit `null` clears the stored cert; omitted leaves it.
+   *
+   * **`null` is not absent** (§27.4 rule 5, §27.15 note 8): leave it
+   * `undefined` to keep the stored value; set it to `null` to send `null` and
+   * clear it.
    */
   idp_signing_cert_pem?: string | null;
   /**
    * OIDC discovery or SAML metadata URL. Explicit `null` clears it; omitted
    * leaves it.
+   *
+   * **`null` is not absent** (§27.4 rule 5, §27.15 note 8): leave it
+   * `undefined` to keep the stored value; set it to `null` to send `null` and
+   * clear it.
    */
   metadata_url?: string | null;
   /** `provider`. */
@@ -5606,6 +5659,10 @@ export interface UpdateFederationConfigRequest {
   /**
    * Operator-chosen identifier for a `generic_*` kind. Explicit `null` clears
    * it.
+   *
+   * **`null` is not absent** (§27.4 rule 5, §27.15 note 8): leave it
+   * `undefined` to keep the stored value; set it to `null` to send `null` and
+   * clear it.
    */
   provider_slug?: string | null;
   /** Send PKCE on the authorization request. */
@@ -5615,11 +5672,23 @@ export interface UpdateFederationConfigRequest {
    * default.
    */
   scopes?: string[] | null;
-  /** OAuth2-variant token endpoint. Explicit `null` clears it. */
+  /**
+   * OAuth2-variant token endpoint. Explicit `null` clears it.
+   *
+   * **`null` is not absent** (§27.4 rule 5, §27.15 note 8): leave it
+   * `undefined` to keep the stored value; set it to `null` to send `null` and
+   * clear it.
+   */
   token_endpoint?: string | null;
   /** `token_exchange`. */
   token_exchange?: TokenExchangeTrustRequest | null;
-  /** OAuth2-variant userinfo endpoint. Explicit `null` clears it. */
+  /**
+   * OAuth2-variant userinfo endpoint. Explicit `null` clears it.
+   *
+   * **`null` is not absent** (§27.4 rule 5, §27.15 note 8): leave it
+   * `undefined` to keep the stored value; set it to `null` to send `null` and
+   * clear it.
+   */
   userinfo_endpoint?: string | null;
 }
 
