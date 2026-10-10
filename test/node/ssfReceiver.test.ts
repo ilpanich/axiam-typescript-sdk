@@ -12,6 +12,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { AuthError, NetworkError } from '../../src/core/index.js';
 import { ValidationError } from '../../src/management/errors.js';
 import {
+  JWKS_CACHE_MAX_AGE_MS,
   MemoryReplayStore,
   MIN_REPLAY_WINDOW_MS,
   pushErrorCode,
@@ -19,6 +20,7 @@ import {
   setErrFromReason,
   SSF_EVENT_TYPES,
   SsfReceiver,
+  type ReplayStore,
   type SetFailureReason,
   type SsfReceiverConfig,
 } from '../../src/node/ssf.js';
@@ -215,6 +217,88 @@ describe('§32.8 receiver (6) — a replay is refused; a short window is refused
     expect(await reasonOf(r, set)).toBe('replayed');
   });
 
+  // Contract 1.60 §34.2 P4 (B1, verify): a store that cannot answer gives NO
+  // verdict. It is never read as `replayed` (which `poll` would acknowledge,
+  // losing an event that was never processed), never accepted, and not recorded.
+  describe('a replay store that cannot answer gives no verdict (§32.8 test 6, P4)', () => {
+    class Boom extends Error {}
+    const failures: Array<[string, (jti: string, windowMs: number) => boolean | Promise<boolean>]> = [
+      ['throws synchronously', () => { throw new Boom('store down'); }],
+      ['rejects', async () => { throw new Boom('store down'); }],
+      ['throws an SDK NetworkError', () => { throw new NetworkError('store down'); }],
+      ['answers neither true nor false', () => undefined as unknown as boolean],
+    ];
+
+    it.each(failures)('verifySet: a store that %s raises a NetworkError with no reason code, never replayed', async (_name, check) => {
+      const key = generateKey();
+      serveJwks([key.jwk]);
+      const memory = new MemoryReplayStore();
+      let down = true;
+      const store: ReplayStore = {
+        checkAndRecord: (jti, windowMs) => (down ? check(jti, windowMs) : memory.checkAndRecord(jti, windowMs)),
+      };
+      const r = receiver({ replayStore: store });
+      const set = signSet(key, claims());
+
+      const err = await r.verifySet(set).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(NetworkError);
+      expect(err).not.toBeInstanceOf(SetRefusedError);
+      expect(err).not.toBeInstanceOf(AuthError);
+      expect((err as { reason?: unknown }).reason, 'a reason code was attached').toBeUndefined();
+
+      // Nothing was recorded, so the SET is judged properly once the store is back —
+      // accepted, not `replayed`.
+      down = false;
+      const event = await r.verifySet(set);
+      expect(event.eventType).toBe(SSF_EVENT_TYPES.SESSION_REVOKED);
+      expect(await reasonOf(r, set)).toBe('replayed');
+    });
+
+    it('poll: the SET is in neither events nor refused, its jti is unrecorded, and nothing is acknowledged', async () => {
+      const key = generateKey();
+      serveJwks([key.jwk]);
+      const first = claims();
+      const second = claims();
+      const bodies: unknown[] = [];
+      server.use(
+        http.post(`${BASE_URL}/ssf/v1/poll/s-6`, async ({ request }) => {
+          bodies.push(await request.json());
+          return HttpResponse.json({
+            sets: { [first.jti as string]: signSet(key, first), [second.jti as string]: signSet(key, second) },
+            moreAvailable: false,
+          });
+        }),
+      );
+      const memory = new MemoryReplayStore();
+      const store: ReplayStore = {
+        checkAndRecord: async (jti, windowMs) => {
+          if (jti === second.jti) throw new Error('store down');
+          return memory.checkAndRecord(jti, windowMs);
+        },
+      };
+      const result = await receiver({ replayStore: store }).poll('s-6');
+      expect(result.events.map((e) => e.jti)).toEqual([first.jti]);
+      expect(result.refused.map((x) => x.jti)).not.toContain(second.jti);
+      expect(result.unjudged).toEqual([second.jti]);
+      // `poll` puts nothing in `ack` on its own — the request carried none.
+      expect(bodies).toEqual([{}]);
+      expect(memory.checkAndRecord(second.jti as string, MIN_REPLAY_WINDOW_MS), 'the unjudged jti was recorded').toBe(true);
+    });
+
+    it('poll: when the store fails for the only SET, the poll raises and records nothing', async () => {
+      const key = generateKey();
+      serveJwks([key.jwk]);
+      const only = claims();
+      server.use(
+        http.post(`${BASE_URL}/ssf/v1/poll/s-7`, () =>
+          HttpResponse.json({ sets: { [only.jti as string]: signSet(key, only) }, moreAvailable: false }),
+        ),
+      );
+      const store: ReplayStore = { checkAndRecord: () => Promise.reject(new Error('store down')) };
+      await expect(receiver({ replayStore: store }).poll('s-7')).rejects.toBeInstanceOf(NetworkError);
+    });
+  });
+
   it('a window below seven days, and a bad key source, are local ValidationErrors', () => {
     expect(() => receiver({ replayWindowMs: MIN_REPLAY_WINDOW_MS - 1 })).toThrow(ValidationError);
     expect(() => receiver({ issuer: '' })).toThrow(ValidationError);
@@ -249,6 +333,90 @@ describe('§32.8 receiver (7) — an unknown kid costs one refetch, a second one
     now += 60_000;
     expect(await reasonOf(r, signSet(generateKey(), claims()))).toBe('invalid_key');
     expect(counter.hits).toBe(3);
+  });
+
+  // Contract 1.60 §34.2 P6 (A3, R-8): a failed cold-cache fill counts toward
+  // the once-a-minute limit, so a JWKS outage is not one fetch per SET.
+  it('a failed fill counts: a second SET within the minute makes no fetch and is left unjudged', async () => {
+    let hits = 0;
+    let up = false;
+    const key = generateKey();
+    server.use(
+      http.get(JWKS_URI, () => {
+        hits += 1;
+        return up ? HttpResponse.json({ keys: [key.jwk] }) : new HttpResponse(null, { status: 503 });
+      }),
+    );
+    let now = 5_000_000;
+    const r = receiver({}, () => now);
+    const first = await r.verifySet(signSet(key, claims())).catch((e: unknown) => e);
+    expect(first).toBeInstanceOf(NetworkError);
+    expect(hits).toBe(1);
+
+    now += 30_000;
+    up = true; // even a recovered server is not asked inside the minute
+    const second = await r.verifySet(signSet(key, claims())).catch((e: unknown) => e);
+    expect(second).toBeInstanceOf(NetworkError);
+    expect(second).not.toBeInstanceOf(SetRefusedError);
+    expect(hits, 'a second fetch inside the minute').toBe(1);
+
+    now += 30_000;
+    expect((await r.verifySet(signSet(key, claims()))).eventType).toBe(SSF_EVENT_TYPES.SESSION_REVOKED);
+    expect(hits).toBe(2);
+    // That fill succeeded, so it is not a refetch: an unknown kid is refetched once.
+    expect(await reasonOf(r, signSet(generateKey(), claims()))).toBe('invalid_key');
+    expect(hits).toBe(3);
+  });
+
+  it('a failed fill counts in poll too: two SETs, one outage, one fetch', async () => {
+    let hits = 0;
+    server.use(
+      http.get(JWKS_URI, () => {
+        hits += 1;
+        return new HttpResponse(null, { status: 503 });
+      }),
+    );
+    const key = generateKey();
+    const a = claims();
+    const b = claims();
+    server.use(
+      http.post(`${BASE_URL}/ssf/v1/poll/s-8`, () =>
+        HttpResponse.json({ sets: { [a.jti as string]: signSet(key, a), [b.jti as string]: signSet(key, b) }, moreAvailable: false }),
+      ),
+    );
+    const r = receiver({}, () => 9_000_000);
+    await expect(r.poll('s-8')).rejects.toBeInstanceOf(NetworkError);
+    expect(hits, 'two SETs, one outage: one fetch').toBe(1);
+  });
+
+  // Contract 1.60 §34.2 P6's SHOULD: the key cache expires as §10's JWKS cache
+  // does, so a key the transmitter has removed stops verifying.
+  it('the key cache expires after JWKS_CACHE_MAX_AGE_MS: a removed key stops verifying; the refill is not a refetch', async () => {
+    const oldKey = generateKey();
+    const newKey = generateKey();
+    let served = [oldKey.jwk];
+    let hits = 0;
+    server.use(
+      http.get(JWKS_URI, () => {
+        hits += 1;
+        return HttpResponse.json({ keys: served });
+      }),
+    );
+    let now = 20_000_000;
+    const r = receiver({}, () => now);
+    await r.verifySet(signSet(oldKey, claims()));
+    expect(hits).toBe(1);
+
+    served = [newKey.jwk]; // the transmitter removed the old key
+    now += JWKS_CACHE_MAX_AGE_MS - 1;
+    await r.verifySet(signSet(oldKey, claims())); // still cached: still verifies
+    expect(hits, 'fetched before the cache expired').toBe(1);
+
+    now += 1;
+    expect(await reasonOf(r, signSet(oldKey, claims()))).toBe('invalid_key');
+    expect(hits, 'one refill, and the unknown kid then costs the one refetch').toBe(3);
+    expect((await r.verifySet(signSet(newKey, claims()))).eventType).toBe(SSF_EVENT_TYPES.SESSION_REVOKED);
+    expect(hits).toBe(3);
   });
 
   it('a JWKS fetch failure is a NetworkError, not a verdict', async () => {
