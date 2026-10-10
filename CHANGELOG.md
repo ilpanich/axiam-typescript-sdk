@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-10-10
+
 `axiam-sdk` 1.0.0 is the first stable release: from here the SDK follows semantic versioning,
 and a breaking change to its public API waits for a new major version. One package serves
 Node (`axiam-sdk`, `axiam-sdk/node`) and the browser (`axiam-sdk/browser`, `axiam-sdk/rest`),
@@ -101,6 +104,18 @@ Since `v1.0.0-beta17`. Everything else below is additive, or new since that rele
 - `oauth2ErrorFromBody`, the `/oauth2` error decoder that dispatches on a non-empty `error` at
   any status, `error_description` optional.
 
+- Contract 1.60 — no store asked after a store failure, ssfUnjudged, refresh scope, discovery members
+
+- Contract 1.60 §27.15 and §31 members — null clears on federation update, absent SHA-1 flag reads false
+
+- CIBA initiation, polling and ping helpers, signed form (CONTRACT §33, §21.3.1)
+
+- SSF stream management tests and the receiver helper (CONTRACT §32, §32.7)
+
+- Directory namespace semantics and generator infrastructure (CONTRACT §30)
+
+- RFC 7592 client configuration operations (CONTRACT §28.12)
+
 ### Changed
 
 - **`federation.updateConfig`: `null` clears** (§27.15 note 8). Each of the ten nullable
@@ -130,11 +145,79 @@ Since `v1.0.0-beta17`. Everything else below is additive, or new since that rele
   every replacement body all-required or every all-optional type sparse, and the mTLS section
   counts seven aliases.
 
+- re-vendor at axiam 8df0e11 (the R1W1 tls_client_auth note, the spec digest)
+
+- README at contract 1.60; the 1.0.0 changelog
+
+- re-vendor contract 1.60, the spec and the registry (axiam 3ed6547)
+
+- A broker confirm is not evidence that AXIAM saw a message (contract 1.60 §8); README for the SSF store and key cache, and the actor token
+
+- The actor token is the same client's client_credentials token (contract 1.60 §15.2 rule 9)
+
+- re-vendor CONTRACT.md at contract 1.60
+
+- Contract 1.59 conformance statement and changelog (F-59-02)
+
+- Generated docs agree with the types; seven mTLS aliases (R-28, F-13, F-14)
+
+- Poll is retried on 408 and 429; a replayed SET is acknowledged (R-7, F-9, P7, P2)
+
+- re-vendor CONTRACT.md at contract 1.59 (axiam fe369eb)
+
+- Contract 1.58 conformance statement, usage, changelog
+
+- scim_targets namespace required tests (CONTRACT §31)
+
+- Saml namespace required tests (CONTRACT §29)
+
+- re-vendor contract 1.58 artifacts and regenerate §27 surface
+
+- Migrate the suite to msw 3
+
+- Bump msw from 2.15.0 to 3.0.2
+
+- Bump fast-uri
+
+- Bump markdown-it from 14.3.0 to 14.3.2
+
+- Bump brace-expansion from 5.0.7 to 5.0.12
+
+- Bump the minor-patch group with 6 updates
+
+- re-vendor openapi.json + management-registry.json after utoipa 6
+
+- Update CodeQL action version in workflow
+
+- Update CodeQL analysis action version
+
+- Bump github/codeql-action/init from 4.38.1 to 4.38.2
+
+- Bump bufbuild/buf-action from 1.5.0 to 1.6.0
+
+- Bump github/codeql-action/analyze from 4.38.1 to 4.38.2
+
 ### Fixed
 
 - **`federation.updateConfig` documentation** no longer describes a clear as `Some(None)` (the
   server's Rust spelling): each nullable member's TSDoc says that `null` clears it and
   `undefined` leaves it.
+
+- A failed JWKS fill counts, the key cache expires, a store that cannot answer gives no verdict (contract 1.60 A3, B1)
+
+- Sanitize a transport failure's cause like every other REST path (R-18)
+
+- A 5xx on cibaPoll is transient whatever its body (§33.8 test 8 as amended, P8)
+
+- The update sends no list the read lacked, and a mistyped one as read (R-23, F-5b, P12.4)
+
+- §29 – §32 responses keep only declared members, in every union arm (R-20, F-3, P12.1)
+
+- Poll returns what it judged and leaves an unjudged SET unrecorded (R-1, F-2, P1)
+
+- Rebuild NetworkError.cause from an allow-list so a failed write cannot carry its secret (R-18, F-1)
+
+- Trim the poll URL's trailing slashes without a polynomial regex
 
 ### Security
 
