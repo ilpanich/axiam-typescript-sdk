@@ -106,6 +106,10 @@ export class ScimTargetsApi {
    * member left out takes its default — start from `scimTargetInputFrom(await
    * scimTargets.get(id))`. An update overtaken by another administrator's
    * write is `409` (§31.3 rule 4): reload, then retry yourself.
+   * `expected_updated_at` — the `updated_at` you read, which
+   * `scimTargetInputFrom` carries over — is sent exactly as given and makes
+   * the replacement conditional on your read: a target written since is `409`
+   * and unchanged (contract 1.60).
    *
    * **This is a replacement, not a patch** (§27.4 rule 5). Only the required
    * members must be set, but what you do not carry over from a prior read is

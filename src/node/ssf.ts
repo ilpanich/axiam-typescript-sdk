@@ -22,7 +22,8 @@
 
 import { createPublicKey, verify as verifySignature, type KeyObject } from 'node:crypto';
 import type { AxiosResponse } from 'axios';
-import { AuthError, mapHttpStatusToError, NetworkError, type AxiamError } from '../core/index.js';
+import { AuthError, AxiamError, mapHttpStatusToError, NetworkError } from '../core/index.js';
+import type { SsfUnjudgedCategory } from '../core/telemetry.js';
 import type { Sensitive } from '../core/index.js';
 import { ConflictError, NotFoundError, ValidationError, parseFieldErrors } from '../management/errors.js';
 import { bareRequest, retryableNetworkError, statusIsRetryable } from '../rest/bareTransport.js';
@@ -36,8 +37,20 @@ import { withRetry } from '../rest/retry.js';
  */
 export const MIN_REPLAY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** Forced JWKS refetches (on an unknown `kid`) happen at most this often (§32.7 step 4). */
+/**
+ * Forced JWKS refetches (on an unknown `kid`) happen at most this often, and
+ * so does any fetch after a **failed** one (§32.7 step 4, §34.2 P6). A
+ * successful fill of an empty cache is not a refetch and is not counted.
+ */
 export const JWKS_REFETCH_INTERVAL_MS = 60_000;
+
+/**
+ * How long a fetched key set is trusted: ten minutes, the lifetime of the
+ * `jose` remote key set that §10's verifier (`createVerifier`) uses. Past it
+ * the cache is treated as empty and the next SET fills it again, so a key the
+ * transmitter has removed stops verifying (§34.2 P6's SHOULD).
+ */
+export const JWKS_CACHE_MAX_AGE_MS = 600_000;
 
 /**
  * The six event types AXIAM transmits, plus the two SSF stream events
@@ -136,14 +149,23 @@ export class SetRefusedError extends AuthError {
  *
  * Pluggable so a receiver running several instances can share one store
  * (§32.7). {@link MemoryReplayStore} is the default.
+ *
+ * A store has three answers (§34.2 P4): `true` (not seen, now recorded),
+ * `false` (seen), and **cannot answer**, which is a throw or a rejection.
+ * Cannot-answer gives no verdict: the SET is neither accepted nor refused as
+ * `replayed`, `verifySet` raises a `NetworkError` with no reason code, and
+ * `poll` lists the SET in `unjudged`, records nothing for it and leaves it
+ * unacknowledged, so the transmitter offers it again. Never answer `false`
+ * for "I do not know": that is how an event that was never processed gets
+ * acknowledged and lost. An answer that is not exactly `true` or `false` is
+ * treated as cannot-answer.
  */
 export interface ReplayStore {
   /**
    * Record `jti` for `windowMs` and return `true`, or return `false` without
    * recording when it is already held. Must be atomic: two concurrent calls
    * with one `jti` must not both see `true`. A store that cannot answer must
-   * throw (or reject) without recording: the SET is then not accepted, and
-   * `poll` leaves it unjudged (contract 1.59, §34.2 P1, P4 — fail closed).
+   * throw (or reject) without recording (contract 1.60, §34.2 P4).
    */
   checkAndRecord(jti: string, windowMs: number): boolean | Promise<boolean>;
 }
@@ -257,6 +279,23 @@ export interface SsfPollResult {
 }
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/** One `poll` batch's state: whether the replay store has failed in it (§34.2 P1, contract 1.60). */
+interface PollBatch {
+  storeFailed: boolean;
+}
+
+/** The errors that came from the replay store (or from not asking it again), for `ssfUnjudged`'s category. */
+const STORE_FAILURES = new WeakSet<object>();
+
+function markStoreFailure(err: unknown): unknown {
+  if (typeof err === 'object' && err !== null) STORE_FAILURES.add(err);
+  return err;
+}
+
+function isStoreFailure(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && STORE_FAILURES.has(err);
+}
 const B64URL = /^[A-Za-z0-9_-]*$/;
 
 function refuseConfig(field: string, message: string): never {
@@ -335,8 +374,12 @@ export class SsfReceiver {
   readonly #now: () => number;
   #resolvedJwksUri: Promise<string> | undefined;
   #keys: Map<string, Record<string, unknown>> | undefined;
+  #keysFetchedAt = 0;
   #fetching: Promise<void> | undefined;
-  #lastForcedRefetch: number | undefined;
+  /** When the last unknown-`kid` refetch was made (§34.2 P6: refetches count). */
+  #lastRefetch: number | undefined;
+  /** When the last fetch failed (§34.2 P6: a failed fetch counts, a failed fill included). */
+  #lastFailedFetch: number | undefined;
 
   /**
    * @param client the client whose TLS policy and base URL the helper uses.
@@ -374,7 +417,9 @@ export class SsfReceiver {
    * 1. three base64url parts, a JSON-object header and payload [`malformed`];
    * 2. `typ` `secevent+jwt` or `application/secevent+jwt`, any case [`invalid_type`];
    * 3. `alg` exactly `EdDSA` [`invalid_key`];
-   * 4. the `kid` in the configured JWKS — on a miss, one refetch, at most once a minute [`invalid_key`];
+   * 4. the `kid` in the configured JWKS — on a miss, one refetch, at most once a minute [`invalid_key`]
+   *    (a fill of an empty cache is not a refetch; a failed fetch counts toward the minute; the cached
+   *    key set expires after {@link JWKS_CACHE_MAX_AGE_MS});
    * 5. the Ed25519 signature [`invalid_key`];
    * 6. `iss` equal to the configured issuer [`invalid_issuer`];
    * 7. `aud` equal to, or an array containing, the audience [`invalid_audience`];
@@ -385,7 +430,9 @@ export class SsfReceiver {
    * `replayed`. Acknowledge a polled SET once you have processed it.
    *
    * @throws SetRefusedError on a refusal; NetworkError when the JWKS (or the
-   * discovery document) could not be fetched — which is not a verdict.
+   * discovery document) could not be fetched, when a fetch is withheld because
+   * one failed less than a minute ago, or when the replay store could not
+   * answer — none of which is a verdict, and none carries a reason code.
    */
   verifySet(set: string): Promise<SecurityEvent> {
     return this.#verify(set, undefined);
@@ -419,6 +466,12 @@ export class SsfReceiver {
    * `events` are recorded and must be processed and acknowledged, or they are
    * lost. When the poll accepted no SET at all, nothing was recorded and the
    * first such failure is thrown instead (a `NetworkError` for a failed fetch).
+   *
+   * After the replay store fails once, it is **not asked again** in that
+   * batch (contract 1.60, §34.2 P1): every later SET that passes steps 1 – 8
+   * is unjudged as well, and one failing them is still refused. A poll that
+   * returns leaving SETs unjudged emits the §19 `ssfUnjudged` telemetry event
+   * (one per failure category, `key_fetch` or `replay_store`, with a count).
    *
    * @throws AuthError (local, no request) when no `accessTokenProvider` was configured.
    */
@@ -483,6 +536,8 @@ export class SsfReceiver {
       unjudged: [],
     };
     let firstFailure: { error: unknown } | undefined;
+    const batch: PollBatch = { storeFailed: false };
+    const unjudgedBy: Record<SsfUnjudgedCategory, number> = { key_fetch: 0, replay_store: 0 };
     const sets = isPlainObject(record.sets) ? record.sets : {};
     for (const [jti, set] of Object.entries(sets)) {
       if (typeof set !== 'string') {
@@ -490,7 +545,7 @@ export class SsfReceiver {
         continue;
       }
       try {
-        result.events.push(await this.#verify(set, jti));
+        result.events.push(await this.#verify(set, jti, batch));
       } catch (err) {
         if (err instanceof SetRefusedError) {
           result.refused.push({ jti, reason: err.reason });
@@ -500,16 +555,23 @@ export class SsfReceiver {
           // a SET already accepted in this batch is recorded and must be
           // returned, never dropped by a throw.
           result.unjudged.push(jti);
+          unjudgedBy[isStoreFailure(err) ? 'replay_store' : 'key_fetch'] += 1;
           firstFailure ??= { error: err };
         }
       }
     }
     // Nothing accepted means nothing recorded: raising loses no event.
     if (firstFailure && result.events.length === 0) throw firstFailure.error;
+    // Contract 1.60 §19.1 (SHOULD): returning with SETs unjudged hides an
+    // outage in a list the caller may never read — say so, with counts only.
+    for (const category of ['key_fetch', 'replay_store'] as const) {
+      const count = unjudgedBy[category];
+      if (count > 0) this.#client.telemetry.dispatcher.emit({ type: 'ssfUnjudged', operation, count, category });
+    }
     return result;
   }
 
-  async #verify(set: string, expectedJti: string | undefined): Promise<SecurityEvent> {
+  async #verify(set: string, expectedJti: string | undefined, batch?: PollBatch): Promise<SecurityEvent> {
     // 1.
     const parts = typeof set === 'string' ? set.split('.') : [];
     if (parts.length !== 3 || !B64URL.test(parts[2]!)) {
@@ -589,8 +651,21 @@ export class SsfReceiver {
       throw new SetRefusedError('invalid_request', 'the poll key is not the SET jti');
     }
     const [eventType, event] = Object.entries(events)[0]!;
-    // 9.
-    if (!(await this.#replayStore.checkAndRecord(jti, this.#replayWindowMs))) {
+    // 9. Contract 1.60 (§34.2 P1): once the store failed in this poll batch
+    // it is not asked again; a later SET that passed 1 – 8 is unjudged too.
+    if (batch?.storeFailed) {
+      throw markStoreFailure(
+        new NetworkError('the SSF replay store failed earlier in this poll and was not asked again (no verdict on the SET)'),
+      );
+    }
+    let fresh: boolean;
+    try {
+      fresh = await this.#recordJti(jti);
+    } catch (err) {
+      if (batch) batch.storeFailed = true;
+      throw markStoreFailure(err);
+    }
+    if (!fresh) {
       throw new SetRefusedError('replayed', 'jti already seen');
     }
     return {
@@ -605,14 +680,59 @@ export class SsfReceiver {
     };
   }
 
-  /** The JWK for `kid`: fetched once, refetched once on a miss, forced refetches at most once a minute. */
+  /**
+   * Step 9's store call, with the store's three answers kept apart (§34.2 P4):
+   * `true` / `false` are verdicts; a throw, a rejection or any other value is
+   * the store failing to answer, which is no verdict and so a `NetworkError`
+   * (never a {@link SetRefusedError}, never read as `replayed`).
+   */
+  async #recordJti(jti: string): Promise<boolean> {
+    let answer: unknown;
+    try {
+      answer = await this.#replayStore.checkAndRecord(jti, this.#replayWindowMs);
+    } catch (cause) {
+      // An error of the §2 taxonomy is already the failure's type; anything
+      // else (a driver's own error) is wrapped, so `verifySet` raises the §2
+      // type and the original stays on `cause`.
+      if (cause instanceof AxiamError && !(cause instanceof SetRefusedError)) throw cause;
+      throw new NetworkError('the SSF replay store could not answer (no verdict on the SET)', cause);
+    }
+    if (answer !== true && answer !== false) {
+      throw new NetworkError('the SSF replay store gave neither true nor false (no verdict on the SET)');
+    }
+    return answer;
+  }
+
+  /**
+   * The JWK for `kid` (§32.7 step 4, §34.2 P6).
+   *
+   * - An empty — or expired ({@link JWKS_CACHE_MAX_AGE_MS}) — cache is
+   *   **filled**; a fill that succeeds is not a refetch and is not counted.
+   * - A fill that **fails** counts: for the next minute no fetch is made and
+   *   the SET is left unjudged (a `NetworkError`), so a JWKS outage is not one
+   *   fetch per SET.
+   * - An unknown `kid` on a populated cache is **refetched** once, and not
+   *   again for a minute.
+   */
   async #keyFor(kid: string): Promise<Record<string, unknown> | undefined> {
-    if (this.#keys === undefined) await this.#fetchKeys();
+    const now = this.#now();
+    if (this.#keys !== undefined && now - this.#keysFetchedAt >= JWKS_CACHE_MAX_AGE_MS) {
+      this.#keys = undefined;
+    }
+    if (this.#keys === undefined) {
+      if (this.#lastFailedFetch !== undefined && now - this.#lastFailedFetch < JWKS_REFETCH_INTERVAL_MS) {
+        throw new NetworkError(
+          'the SSF JWKS is not fetched again within a minute of a failed fetch (CONTRACT.md §32.7 step 4, §34.2 P6)',
+        );
+      }
+      await this.#fetchKeys();
+    }
     let jwk = this.#keys?.get(kid);
     if (jwk) return jwk;
-    const now = this.#now();
-    if (this.#lastForcedRefetch === undefined || now - this.#lastForcedRefetch >= JWKS_REFETCH_INTERVAL_MS) {
-      this.#lastForcedRefetch = now;
+    const later = this.#now();
+    const last = Math.max(this.#lastRefetch ?? -Infinity, this.#lastFailedFetch ?? -Infinity);
+    if (later - last >= JWKS_REFETCH_INTERVAL_MS) {
+      this.#lastRefetch = later;
       await this.#fetchKeys();
       jwk = this.#keys?.get(kid);
     }
@@ -640,6 +760,10 @@ export class SsfReceiver {
           if (isPlainObject(k) && typeof k.kid === 'string') map.set(k.kid, k);
         }
         this.#keys = map;
+        this.#keysFetchedAt = this.#now();
+      } catch (err) {
+        this.#lastFailedFetch = this.#now();
+        throw err;
       } finally {
         this.#fetching = undefined;
       }

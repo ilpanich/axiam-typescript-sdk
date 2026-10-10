@@ -42,7 +42,7 @@ export class FederationApi {
       path: '/api/v1/federation-configs',
       query: { ...pageQuery(page) },
     });
-    return wire;
+    return { ...wire, items: wire.items.map(models.withFederationConfigResponseDefaults) };
   }
 
   /**
@@ -70,7 +70,7 @@ export class FederationApi {
       path: '/api/v1/federation-configs',
       body: models.createFederationConfigRequestToWire(body),
     });
-    return wire;
+    return models.withFederationConfigResponseDefaults(wire);
   }
 
   /** `GET /api/v1/federation-configs/{id}` */
@@ -81,7 +81,7 @@ export class FederationApi {
       pathTemplate: '/api/v1/federation-configs/{id}',
       path: `/api/v1/federation-configs/${encodeURIComponent(id)}`,
     });
-    return wire;
+    return models.withFederationConfigResponseDefaults(wire);
   }
 
   /**
@@ -98,7 +98,7 @@ export class FederationApi {
       path: `/api/v1/federation-configs/${encodeURIComponent(id)}`,
       body: models.updateFederationConfigRequestToWire(body),
     });
-    return wire;
+    return models.withFederationConfigResponseDefaults(wire);
   }
 
   /**

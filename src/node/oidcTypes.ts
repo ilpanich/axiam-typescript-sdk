@@ -173,6 +173,38 @@ export interface OidcConfiguration {
    */
   token_endpoint_auth_signing_alg_values_supported?: string[];
   /**
+   * RFC 8414 §2 — the client-authentication methods the revocation endpoint
+   * accepts; AXIAM publishes the token endpoint's list (contract 1.60,
+   * §21.5).
+   *
+   * Informational only, and optional: a server before 1.0.0 omits all four
+   * revocation and introspection members, and RFC 8414 then reads this one
+   * as `client_secret_basic` alone. Neither changes how `revoke`
+   * authenticates — it keeps the method this client was configured with
+   * (§12.1 rules 3 and 4).
+   */
+  revocation_endpoint_auth_methods_supported?: string[];
+  /**
+   * RFC 8414 §2 — the client-authentication methods the introspection
+   * endpoint accepts; AXIAM publishes the token endpoint's list without
+   * `none`, since introspection refuses a public client (contract 1.60,
+   * §21.5). Informational and optional, as above.
+   */
+  introspection_endpoint_auth_methods_supported?: string[];
+  /**
+   * RFC 8414 §2 — the JWS algorithms a `private_key_jwt` assertion at the
+   * revocation endpoint may use; equal to
+   * {@link OidcConfiguration.token_endpoint_auth_signing_alg_values_supported}
+   * on AXIAM (contract 1.60, §21.5). Informational and optional.
+   */
+  revocation_endpoint_auth_signing_alg_values_supported?: string[];
+  /**
+   * RFC 8414 §2 — the JWS algorithms a `private_key_jwt` assertion at the
+   * introspection endpoint may use (contract 1.60, §21.5). Informational and
+   * optional.
+   */
+  introspection_endpoint_auth_signing_alg_values_supported?: string[];
+  /**
    * CIBA Core §4 — the backchannel authentication endpoint `cibaInitiate`
    * posts to (contract 1.58, §21.5, §33.1). Optional: its absence means the
    * server does not support CIBA, and is an error at call time, never a cue
@@ -349,7 +381,15 @@ export interface OidcTokenSet {
   tokenType: string;
   /** Access-token lifetime in seconds from the time of the response. */
   expiresIn: number;
-  /** Granted scope, when the server narrowed or echoed it. */
+  /**
+   * Granted scope, when the server narrowed or echoed it.
+   *
+   * On an `oidcRefresh` result this is the **refresh response's** scope and the
+   * token's scope from then on — never the original grant's. The server
+   * intersects a grant with the client's current registration at every
+   * refresh, so it may be narrower (and carry no ID token once `openid` is
+   * gone), permanently for that grant (contract 1.60, §12.1).
+   */
   scope?: string;
   /** The refresh token, when the grant issued one (§12.5 secret). */
   refreshToken?: Sensitive<string>;
@@ -904,6 +944,13 @@ export interface TokenExchangeParams {
    *
    * Its absence selects **impersonation** — a different operation with
    * different risk. The SDK never fills this in for you.
+   *
+   * It must have been issued to the exchanging client (§15.2 rule 9, contract
+   * 1.60): the usual actor is **the same client's own `client_credentials`
+   * token** — `(await oidc.loginClientCredentials()).accessToken`. A token
+   * issued to another client, a console sign-in or a service account is
+   * answered `invalid_request` ("actor_token was not issued to the exchanging
+   * client"), which is surfaced unchanged and never retried or dropped.
    */
   actorToken?: Sensitive<string> | string;
   /** Scopes to request. Omitted from the body when absent. */

@@ -116,13 +116,38 @@ export interface ConfigClampedEvent {
   contractReference: string;
 }
 
+/** Why an SSF poll left SETs unjudged: the JWKS (or discovery) fetch, or the replay store. */
+export type SsfUnjudgedCategory = 'key_fetch' | 'replay_store';
+
+/**
+ * Emitted when `SsfReceiver.poll` returns normally leaving at least one SET
+ * unjudged (contract 1.60, §19.1's SHOULD; §34.2 P1) — one event per failure
+ * category present in the batch.
+ *
+ * A poll that accepted some SETs cannot raise without losing them, so it
+ * returns and lists the rest in `unjudged`; this event is what makes that
+ * outage visible to an operator who never inspects the list. It carries a
+ * count, never a `jti` or a SET.
+ */
+export interface SsfUnjudgedEvent {
+  /** Discriminant. */
+  type: 'ssfUnjudged';
+  /** Canonical operation name: `ssf.poll`. */
+  operation: string;
+  /** How many SETs of the batch this category left unjudged. */
+  count: number;
+  /** The failure that left them unjudged. */
+  category: SsfUnjudgedCategory;
+}
+
 /** A §19 telemetry event. Closed union — see the file header for why. */
 export type TelemetryEvent =
   | RequestStartEvent
   | RequestEndEvent
   | RetryEvent
   | RefreshEvent
-  | ConfigClampedEvent;
+  | ConfigClampedEvent
+  | SsfUnjudgedEvent;
 
 /**
  * A caller-supplied telemetry sink (§19).

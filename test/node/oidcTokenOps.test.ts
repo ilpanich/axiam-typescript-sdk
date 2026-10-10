@@ -62,6 +62,25 @@ describe('oidcRefresh (§12.1, §9)', () => {
     expect(tokens.refreshToken?.expose()).toBe('rotated-refresh');
   });
 
+  // Contract 1.60 §12.1: the server intersects the grant with the client's
+  // current registration, so a refresh may answer a narrower scope — and no
+  // ID token once `openid` is gone. The result carries the response's scope.
+  it("takes the refresh response's scope as the token's scope, never the original grant's", async () => {
+    const state = createMockState();
+    server.use(
+      discoveryHandler(state),
+      tokenHandler(state, () => HttpResponse.json(tokenResponse({ scope: 'profile' }))),
+    );
+    const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
+
+    const tokens = await oidc.oidcRefresh({ refreshToken: 'r', scope: 'openid profile email' });
+
+    expect(state.tokenForms[0].get('scope')).toBe('openid profile email');
+    expect(tokens.scope).toBe('profile');
+    expect(tokens.idToken).toBeUndefined();
+    expect(tokens.idClaims).toBeUndefined();
+  });
+
   it('omits scope when the caller does not narrow it', async () => {
     const state = createMockState();
     server.use(discoveryHandler(state), tokenHandler(state, () => HttpResponse.json(tokenResponse())));

@@ -34,6 +34,8 @@ export type {
   RetryEvent,
   RefreshEvent,
   ConfigClampedEvent,
+  SsfUnjudgedEvent,
+  SsfUnjudgedCategory,
 } from '../core/telemetry.js';
 export type { FinishRequest } from '../core/telemetryReporter.js';
 export type {

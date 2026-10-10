@@ -4,6 +4,7 @@
 // these tests assert an absence: no defaulted `actorToken`, no auto-narrow
 // after `invalid_scope`, no synthesised refresh token, no adoption.
 
+import { readFileSync } from 'node:fs';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { AuthError, OAuthProtocolError, Sensitive } from '../../src/core/index.js';
@@ -132,6 +133,51 @@ describe('delegation vs impersonation (§15.2 rule 1)', () => {
     expect(forms[0]!.get('actor_token_type')).toBe(
       'urn:ietf:params:oauth:token-type:access_token',
     );
+  });
+});
+
+describe('an actor token not issued to the exchanging client (§15.2 rule 9, contract 1.60; §15.6)', () => {
+  it('surfaces invalid_request unchanged: exactly one request, the actor token neither dropped nor replaced', async () => {
+    const { forms } = mountExchange(() =>
+      oauthErrorWithDescription(
+        'invalid_request',
+        'actor_token was not issued to the exchanging client',
+      ),
+    );
+    const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
+
+    const err = await oidc
+      .tokenExchange({
+        subjectToken: SUBJECT_TOKEN,
+        subjectTokenType: ACCESS_TOKEN_TYPE,
+        actorToken: new Sensitive(ACTOR_TOKEN),
+      })
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(OAuthProtocolError);
+    expect((err as OAuthProtocolError).error).toBe('invalid_request');
+    expect((err as OAuthProtocolError).message).toContain(
+      'actor_token was not issued to the exchanging client',
+    );
+    // Exactly one request. Dropping the actor token and re-sending would turn
+    // the delegation the caller asked for into an impersonation they did not
+    // (rule 1); minting a client_credentials token of its own and swapping it
+    // in would be the SDK choosing the actor (rule 9: the caller supplies it).
+    expect(forms).toHaveLength(1);
+    expect(forms[0]!.get('actor_token')).toBe(ACTOR_TOKEN);
+    expect(forms[0]!.get('actor_token_type')).toBe('urn:ietf:params:oauth:token-type:access_token');
+    expect(forms[0]!.get('grant_type')).toBe('urn:ietf:params:oauth:grant-type:token-exchange');
+  });
+
+  it('the README and the example obtain the actor token from the same client\'s client_credentials grant', () => {
+    const readme = readFileSync(new URL('../../README.md', import.meta.url), 'utf8');
+    const example = readFileSync(new URL('../../examples/token-exchange.ts', import.meta.url), 'utf8');
+    const section = readme.slice(readme.indexOf('## Token exchange'), readme.indexOf('### External-IdP subject tokens'));
+    for (const text of [section, example]) {
+      expect(text).toContain('loginClientCredentials');
+      expect(text).toMatch(/actorToken:/);
+    }
+    expect(section).toContain('§15.2 rule 9');
   });
 });
 

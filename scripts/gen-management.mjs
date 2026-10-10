@@ -76,10 +76,40 @@ const OPEN_TAGGED_UNIONS = new Set(['ScimTargetAuth', 'ScimTargetScope']);
 // §30.2 names two request members: on `UpdateDirectoryConfig`, `null` clears
 // the value and absence keeps it. §29.8 test 8 asks the same of a response:
 // `SamlIdpInfo`'s two credential ids are `null` when the slot is empty, and
-// that `null` must stay distinct from an absent member.
+// that `null` must stay distinct from an absent member. Contract 1.60 §27.15
+// note 8 names the ten nullable strings of `UpdateFederationConfigRequest`:
+// each is cleared by an explicit `null` and left unchanged when omitted.
 const EXPLICIT_NULL_FIELDS = {
   UpdateDirectoryConfig: new Set(['group_base_dn', 'group_filter']),
   SamlIdpInfo: new Set(['active_credential_id', 'next_credential_id']),
+  UpdateFederationConfigRequest: new Set([
+    'apple_key_id',
+    'apple_team_id',
+    'authorization_endpoint',
+    'button_icon',
+    'idp_metadata_signing_cert_pem',
+    'idp_signing_cert_pem',
+    'metadata_url',
+    'provider_slug',
+    'token_endpoint',
+    'userinfo_endpoint',
+  ]),
+};
+
+// The section that makes `null` a clearing value on a request type (the
+// explicit-null sentence cites it); §30.2 when a type is not listed here.
+const EXPLICIT_NULL_CITATION = {
+  UpdateFederationConfigRequest: '§27.15 note 8',
+};
+
+// Response members the spec marks required but an older server omits, and the
+// value an absent one decodes as. Contract 1.60 §27.15 note 6:
+// `FederationConfigResponse.allow_sha1_signatures` from a server before 1.0.0
+// is absent and reads as `false`. Every operation answering one of these types
+// runs the generated `with<Type>Defaults` over it, so the declared
+// non-optional type stays true of every value a caller receives.
+const RESPONSE_DEFAULTS = {
+  FederationConfigResponse: { allow_sha1_signatures: 'false' },
 };
 
 // Namespaces whose responses keep **only the members their type declares**
@@ -136,7 +166,7 @@ const CALL_SITE_NOTES = {
   'scim_targets.create':
     '`credential` is required here (§31.3 rule 2). It is write-only: no response ever carries it, and the SDK keeps no copy.',
   'scim_targets.update':
-    "**The credential is bound to its URL** (§31.3 rule 2): absent `credential` keeps the stored one — except that changing `base_url` of a bearer target, `auth.token_url` or `base_url` of a client-credentials target, or `auth.type`, without `credential` in the same write is refused `400` and changes nothing. The SDK holds no credential to re-send. Every other member left out takes its default — start from `scimTargetInputFrom(await scimTargets.get(id))`. An update overtaken by another administrator's write is `409` (§31.3 rule 4): reload, then retry yourself.",
+    "**The credential is bound to its URL** (§31.3 rule 2): absent `credential` keeps the stored one — except that changing `base_url` of a bearer target, `auth.token_url` or `base_url` of a client-credentials target, or `auth.type`, without `credential` in the same write is refused `400` and changes nothing. The SDK holds no credential to re-send. Every other member left out takes its default — start from `scimTargetInputFrom(await scimTargets.get(id))`. An update overtaken by another administrator's write is `409` (§31.3 rule 4): reload, then retry yourself. `expected_updated_at` — the `updated_at` you read, which `scimTargetInputFrom` carries over — is sent exactly as given and makes the replacement conditional on your read: a target written since is `409` and unchanged (contract 1.60).",
   'scim_targets.delete':
     '**Deprovisions nothing downstream** (§31.3 rule 8): the users and groups AXIAM created in the service provider stay there, and AXIAM no longer knows them. To remove them, set `deprovision` to `delete`, let AXIAM push, and only then delete the target.',
   'scim_targets.reconcile':
@@ -526,9 +556,10 @@ function emitModels() {
  *   *absent from the wire body* rather than sent as \`null\` — so a body
  *   carrying one field changes one field (§27.4 rule 5). \`null\` is not
  *   absent: where a member's documentation says so (contract 1.54's
- *   \`UpdateDirectoryConfig.group_base_dn\` / \`group_filter\`), \`null\` is sent
- *   as \`null\` and clears the stored value; leave a member \`undefined\` to
- *   keep it.
+ *   \`UpdateDirectoryConfig.group_base_dn\` / \`group_filter\`, and contract
+ *   1.60's ten nullable strings of \`UpdateFederationConfigRequest\`), \`null\`
+ *   is sent as \`null\` and clears the stored value; leave a member
+ *   \`undefined\` to keep it.
  * - **Replacement bodies.** \`SetOrgSettings\`, the organization email config,
  *   \`WebauthnAttestationPolicy\` and \`SetMtlsTrustAnchor\` have required
  *   fields, because a \`PUT\` on those routes replaces rather than patches.
@@ -623,9 +654,29 @@ export function roleAssignmentInherits(assignment: { inherit?: boolean }): boole
         projections.get(name) ?? [],
       ),
     );
+    if (RESPONSE_DEFAULTS[name]) out.push(emitResponseDefaults(rname, RESPONSE_DEFAULTS[name]));
   }
   out.push(emitScrubbers());
   return out.join('\n');
+}
+
+/** `with<Type>Defaults`: fill the members an older server omits (see `RESPONSE_DEFAULTS`). */
+function emitResponseDefaults(rname, defaults) {
+  const members = Object.entries(defaults);
+  const lines = doc(
+    `Fill the members of a decoded \`${rname}\` that a server before contract 1.60 omits: ` +
+      members.map(([m, v]) => `\`${m}\` absent reads as \`${v}\``).join(', ') +
+      ' (§27.15). A member the server sent is kept as sent. Never mutates its input.\n\n@internal — every operation answering this type runs it.',
+  );
+  lines.push(`export function with${rname}Defaults(value: ${rname}): ${rname} {`);
+  lines.push('  const read = value as Partial<' + rname + '>;');
+  lines.push('  return {');
+  lines.push('    ...value,');
+  for (const [m, v] of members) lines.push(`    ${m}: read.${m} ?? ${v},`);
+  lines.push('  };');
+  lines.push('}');
+  lines.push('');
+  return lines.join('\n');
 }
 
 /** The response schemas of {@link DECLARED_ONLY_NAMESPACES}: each gets an exported `scrub<Type>`. */
@@ -929,7 +980,7 @@ function emitInterface(rname, name, secrets, directions, projected = []) {
     let text = f.description ?? `\`${f.name}\`.`;
     if (f.explicitNull) {
       text += directions.has('request') || /^(Update|Set)/.test(rname)
-        ? '\n\n**`null` is not absent** (§27.4 rule 5, §30.2): leave it `undefined` to keep the stored value; set it to `null` to send `null` and clear it.'
+        ? `\n\n**\`null\` is not absent** (§27.4 rule 5, ${EXPLICIT_NULL_CITATION[name] ?? '§30.2'}): leave it \`undefined\` to keep the stored value; set it to \`null\` to send \`null\` and clear it.`
         : '\n\n**`null` is not absent** (§29.8): `null` means the slot is empty; a server that stopped sending the member yields `undefined`, which this SDK keeps distinct.';
     }
     lines.push(
@@ -1268,17 +1319,26 @@ function emitOperation(namespace, opname, op, secrets) {
   if (bodyExpr !== 'undefined') lines.push(`      body: ${bodyExpr},`);
   lines.push('    });');
 
+  const itemSchema = resp.kind === 'none' ? null : op.response.schema.replace(/^\[\]/, '');
+  const defaulted = itemSchema && RESPONSE_DEFAULTS[itemSchema]
+    ? `models.with${pascal(itemSchema)}Defaults`
+    : null;
   const scrub = resp.kind !== 'none' && SCRUBBABLE.has(op.response.schema)
     ? `models.scrub${pascal(op.response.schema)}`
-    : null;
+    : defaulted;
   if (scrub && resp.wire !== resp.public) {
-    throw new Error(`${canonical}: a response both scrubbed and carrying Sensitive fields is not supported`);
+    throw new Error(`${canonical}: a response both scrubbed or defaulted and carrying Sensitive fields is not supported`);
+  }
+  if (defaulted && SCRUBBABLE.has(itemSchema)) {
+    throw new Error(`${canonical}: a response both scrubbed and defaulted is not supported`);
   }
   if (resp.kind === 'none') {
     // nothing to return
   } else if (scrub) {
     if (resp.kind === 'array') lines.push(`    return wire.map(${scrub});`);
-    else if (resp.kind === 'page') {
+    else if (resp.kind === 'page' && defaulted) {
+      lines.push(`    return { ...wire, items: wire.items.map(${scrub}) };`);
+    } else if (resp.kind === 'page') {
       // The envelope keeps only `Page`'s own members too (§34.2 P12.1).
       lines.push(
         `    return { items: wire.items.map(${scrub}), total: wire.total, offset: wire.offset, limit: wire.limit };`,

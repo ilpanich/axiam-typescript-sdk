@@ -1,13 +1,8 @@
 # axiam-sdk (TypeScript/JavaScript)
 
-<!-- Track the CURRENT channel's dist-tag, not `latest`: releases are prereleases and
-     the publish job keeps those off `latest` (see "Release / versioning"), so a plain
-     `npm/v/axiam-sdk` badge reports whatever was last published to `latest` — today
-     1.0.0-alpha28, dozens of releases stale. Move `beta` below to `rc`, then drop it
-     entirely, as the channel advances. -->
 [![CI](https://github.com/ilpanich/axiam-typescript-sdk/actions/workflows/sdk-ci-typescript.yml/badge.svg?branch=main)](https://github.com/ilpanich/axiam-typescript-sdk/actions/workflows/sdk-ci-typescript.yml)
 [![Coverage Status](https://coveralls.io/repos/github/ilpanich/axiam-typescript-sdk/badge.svg?branch=main)](https://coveralls.io/github/ilpanich/axiam-typescript-sdk?branch=main)
-[![npm](https://img.shields.io/npm/v/axiam-sdk/beta?label=npm%20beta)](https://www.npmjs.com/package/axiam-sdk)
+[![npm](https://img.shields.io/npm/v/axiam-sdk)](https://www.npmjs.com/package/axiam-sdk)
 [![Docs](https://img.shields.io/badge/docs-TypeDoc-blue.svg)](https://ilpanich.github.io/axiam-typescript-sdk/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
@@ -18,19 +13,39 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 ## Package identity
 
 - **npm package:** `axiam-sdk`
-- **Registry:** [npmjs.com/package/axiam-sdk](https://www.npmjs.com/package/axiam-sdk) — published as prereleases, under the `alpha`/`beta` dist-tags
+- **Registry:** [npmjs.com/package/axiam-sdk](https://www.npmjs.com/package/axiam-sdk) — stable releases on the `latest` dist-tag, following [semantic versioning](https://semver.org/)
 - **Source:** [github.com/ilpanich/axiam-typescript-sdk](https://github.com/ilpanich/axiam-typescript-sdk)
 - **License:** Apache-2.0
 - **Node:** `>=22` — see [Supported Node versions](#supported-node-versions)
 
 ## Contract conformance
 
-This SDK conforms to **contract 1.59**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
+This SDK conforms to **contract 1.60**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
 §20, §21, §22, §23, §24, §25, §26, §27, §28, §28.12, §29, §30, §31, §32 and §33, with §32.7 and
 §33.2 signed (including §6.1 mTLS client certificates, the
 §10.1 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
 `verifyWebhook` signature verifier). §12 is implemented in full at its 1.38 shape: all
 **thirteen** operations, including the four public "Sign in with X" entry points.
+
+### Contract 1.60 — the answers to #588 and the release wave (§34.4)
+
+Contract 1.60 changes no route; it answers the questions the 1.59 ports raised (§34.4
+A1 – B9, C-1 – C-16) and adds the 1.0.0 release wave's members. Every §34.4 row assigned to
+TypeScript:
+
+| Row | Rule | What this SDK does |
+|---|---|---|
+| A3 | §32.7 step 4, P6 | A failed cold-cache fill and a failed expiry refresh of the SSF key cache count toward the once-a-minute limit; the cache expires after ten minutes (`JWKS_CACHE_MAX_AGE_MS`). |
+| B1, C-1 | §32.7 step 9, P3, P4 | A replay store that cannot answer (a throw, a rejection, any answer but `true`/`false`) gives no verdict: `verifySet` raises `NetworkError`, the store's failure on `cause`, and `poll` leaves the SET unjudged. A `SetRefusedError` thrown from inside a store is wrapped too, so no store failure carries a reason code. |
+| C-3, C-4 | P1, §19.1 | After the replay store fails in a `poll` batch it is not asked again: every later SET that verifies is unjudged, one that fails verification is still refused. A `poll` that returns with SETs unjudged emits the §19 `ssfUnjudged` event (count and category, `key_fetch` or `replay_store`; no `jti`). |
+| §15.2 rule 9 | §15 | The `actor_token` is the same client's `client_credentials` token. |
+| §8 minimal profile | §8 | A broker confirm is not evidence that AXIAM saw a message. |
+| §31 `expected_updated_at` | §31.3 rule 4 | On `ScimTargetInput`, sent exactly as given and only when set; `scimTargetInputFrom` carries the read's `updated_at`, so a read-modify-write of a target written since is `409`. |
+| §27.15 `window_minutes` | §27.15 note 1 | On the `notificationRules` models, sent as given (never clamped) and only when set. |
+| §27.15 `allow_sha1_signatures`, `idp_metadata_signing_cert_pem` | notes 6, 7 | On the three federation configuration models, sent only when set; a response without `allow_sha1_signatures` (a server before 1.0.0) reads `false`. |
+| §27.15 note 8 | §27.4 rule 5 | `federation.updateConfig`: each of the ten nullable members of `UpdateFederationConfigRequest` is cleared by `null` and left unchanged when `undefined`, and the body carries exactly the members you set. |
+| §12.1 refresh `scope` | §12.1 | An `oidcRefresh` result's `scope` is the refresh response's, which may be narrower than the grant's. |
+| §21.5 discovery | §21.5, §12.1 | `OidcConfiguration` carries the four revocation and introspection auth members, all optional; a document without them decodes. |
 
 ### Contract 1.59 — the Phase 23 ports review (§34)
 
@@ -166,13 +181,12 @@ See [`CONTRACT.md`](./CONTRACT.md) for the full cross-language behavioral contra
 ## Install
 
 ```bash
-npm install axiam-sdk@beta
+npm install axiam-sdk@^1.0.0
 ```
 
-Every release so far is a prerelease, and the publish job files each one under its
-channel's dist-tag (`beta` today) rather than `latest` — so name the channel, or pin an
-exact version. A bare `npm install axiam-sdk` resolves `latest`, which no prerelease
-moves.
+From 1.0.0 the SDK is stable and follows semantic versioning: a breaking change to its
+public API waits for the next major version. Releases are published on npm's `latest`
+dist-tag, so a bare `npm install axiam-sdk` resolves the newest one.
 
 ## Supported Node versions
 
@@ -585,6 +599,16 @@ A switch like that appears in a dev compose file, works, and travels unchanged
 into production, where it turns TLS into an expensive no-op against precisely
 the attacker TLS exists to stop. `caCert` covers the legitimate reason people
 reach for one.
+
+#### Minimal profile (contract 1.60, §8)
+
+A server running in the **minimal profile** (`AXIAM__AMQP__ENABLED=false`) reads no AMQP
+queue: it does not consume `axiam.authz.request` or `axiam.audit.events`, whatever a broker
+holds. **A broker confirm is not evidence that AXIAM saw a message** — a publisher confirm, or
+the broker's `basic.ack` of a publish, means only that the broker accepted it, never that
+AXIAM decided the request or recorded the event. This SDK does not treat one as such. Against
+a minimal-profile server use REST or gRPC; `GET /health` reports `profile: minimal` and lists
+`amqp_authz` and `amqp_audit_ingestion` under `unavailable`.
 
 ### Node — reactors, AMQP extension actors (`axiam-sdk/amqp`, CONTRACT.md §22)
 
@@ -1650,9 +1674,13 @@ RFC 8693 — a service holding a user's token exchanging it for a *narrower* one
 calling the next service.
 
 ```ts
+// Delegation: the actor token is THIS client's own client_credentials token (§15.2 rule 9).
+const actor = await oidc.loginClientCredentials();
+
 const exchanged = await oidc.tokenExchange({
   subjectToken: new Sensitive(userToken),
   subjectTokenType: ACCESS_TOKEN_TYPE, // required (§15.1), no default
+  actorToken: actor.accessToken, // omit it and you ask for impersonation instead
   scopes: ['orders:read'],
   audience: 'orders-service',
 });
@@ -1662,6 +1690,14 @@ Most of what this method does is refuse to be helpful, and each refusal is delib
 
 - **No default `actorToken`.** Omitting it asks for *impersonation*; the SDK will not
   quietly substitute the client's own session token and turn that into a delegation.
+- **The actor token must have been issued to the exchanging client** (contract 1.60,
+  §15.2 rule 9). The usual actor is the exchanging client's own `client_credentials` token
+  (`loginClientCredentials()` above): its `sub` — and so the issued token's `act.sub` — is
+  the client's `client_id`. One issued to another client, a console sign-in or a service
+  account is answered `400 invalid_request` (`actor_token was not issued to the exchanging
+  client`), which the SDK surfaces unchanged: no retry, no dropping the actor token to
+  impersonate instead, no substituting a token of its own. You obtain and pass the actor
+  token; the SDK supplies none.
 - **No auto-narrowing after `invalid_scope`.** The server refuses rather than silently
   narrowing precisely so the caller finds out here.
 - **No refresh token, ever** — `ExchangedToken` has no such field, so there is nothing to
@@ -2271,10 +2307,22 @@ return** (contract 1.59, §34.2 P1): a SET it cannot judge — the JWKS or disco
 failed, or the replay store threw — is left unrecorded and listed by `jti` in `unjudged`
 (neither acknowledge nor refuse it; the transmitter offers it again), while the SETs judged
 in the same batch are returned as usual. When a poll accepts no SET at all it records
-nothing and throws that failure instead. The default `MemoryReplayStore` is per process and
+nothing and throws that failure instead. Once the replay store fails in a batch it is not
+asked again for that batch: every later SET that verifies is unjudged as well, and `poll`
+emits the §19 `ssfUnjudged` telemetry event when it returns with any SET unjudged
+(contract 1.60). The default `MemoryReplayStore` is per process and
 **unbounded in count** — an entry leaves only when its window expires (§34.2 P4); a
-`ReplayStore` that cannot answer must throw or reject, and the SET is then not accepted
-(fail closed). A SET refused as `replayed` was accepted by this
+`ReplayStore` has three answers — `true` (not seen, now recorded), `false` (seen) and
+**cannot answer**, which is a throw or a rejection (contract 1.60, §34.2 P4). A store that
+cannot answer gives **no verdict**: `verifySet` raises a `NetworkError` with no reason code
+(it is never a `SetRefusedError`, and never read as `replayed`, which `poll` would have you
+acknowledge), and `poll` lists the SET in `unjudged`, records nothing for it and does not
+acknowledge it, so the transmitter offers it again. Never answer `false` for "I do not know";
+an answer that is neither `true` nor `false` is treated as cannot-answer. The key set is
+cached for ten minutes (`JWKS_CACHE_MAX_AGE_MS`; contract 1.60 requires no more than ten), so a key
+the transmitter removed stops verifying; filling an empty or expired cache is not a refetch,
+but a **failed** fetch counts toward the once-a-minute limit: after a failed fill a SET inside
+the minute makes no fetch and is left unjudged (§34.2 P6). A SET refused as `replayed` was accepted by this
 receiver on an earlier poll: acknowledge it in `ack` rather than reporting it in `setErrs`
 (§34.2 P2). `poll` never acknowledges anything itself, is not retried on a `4xx` other than
 `408` and `429` — which §16 retries, as it does a transport failure and a `5xx` — and sends
@@ -2407,7 +2455,9 @@ const client = new AxiamClient({
 - **Path templates, not URLs**, so a metric label cannot become a cardinality bomb.
 
 One `requestStart`/`requestEnd` pair is emitted **per attempt**, so you can count real wire
-calls. See [`examples/telemetry-hook.ts`](examples/telemetry-hook.ts), including the
+calls. `SsfReceiver.poll` also emits `ssfUnjudged` when it returns leaving SETs unjudged
+(contract 1.60), one per failure category with a count, so an outage it cannot raise is
+still visible. See [`examples/telemetry-hook.ts`](examples/telemetry-hook.ts), including the
 OpenTelemetry mapping.
 
 ### Decision memo (§17) — opt-in, off by default

@@ -216,3 +216,51 @@ describe('RFC 8414 capability members (contract 1.42, §21.5)', () => {
     expect(configuration.token_endpoint).toBe(`${BASE_URL}/oauth2/token`);
   });
 });
+
+// ---------------------------------------------------------------------------
+// §21.5 / §12.1 — the four revocation and introspection members (contract 1.60)
+// ---------------------------------------------------------------------------
+
+describe('revocation and introspection auth members (contract 1.60, §21.5)', () => {
+  const server = createServer();
+
+  beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
+  afterEach(() => server.resetHandlers());
+  afterAll(() => server.close());
+
+  const FOUR = {
+    revocation_endpoint_auth_methods_supported: ['client_secret_post', 'private_key_jwt', 'none'],
+    introspection_endpoint_auth_methods_supported: ['client_secret_post', 'private_key_jwt'],
+    revocation_endpoint_auth_signing_alg_values_supported: ['PS256', 'ES256', 'EdDSA'],
+    introspection_endpoint_auth_signing_alg_values_supported: ['PS256', 'ES256', 'EdDSA'],
+  };
+
+  it('decodes the four members when a 1.0.0 server publishes them', async () => {
+    const state = createMockState();
+    server.use(discoveryHandler(state, discoveryDocument(FOUR)));
+    const { oidc } = createClient();
+
+    const configuration = await oidc.oidcDiscover();
+
+    expect(configuration.revocation_endpoint_auth_methods_supported).toEqual(FOUR.revocation_endpoint_auth_methods_supported);
+    expect(configuration.introspection_endpoint_auth_methods_supported).toEqual(
+      FOUR.introspection_endpoint_auth_methods_supported,
+    );
+    expect(configuration.revocation_endpoint_auth_signing_alg_values_supported).toEqual(['PS256', 'ES256', 'EdDSA']);
+    expect(configuration.introspection_endpoint_auth_signing_alg_values_supported).toEqual(['PS256', 'ES256', 'EdDSA']);
+  });
+
+  it('decodes a document without them (a server before 1.0.0) — optional, not required', async () => {
+    const state = createMockState();
+    server.use(discoveryHandler(state, discoveryDocument()));
+    const { oidc } = createClient();
+
+    const configuration = await oidc.oidcDiscover();
+
+    expect(configuration.revocation_endpoint_auth_methods_supported).toBeUndefined();
+    expect(configuration.introspection_endpoint_auth_methods_supported).toBeUndefined();
+    expect(configuration.revocation_endpoint_auth_signing_alg_values_supported).toBeUndefined();
+    expect(configuration.introspection_endpoint_auth_signing_alg_values_supported).toBeUndefined();
+    expect(configuration.revocation_endpoint).toBe(discoveryDocument().revocation_endpoint);
+  });
+});

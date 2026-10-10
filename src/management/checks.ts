@@ -110,6 +110,11 @@ export function ssfStreamInputFrom(stream: SsfStream): SsfStreamInput {
  * Read-modify-write for `scimTargets.update` (§31.2). `credential` is left
  * absent — absent keeps the stored one, unless the write moves its URL or
  * changes `auth.type` (§31.3 rule 2), when the caller must supply it again.
+ *
+ * `expected_updated_at` is the `updated_at` of the read (contract 1.60, §31.3
+ * rule 4): the replacement lands only if nobody wrote the target since, else
+ * `409` — reload, then retry. Delete it from the body to fall back to the
+ * server's last-writer-wins.
  */
 export function scimTargetInputFrom(target: ScimTargetResponse): ScimTargetInput {
   return {
@@ -117,6 +122,7 @@ export function scimTargetInputFrom(target: ScimTargetResponse): ScimTargetInput
     base_url: target.base_url,
     deprovision: target.deprovision,
     enabled: target.enabled,
+    expected_updated_at: target.updated_at,
     name: target.name,
     push_groups: target.push_groups,
     scope: { ...target.scope } as ScimTargetInput['scope'],

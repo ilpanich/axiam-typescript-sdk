@@ -175,6 +175,37 @@ describe('§31.8 (3) — update without a credential sends no key; variants keep
       expect(JSON.parse(JSON.stringify(value))).toEqual(wire);
     }
   });
+
+  // Contract 1.60 (§31.3 rule 4): expected_updated_at is passed through
+  // unchanged — the string as given, never re-formatted — and absent when
+  // unset; the server's 409 for a target written since surfaces as
+  // ConflictError after exactly one request.
+  it('sends expected_updated_at exactly as given, omits it when unset, and surfaces the 409', async () => {
+    const server = mockServer();
+    const id = freshId();
+    // Not the canonical form a Date round-trip would produce.
+    const readAt = '2026-10-05T09:15:00.123456+02:00';
+    const seen = capture(server, 'PUT', `${TARGETS}/${id}`, 200, targetBody());
+    const client = managementClient();
+
+    await client.scimTargets.update(id, { ...input(), expected_updated_at: readAt });
+    await client.scimTargets.update(id, input());
+    expect((seen[0]?.json as Record<string, unknown>).expected_updated_at).toBe(readAt);
+    expect(seen[0]?.text).toContain(`"expected_updated_at":"${readAt}"`);
+    expect('expected_updated_at' in (seen[1]?.json as Record<string, unknown>)).toBe(false);
+
+    server.resetHandlers();
+    const conflicts = capture(server, 'PUT', `${TARGETS}/${id}`, 409, {
+      error: 'conflict',
+      message: 'the SCIM target changed since it was read',
+    });
+    const err = await retryingManagementClient()
+      .scimTargets.update(id, { ...input(), expected_updated_at: readAt })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictError);
+    expect(conflicts).toHaveLength(1);
+    expect((conflicts[0]?.json as Record<string, unknown>).expected_updated_at).toBe(readAt);
+  });
 });
 
 // ── 4. Open decoding and pagination ─────────────────────────────────────────
@@ -292,6 +323,8 @@ describe('read-modify-write', () => {
     expect('credential' in body).toBe(false);
     expect(body.base_url).toBe(target.base_url);
     expect(body.enabled).toBe(true);
+    // §31.3 rule 4's SHOULD: the composed form makes the write conditional on the read.
+    expect(body.expected_updated_at).toBe(target.updated_at);
     expect(JSON.stringify(scimTargetInputToWire(body)).includes('credential')).toBe(false);
   });
 });
