@@ -904,6 +904,13 @@ export interface TokenExchangeParams {
    *
    * Its absence selects **impersonation** — a different operation with
    * different risk. The SDK never fills this in for you.
+   *
+   * It must have been issued to the exchanging client (§15.2 rule 9, contract
+   * 1.60): the usual actor is **the same client's own `client_credentials`
+   * token** — `(await oidc.loginClientCredentials()).accessToken`. A token
+   * issued to another client, a console sign-in or a service account is
+   * answered `invalid_request` ("actor_token was not issued to the exchanging
+   * client"), which is surfaced unchanged and never retried or dropped.
    */
   actorToken?: Sensitive<string> | string;
   /** Scopes to request. Omitted from the body when absent. */

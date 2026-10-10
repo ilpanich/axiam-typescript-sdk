@@ -1703,6 +1703,12 @@ export class OidcClient {
    * - **No default `actorToken`** (§15.2 rule 1). Passing none asks for
    *   *impersonation*; the SDK will not quietly reuse the client's own session
    *   token as the actor and turn that into a delegation.
+   * - **No substitute for an actor token that was refused** (§15.2 rule 9). The
+   *   actor token must have been issued to this client — the usual one is its
+   *   own `client_credentials` token, `loginClientCredentials()`, which the
+   *   caller obtains and passes. Any other is answered `400 invalid_request`
+   *   (`actor_token was not issued to the exchanging client`), surfaced
+   *   unchanged: not retried, not dropped, not replaced.
    * - **No retry or downgrade on `unauthorized_client`** (rule 2) — a
    *   registration fact an operator must fix.
    * - **No auto-narrowing on `invalid_scope`** (rule 3). The server refuses
