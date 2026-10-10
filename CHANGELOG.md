@@ -6,133 +6,145 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-Contract 1.60 (phase 1) — re-vendored `CONTRACT.md` (`openapi.json`, `management-registry.json`
-and `proto/` follow in phase 2) and the rows §34.4 assigns to this SDK: A3, B1 (verify),
-§15.2 rule 9 and the §8 minimal-profile note. No interface changed, so nothing here is a
-breaking change.
+`axiam-sdk` 1.0.0 is the first stable release: from here the SDK follows semantic versioning,
+and a breaking change to its public API waits for a new major version. One package serves
+Node (`axiam-sdk`, `axiam-sdk/node`) and the browser (`axiam-sdk/browser`, `axiam-sdk/rest`),
+with three transports — REST, gRPC (`axiam-sdk/grpc`) and AMQP (`axiam-sdk/amqp`, with the
+§8 HMAC verifier) — and Express, Fastify (`axiam-sdk/middleware`) and NestJS
+(`axiam-sdk/nestjs`) integrations. It conforms to **contract 1.60** (axiam `3ed6547`):
+CONTRACT.md §1 – §13 and §12.7, §14, §15, §17, §19, §20, §21, §22, §23, §24, §25, §26, §27 (the
+190-operation management surface and the §27.6 declarative manifest), §28, §28.12, §29, §30,
+§31, §32 with the §32.7 receiver helper, and §33 with §33.2's signed request — and every §34.4
+row contract 1.60 assigns to TypeScript. `CONTRACT.md`, `openapi.json`,
+`management-registry.json` and `proto/` are vendored from that commit.
 
-### Fixed (contract 1.60)
+### Breaking changes
 
-- **A3 / R-8 — a failed cold-cache JWKS fill counts toward the once-a-minute limit, and the
-  key cache expires** (§32.7 step 4, §34.2 P6). `SsfReceiver` fetched the key set again for
-  every SET while the transmitter was down, because only an unknown-`kid` refetch was
-  rate-limited. A failed fetch now blocks the next fetch for a minute: a SET inside it makes
-  no request and is left unjudged (`verifySet` raises a `NetworkError`, `poll` lists it in
-  `unjudged`). A **successful** fill is not a refetch, so an unknown `kid` right after one is
-  refetched once (§32.8 test 7). The cached key set is also trusted for ten minutes only
-  (`JWKS_CACHE_MAX_AGE_MS`, the `jose` remote-key-set lifetime §10's verifier uses); before, a
-  key the transmitter removed verified for the life of the receiver.
-- **B1 / R-4 — a replay store that cannot answer is no verdict** (§32.7 step 9, §34.2 P4). The
-  `ReplayStore` interface already allowed a throw or a rejection, and a SET whose store threw
-  was never accepted; the 1.60 port proves it (§32.8 test 6, store-failure case) and closes
-  two gaps: a store that threw a plain `Error` now surfaces as a `NetworkError` (the §2 type,
-  original on `cause`, no reason code) instead of the raw error, and a store that answered
-  neither `true` nor `false` (a missing `return`, `undefined`) is no longer read as `replayed` —
-  which `poll` would have you acknowledge, losing an event that was never processed — but
-  raises the same `NetworkError`. Neither case records the `jti`.
+Since `v1.0.0-beta17`. Everything else below is additive, or new since that release.
 
-### Added (contract 1.60)
-
-- `JWKS_CACHE_MAX_AGE_MS`, exported from `axiam-sdk/node`.
-- **§15.2 rule 9 (documentation, test):** the `actorToken` documentation, the README and
-  `examples/token-exchange.ts` obtain the actor token from the same client's
-  `client_credentials` grant (`loginClientCredentials()`); the §15.6 test the contract adds —
-  an `actor_token` answered `400 invalid_request` (`actor_token was not issued to the
-  exchanging client`) surfaces unchanged, one request, no rewriting.
-- **§8 minimal profile (documentation):** the README says that a broker confirm is not
-  evidence that AXIAM saw a message and that a minimal-profile server reads no AMQP queue.
-
-Contract 1.59 — re-vendored `CONTRACT.md` (axiam `fe369eb`; `openapi.json`,
-`management-registry.json` and `proto/` unchanged) and fixed the rows of follow-up F-59-02
-(ilpanich/axiam#577) of the §34 review: R-18, R-1, R-7, R-20, R-23 and R-28, plus §33.8 test 8
-as amended by P8. The README's Contract conformance statement names contract 1.59 and the same
-sections as before: §1–§13 and §12.7, §14, §15, §17, §19, §20, §21, §22, §23, §24, §25, §26,
-§27, §28, §28.12, §29, §30, §31, §32 and §33, with §32.7 and §33.2 signed.
-
-### Fixed (contract 1.59)
-
-- **R-18 — a failed write no longer carries its secret** (§30.5, §31.5, §32.5, §7 rule 1). A
-  management write that failed with a `5xx` or a transport error threw a `NetworkError` whose
-  `cause` was the axios error with only its response headers redacted, so its `config.data`
-  — the serialized body with the plaintext `bind_secret`, `credential`,
-  `authorization_header`, or a §27.5 `password` / `secret` / `client_secret` /
-  `private_key_pem` — printed with `console.log(err)`. `sanitizeAxiosError` now rebuilds the
-  cause from an allow-list (`name`, `message`, `code`, `status`, and the response's `status`,
-  `statusText`, `data` and allow-listed headers); `config` and `request` never survive. Every
-  REST path routes through it.
-- **R-1 — `SsfReceiver.poll` no longer loses events** (§32.7, §34.2 P1). A JWKS fetch or replay
-  store failure on a later SET of a batch aborted the poll after earlier SETs had been recorded;
-  re-offered, they read `replayed`. P1's second form: `poll` returns what it judged and lists
-  the SETs it could not judge, unrecorded, in the new `SsfPollResult.unjudged`; when it
-  accepted none, it records nothing and throws.
-- **R-20 — responses keep only declared members** (§29.5, §31.2, §34.2 P12.1). The `scrub<Type>`
-  functions dropped one named key each; every `directory`, `saml`, `scimTargets` and `ssf`
-  response is now rebuilt from its declared members at every depth (generated from
-  `openapi.json`), an unknown `auth` / `scope` arm keeps only `type`, and a page keeps only
-  `Page`'s members. Six responses that had no scrubber gain one.
-- **R-23 — the RFC 7592 update sends what the read carried** (§28.12.2 rule 4, §34.2 P12.4). A
-  list the read lacked is no longer sent as `[]`, and a list of an unexpected shape is sent
-  back as read instead of filtered or overwritten.
-- **§33.8 test 8 (P8) — a `5xx` on `cibaPoll` is transient whatever its body.** The server's own
-  `500 {"error":"server_error"}` was an `OAuthProtocolError` that ended `cibaAwait`.
-
-### Changed (contract 1.59)
-
-- `ClientRegistration.redirect_uris`, `grant_types` and `response_types` are optional: absent
-  when the read did not carry a list of strings (R-23).
-- `SsfPollResult` gains `unjudged: string[]` (R-1).
-- **R-7, R-28 (documentation):** the README says `poll` is retried on `408` and `429` (P7) and
-  that a `replayed` SET is acknowledged rather than reported (P2), and that the default replay
-  store is unbounded in count and a store that cannot answer fails closed (P4); the generator
-  no longer writes "Every field of the body is required" on a replacement with optional members
-  or "sparse body" on a type that is no sparse update (`ParseSamlSpMetadata`); the mTLS section
-  counts seven aliases and lists `cibaInitiate`.
-
-Contract 1.58 — re-vendored `CONTRACT.md`, `openapi.json` and `management-registry.json`, and
-implemented contracts 1.53 – 1.58 (§28.12, §29, §30, §31, §32 with §32.7, §33 with §33.2
-signed, and the §21.3.1 amendment). Ported from the reference implementation,
-`ilpanich/axiam-rust-sdk#123`.
+- **A `401` on a management operation is an `AuthError`**, as §29.4 – §32.4 require, not a
+  `NetworkError` wrapping the `AuthError` the refresh interceptor produced. *Migration:*
+  handle an expired or refused credential on `AuthError`.
+- **`TelemetryEvent` gains `ssfUnjudged`** (§19.1). An exhaustive `switch` over
+  `event.type` with no `default` branch no longer compiles. *Migration:* add the case, or a
+  `default`.
+- **Two response types gain required members** (§27.15): `FederationConfigResponse`
+  carries `allow_sha1_signatures` and `NotificationRuleResponse` carries `window_minutes`.
+  Responses need nothing — the SDK fills `allow_sha1_signatures: false` for a server before
+  1.0.0 — but an object literal typed as one of them (a test double) no longer compiles
+  without the member. *Migration:* add it.
 
 ### Added
 
-- **RFC 7592 client configuration** (CONTRACT.md §28.12): `AxiamClient.readClientRegistration`,
-  `updateClientRegistration` and `deleteClientRegistration`, and the tolerant
-  `ClientRegistration` (unknown members kept in `extra`; `registration_access_token` and
-  `client_secret` `Sensitive`). Origin-checked before any request, bearer-only on a
-  session-free transport (no cookie, no SDK token, no redirects, no §9 refresh); update and
-  delete never retried.
-- **Four management namespaces** — `directory` (§30), `saml` (§29), `ssf` (§32) and
-  `scimTargets` (§31): 28 operations, 190 across 28 namespaces in all. The call-site rules
-  the contract makes an SDK repeat are in the generated TSDoc; `bind_secret`,
-  `authorization_header` and `credential` are `Sensitive`; a response that carries one of
-  them, or `private_key_pem`, has it dropped (`scrub<Type>`); `directory.update` sends
-  `null` to clear `group_base_dn` / `group_filter`; `saml.parseSpMetadata` refuses both or
-  neither of `metadata_url` / `metadata_xml` locally.
-- Read-modify-write helpers `setDirectoryConfigFrom`, `samlServiceProviderInputFrom`,
-  `ssfStreamInputFrom`, `scimTargetInputFrom`, and `parseSpMetadataFromUrl` / `FromXml`.
+- **Management members of contract 1.60** (§27.15, §31), from the regenerated surface:
+  `ScimTargetInput.expected_updated_at`, sent exactly as given and only when set, which
+  `scimTargetInputFrom` fills with the read's `updated_at` so that a read-modify-write of a
+  target written since answers `409` (`ConflictError`) instead of overwriting it (delete it
+  from the body for last-writer-wins); `window_minutes` on the `notificationRules` create,
+  update and response models, passed through and never clamped (the server answers `400`
+  outside 1 – 1440); `allow_sha1_signatures` and `idp_metadata_signing_cert_pem` on the
+  federation configuration models, sent only when set.
+- **`OidcConfiguration` reads the four revocation and introspection discovery members**
+  (§21.5): `revocation_endpoint_auth_methods_supported`,
+  `introspection_endpoint_auth_methods_supported` and their two
+  `…_auth_signing_alg_values_supported`, all optional — a server before 1.0.0 omits them.
+- **The `ssfUnjudged` telemetry event** (§19.1): emitted when `SsfReceiver.poll` returns with
+  SETs unjudged, one per failure category (`key_fetch`, `replay_store`) with a count and no
+  `jti`.
 - **The SSF receiver helper** (§32.7, `axiam-sdk/node`): `SsfReceiver.verifySet` (the nine
-  steps, `SetRefusedError` with a typed `reason`) and `SsfReceiver.poll`; `pushErrorCode`,
-  `setErrFromReason`, `SSF_EVENT_TYPES`, `MemoryReplayStore`.
+  steps, a `SetRefusedError` with a typed `reason`) and `SsfReceiver.poll`, with
+  `pushErrorCode`, `setErrFromReason`, `SSF_EVENT_TYPES`, `MemoryReplayStore` and
+  `JWKS_CACHE_MAX_AGE_MS`. What an integrator must know:
+  - **`poll` never keeps a `jti` it does not return** (§34.2 P1). A SET it cannot judge — the
+    JWKS or discovery fetch failed, or the replay store could not answer — is left
+    unrecorded and listed in `SsfPollResult.unjudged`: neither acknowledge nor refuse it, the
+    transmitter offers it again. The SETs judged in the same batch are returned; when none was
+    accepted, `poll` records nothing and throws. After the replay store fails once in a batch
+    it is not asked again, so every later SET that verifies is unjudged too.
+  - **A replay store has three answers** (§34.2 P3, P4): `true`, `false`, and *cannot
+    answer* — a throw, a rejection or any other value — which gives no verdict: `verifySet`
+    raises a `NetworkError` with the store's failure on `cause` and no reason code (a
+    `SetRefusedError` thrown by a store is wrapped too), never `replayed`. Never answer
+    `false` for "I do not know". The default `MemoryReplayStore` is unbounded in count.
+  - **The key cache** (§34.2 P6) expires after ten minutes; filling an empty or expired cache
+    is not a refetch, but a **failed** fill or refresh counts toward the once-a-minute limit,
+    so a transmitter outage costs one fetch a minute and a SET inside that minute is left
+    unjudged; an unknown `kid` is refetched once a minute at most.
+  - `poll` is retried on a transport failure, `408`, `429` and `5xx`, never on another `4xx`
+    (P7); a `replayed` SET was accepted earlier and is acknowledged, not reported (P2).
 - **CIBA** (§33, `axiam-sdk/node`): `OidcClient.cibaInitiate`, `cibaPoll`, `cibaAwait`
   (injectable clock) and `cibaHandlePing`; `isAccessDenied` / `isExpiredToken`; the signed
   request form through `CibaRequestSigner` (PS256, ES256, EdDSA). `cibaInitiate` is never
-  retried.
+  retried; `cibaPoll` treats a `5xx` as transient whatever its body, the server's own
+  `500 {"error":"server_error"}` included (§33.8 test 8, P8).
+- **RFC 7592 client configuration** (§28.12): `AxiamClient.readClientRegistration`,
+  `updateClientRegistration` and `deleteClientRegistration`, and the tolerant
+  `ClientRegistration` (unknown members in `extra`; `registration_access_token` and
+  `client_secret` `Sensitive`; `redirect_uris`, `grant_types` and `response_types` optional,
+  absent when the read did not carry a list of strings). Origin-checked before any request,
+  bearer-only on a session-free transport (no cookie, no SDK token, no redirects, no §9
+  refresh); update and delete never retried. The update sends what the read carried: no `[]`
+  for a list the read lacked, and a list of an unexpected shape as read (§28.12.2 rule 4).
+- **Four management namespaces** — `directory` (§30), `saml` (§29), `ssf` (§32) and
+  `scimTargets` (§31), 28 operations: 190 across 28 namespaces in all. `bind_secret`,
+  `authorization_header` and `credential` are `Sensitive`; every response of the four keeps
+  only the members its type declares, at every depth (§29.5, §31.2, §34.2 P12.1), so a key or
+  credential the server should not have sent never reaches you, an unknown `auth` / `scope`
+  arm keeps only `type`, and a page keeps only `Page`'s members; `directory.update` sends
+  `null` to clear `group_base_dn` / `group_filter`; `saml.parseSpMetadata` refuses both or
+  neither of `metadata_url` / `metadata_xml` locally. The call-site rules the contract makes
+  an SDK repeat are in the generated TSDoc.
+- Read-modify-write helpers `setDirectoryConfigFrom`, `samlServiceProviderInputFrom`,
+  `ssfStreamInputFrom`, `scimTargetInputFrom`, and `parseSpMetadataFromUrl` / `FromXml`.
 - `OidcConfiguration` gains the four CIBA discovery members, and `MtlsEndpointAliases` the
   seventh alias, `backchannel_authentication_endpoint` (§21.3.1 vector A).
-- `oauth2ErrorFromBody`: the `/oauth2` error decoder that dispatches on a non-empty `error`
-  at any status, `error_description` optional.
+- `oauth2ErrorFromBody`, the `/oauth2` error decoder that dispatches on a non-empty `error` at
+  any status, `error_description` optional.
 
 ### Changed
 
+- **`federation.updateConfig`: `null` clears** (§27.15 note 8). Each of the ten nullable
+  members of `UpdateFederationConfigRequest` — `metadata_url`, `idp_signing_cert_pem`,
+  `idp_metadata_signing_cert_pem`, `provider_slug`, the three OAuth2 endpoints,
+  `apple_team_id`, `apple_key_id` and `button_icon` — is sent as `null` when you set it to
+  `null`, which a 1.0.0 server reads as "clear", and left out when `undefined`, which leaves
+  it unchanged. The SDK always sent what you set; a server before 1.0.0 read `null` as absent
+  for all but `idp_metadata_signing_cert_pem`, so a `null` that changed nothing there clears
+  the value now. The TSDoc of each member says so.
+- **A federation configuration read from a server before 1.0.0 reads
+  `allow_sha1_signatures: false`** (§27.15 note 6), filled in by the SDK, so the declared
+  `boolean` holds on every response.
+- **`oidcRefresh`'s `scope` is the refresh response's** (§12.1): the server intersects a
+  grant with the client's current registration, so it may be narrower than the grant — and
+  carry no ID token once `openid` is gone — and the TSDoc of `OidcTokenSet.scope` says so.
 - `OAuthProtocolError`'s `errorDescription` may be empty (the server sent none); its message
   is then just the code.
 - `PATCH` joins the management verbs (`directory.update`); like every write it is not retried.
+- **Documentation:** the README states conformance at contract 1.60 with every §34.4 row this
+  SDK holds, installs `axiam-sdk@^1.0.0` from npm's `latest` dist-tag, and no longer calls the
+  SDK a prerelease. It also says that the `actorToken` of §15 is the same client's
+  `client_credentials` token (§15.2 rule 9, with `examples/token-exchange.ts`; an
+  `actor_token` the server refuses `400 invalid_request` surfaces unchanged, after one
+  request), and that a broker confirm is not evidence that AXIAM saw a message — a
+  minimal-profile server reads no AMQP queue (§8). The generator no longer calls
+  every replacement body all-required or every all-optional type sparse, and the mTLS section
+  counts seven aliases.
 
 ### Fixed
 
-- A `401` on a management operation surfaced as a `NetworkError` wrapping the `AuthError`
-  the refresh interceptor had produced; it is now the `AuthError` itself, as §29.4, §30.4,
-  §31.4 and §32.4 require.
+- **`federation.updateConfig` documentation** no longer describes a clear as `Some(None)` (the
+  server's Rust spelling): each nullable member's TSDoc says that `null` clears it and
+  `undefined` leaves it.
+
+### Security
+
+- **A failed management write no longer carries its secret** (§30.5, §31.5, §32.5, §7 rule 1).
+  A write that failed with a `5xx` or a transport error threw a `NetworkError` whose `cause`
+  was the axios error with only its response headers redacted, so its `config.data` — the
+  serialized body with the plaintext `bind_secret`, `credential`, `authorization_header`, or
+  a §27.5 `password` / `secret` / `client_secret` / `private_key_pem` — printed with
+  `console.log(err)`. The cause is now rebuilt from an allow-list of diagnostics; `config` and
+  `request` never survive, on every REST path.
 
 ## [1.0.0-beta17] - 2026-09-25
 Contract 1.51 — the dogfooding remediation (`claude_dev/dogfooding-findings-fix-plan.md`
