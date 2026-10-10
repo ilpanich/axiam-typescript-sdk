@@ -586,6 +586,16 @@ into production, where it turns TLS into an expensive no-op against precisely
 the attacker TLS exists to stop. `caCert` covers the legitimate reason people
 reach for one.
 
+#### Minimal profile (contract 1.60, §8)
+
+A server running in the **minimal profile** (`AXIAM__AMQP__ENABLED=false`) reads no AMQP
+queue: it does not consume `axiam.authz.request` or `axiam.audit.events`, whatever a broker
+holds. **A broker confirm is not evidence that AXIAM saw a message** — a publisher confirm, or
+the broker's `basic.ack` of a publish, means only that the broker accepted it, never that
+AXIAM decided the request or recorded the event. This SDK does not treat one as such. Against
+a minimal-profile server use REST or gRPC; `GET /health` reports `profile: minimal` and lists
+`amqp_authz` and `amqp_audit_ingestion` under `unavailable`.
+
 ### Node — reactors, AMQP extension actors (`axiam-sdk/amqp`, CONTRACT.md §22)
 
 A **reactor** is an external process that subscribes to named hook events on the AMQP bus and
@@ -1650,9 +1660,13 @@ RFC 8693 — a service holding a user's token exchanging it for a *narrower* one
 calling the next service.
 
 ```ts
+// Delegation: the actor token is THIS client's own client_credentials token (§15.2 rule 9).
+const actor = await oidc.loginClientCredentials();
+
 const exchanged = await oidc.tokenExchange({
   subjectToken: new Sensitive(userToken),
   subjectTokenType: ACCESS_TOKEN_TYPE, // required (§15.1), no default
+  actorToken: actor.accessToken, // omit it and you ask for impersonation instead
   scopes: ['orders:read'],
   audience: 'orders-service',
 });
@@ -1662,6 +1676,14 @@ Most of what this method does is refuse to be helpful, and each refusal is delib
 
 - **No default `actorToken`.** Omitting it asks for *impersonation*; the SDK will not
   quietly substitute the client's own session token and turn that into a delegation.
+- **The actor token must have been issued to the exchanging client** (contract 1.60,
+  §15.2 rule 9). The usual actor is the exchanging client's own `client_credentials` token
+  (`loginClientCredentials()` above): its `sub` — and so the issued token's `act.sub` — is
+  the client's `client_id`. One issued to another client, a console sign-in or a service
+  account is answered `400 invalid_request` (`actor_token was not issued to the exchanging
+  client`), which the SDK surfaces unchanged: no retry, no dropping the actor token to
+  impersonate instead, no substituting a token of its own. You obtain and pass the actor
+  token; the SDK supplies none.
 - **No auto-narrowing after `invalid_scope`.** The server refuses rather than silently
   narrowing precisely so the caller finds out here.
 - **No refresh token, ever** — `ExchangedToken` has no such field, so there is nothing to
@@ -2273,8 +2295,17 @@ failed, or the replay store threw — is left unrecorded and listed by `jti` in 
 in the same batch are returned as usual. When a poll accepts no SET at all it records
 nothing and throws that failure instead. The default `MemoryReplayStore` is per process and
 **unbounded in count** — an entry leaves only when its window expires (§34.2 P4); a
-`ReplayStore` that cannot answer must throw or reject, and the SET is then not accepted
-(fail closed). A SET refused as `replayed` was accepted by this
+`ReplayStore` has three answers — `true` (not seen, now recorded), `false` (seen) and
+**cannot answer**, which is a throw or a rejection (contract 1.60, §34.2 P4). A store that
+cannot answer gives **no verdict**: `verifySet` raises a `NetworkError` with no reason code
+(it is never a `SetRefusedError`, and never read as `replayed`, which `poll` would have you
+acknowledge), and `poll` lists the SET in `unjudged`, records nothing for it and does not
+acknowledge it, so the transmitter offers it again. Never answer `false` for "I do not know";
+an answer that is neither `true` nor `false` is treated as cannot-answer. The key set is
+cached for ten minutes (`JWKS_CACHE_MAX_AGE_MS`, the lifetime of §10's JWKS cache), so a key
+the transmitter removed stops verifying; filling an empty or expired cache is not a refetch,
+but a **failed** fetch counts toward the once-a-minute limit: after a failed fill a SET inside
+the minute makes no fetch and is left unjudged (§34.2 P6). A SET refused as `replayed` was accepted by this
 receiver on an earlier poll: acknowledge it in `ack` rather than reporting it in `setErrs`
 (§34.2 P2). `poll` never acknowledges anything itself, is not retried on a `4xx` other than
 `408` and `429` — which §16 retries, as it does a transport failure and a `5xx` — and sends
