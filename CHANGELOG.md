@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+Contract 1.60 (phase 1) — re-vendored `CONTRACT.md` (`openapi.json`, `management-registry.json`
+and `proto/` follow in phase 2) and the rows §34.4 assigns to this SDK: A3, B1 (verify),
+§15.2 rule 9 and the §8 minimal-profile note. No interface changed, so nothing here is a
+breaking change.
+
+### Fixed (contract 1.60)
+
+- **A3 / R-8 — a failed cold-cache JWKS fill counts toward the once-a-minute limit, and the
+  key cache expires** (§32.7 step 4, §34.2 P6). `SsfReceiver` fetched the key set again for
+  every SET while the transmitter was down, because only an unknown-`kid` refetch was
+  rate-limited. A failed fetch now blocks the next fetch for a minute: a SET inside it makes
+  no request and is left unjudged (`verifySet` raises a `NetworkError`, `poll` lists it in
+  `unjudged`). A **successful** fill is not a refetch, so an unknown `kid` right after one is
+  refetched once (§32.8 test 7). The cached key set is also trusted for ten minutes only
+  (`JWKS_CACHE_MAX_AGE_MS`, the `jose` remote-key-set lifetime §10's verifier uses); before, a
+  key the transmitter removed verified for the life of the receiver.
+- **B1 / R-4 — a replay store that cannot answer is no verdict** (§32.7 step 9, §34.2 P4). The
+  `ReplayStore` interface already allowed a throw or a rejection, and a SET whose store threw
+  was never accepted; the 1.60 port proves it (§32.8 test 6, store-failure case) and closes
+  two gaps: a store that threw a plain `Error` now surfaces as a `NetworkError` (the §2 type,
+  original on `cause`, no reason code) instead of the raw error, and a store that answered
+  neither `true` nor `false` (a missing `return`, `undefined`) is no longer read as `replayed` —
+  which `poll` would have you acknowledge, losing an event that was never processed — but
+  raises the same `NetworkError`. Neither case records the `jti`.
+
+### Added (contract 1.60)
+
+- `JWKS_CACHE_MAX_AGE_MS`, exported from `axiam-sdk/node`.
+- **§15.2 rule 9 (documentation, test):** the `actorToken` documentation, the README and
+  `examples/token-exchange.ts` obtain the actor token from the same client's
+  `client_credentials` grant (`loginClientCredentials()`); the §15.6 test the contract adds —
+  an `actor_token` answered `400 invalid_request` (`actor_token was not issued to the
+  exchanging client`) surfaces unchanged, one request, no rewriting.
+- **§8 minimal profile (documentation):** the README says that a broker confirm is not
+  evidence that AXIAM saw a message and that a minimal-profile server reads no AMQP queue.
+
 Contract 1.59 — re-vendored `CONTRACT.md` (axiam `fe369eb`; `openapi.json`,
 `management-registry.json` and `proto/` unchanged) and fixed the rows of follow-up F-59-02
 (ilpanich/axiam#577) of the §34 review: R-18, R-1, R-7, R-20, R-23 and R-28, plus §33.8 test 8
