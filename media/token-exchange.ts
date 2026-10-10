@@ -31,9 +31,22 @@ const oidc = createOidcClient(session, { clientId, clientSecret });
 // instead — a different operation with different risk, which the server
 // refuses unless this client holds that grant. The SDK will not pick for you
 // (§15.2 rule 1).
+//
+// The actor token must have been issued to THIS client (§15.2 rule 9): the one
+// the server accepts is the exchanging client's own client_credentials token,
+// whose `sub` — and so the issued token's `act.sub` — is the client's
+// `client_id`. A token issued to another client, a console sign-in or a service
+// account is answered 400 invalid_request ("actor_token was not issued to the
+// exchanging client"), which the SDK surfaces unchanged: it neither retries nor
+// quietly drops the actor token. `loginClientCredentials` does not adopt the
+// token as this client's session (a MAY the example does not need), and the SDK
+// supplies no default — you obtain the actor token and pass it.
+const actor = await oidc.loginClientCredentials();
+
 const exchanged = await oidc.tokenExchange({
   subjectToken: new Sensitive(userToken),
   subjectTokenType: ACCESS_TOKEN_TYPE, // required (§15.1): only you know what you hold
+  actorToken: actor.accessToken, // the same client's client_credentials token (§15.2 rule 9)
   scopes: ['orders:read'],
   audience: 'orders-service',
 });
@@ -58,6 +71,9 @@ void authorizationHeader;
 //
 //   unauthorized_client -> this client may not exchange, or may not
 //                          impersonate. A registration fact.
+//   invalid_request     -> among other things, an actor token that was not
+//                          issued to this client (§15.2 rule 9). Fix the token;
+//                          do not drop it and re-send as an impersonation.
 //   invalid_scope       -> you asked for something the user does not have. Do
 //                          NOT re-send with fewer scopes; the server refused
 //                          rather than silently narrowing precisely so you

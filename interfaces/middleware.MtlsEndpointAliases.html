@@ -1,5 +1,5 @@
-<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>MtlsEndpointAliases | AXIAM TypeScript SDK - v1.0.0-beta17</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
-<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK - v1.0.0-beta17</a>
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>MtlsEndpointAliases | AXIAM TypeScript SDK - v1.0.0</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK - v1.0.0</a>
 <div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
 <ul role="listbox" id="tsd-search-results"></ul>
 <div id="tsd-search-status" aria-live="polite" aria-atomic="true">
@@ -12,9 +12,10 @@
 <li><a href="" aria-current="page">MtlsEndpointAliases</a></li></ul>
 <h1>Interface MtlsEndpointAliases</h1></div>
 <section class="tsd-panel tsd-comment">
-<div class="tsd-comment tsd-typography"><p>RFC 8705 §5 <code>mtls_endpoint_aliases</code> — the six endpoints re-based on the host
-that performs the mutual-TLS handshake (wire schema <code>MtlsEndpointAliases</code>,
-contract 1.40).</p>
+<div class="tsd-comment tsd-typography"><p>RFC 8705 §5 <code>mtls_endpoint_aliases</code> — the seven endpoints re-based on the
+host that performs the mutual-TLS handshake (wire schema
+<code>MtlsEndpointAliases</code>, contract 1.40; the seventh, CIBA's
+<code>backchannel_authentication_endpoint</code>, contract 1.58).</p>
 </div>
 <div class="tsd-comment tsd-typography">
 <div class="tsd-tag-remarks">
@@ -23,13 +24,13 @@ handshake, before it has seen any HTTP, so &quot;ask for a certificate on
 <code>/oauth2/token</code> but not on <code>/oauth2/authorize</code>&quot; is not something one listener
 can do. A deployment wanting both runs two, and this object is how the second
 one is named.</p>
-<p>Only these six are ever aliased. <code>authorization_endpoint</code> and
+<p>Only these seven are ever aliased. <code>authorization_endpoint</code> and
 <code>end_session_endpoint</code> are front-channel and <code>jwks_uri</code> is public, so
 CONTRACT.md §21.3 rule 2 forbids synthesising an alias for any of them —
 sending a browser to an mTLS host raises a native certificate-chooser dialog
 most users cannot answer. <code>issuer</code> is not aliased either, and §10.1 rule 3
 still compares <code>iss</code> against it by exact string.</p>
-<p>Every member is optional even though the server's schema marks all six
+<p>Every member is optional even though the server's schema marks them
 required. AXIAM builds them from one path through a shared macro and so
 always publishes the complete set, but RFC 8705 §5 permits an OP to alias
 fewer, and the shape of this member must never be why a client stops
@@ -37,9 +38,9 @@ working — the same principle rule 2 point 1 states for the object as a
 whole, one level in. An absent entry falls back to the top-level endpoint of
 the same name, exactly as an absent object does.</p>
 </div></div></section>
-<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">MtlsEndpointAliases</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#device_authorization_endpoint">device_authorization_endpoint</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#introspection_endpoint">introspection_endpoint</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#pushed_authorization_request_endpoint">pushed_authorization_request_endpoint</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#revocation_endpoint">revocation_endpoint</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#token_endpoint">token_endpoint</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#userinfo_endpoint">userinfo_endpoint</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
+<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">MtlsEndpointAliases</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#backchannel_authentication_endpoint">backchannel_authentication_endpoint</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#device_authorization_endpoint">device_authorization_endpoint</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#introspection_endpoint">introspection_endpoint</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#pushed_authorization_request_endpoint">pushed_authorization_request_endpoint</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#revocation_endpoint">revocation_endpoint</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#token_endpoint">token_endpoint</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#userinfo_endpoint">userinfo_endpoint</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ee31776793609900c5dbe92d2d8451fae01a754a/src/node/oidcTypes.ts#L57">src/node/oidcTypes.ts:57</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/node/oidcTypes.ts#L58">src/node/oidcTypes.ts:58</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -47,7 +48,8 @@ the same name, exactly as an absent object does.</p>
 <div class="tsd-accordion-details">
 <section class="tsd-index-section">
 <h3 class="tsd-index-heading tsd-anchor-link" id="properties">Properties<a href="#properties" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<div class="tsd-index-list"><a href="#device_authorization_endpoint" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>device_<wbr/>authorization_<wbr/>endpoint?</span></a>
+<div class="tsd-index-list"><a href="#backchannel_authentication_endpoint" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>backchannel_<wbr/>authentication_<wbr/>endpoint?</span></a>
+<a href="#device_authorization_endpoint" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>device_<wbr/>authorization_<wbr/>endpoint?</span></a>
 <a href="#introspection_endpoint" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>introspection_<wbr/>endpoint?</span></a>
 <a href="#pushed_authorization_request_endpoint" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>pushed_<wbr/>authorization_<wbr/>request_<wbr/>endpoint?</span></a>
 <a href="#revocation_endpoint" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>revocation_<wbr/>endpoint?</span></a>
@@ -58,47 +60,57 @@ the same name, exactly as an absent object does.</p>
 <h2 class="tsd-anchor-link" id="properties-1">Properties<a href="#properties-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
 <section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="backchannel_authentication_endpoint"><code class="tsd-tag">Optional</code><span>backchannel_<wbr/>authentication_<wbr/>endpoint</span><a href="#backchannel_authentication_endpoint" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">backchannel_authentication_endpoint</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
+<div class="tsd-comment tsd-typography"><p>The mTLS CIBA backchannel authentication endpoint — CIBA Core §7, which
+authenticates the client (contract 1.58, §21.3.1: the <strong>seventh</strong> alias;
+a <code>tls_client_auth</code> CIBA client has no other way to present its
+certificate on a two-listener deployment).</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/node/oidcTypes.ts#L77">src/node/oidcTypes.ts:77</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="device_authorization_endpoint"><code class="tsd-tag">Optional</code><span>device_<wbr/>authorization_<wbr/>endpoint</span><a href="#device_authorization_endpoint" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">device_authorization_endpoint</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>The mTLS device authorization endpoint — RFC 8628 §3.1, which authenticates the client.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ee31776793609900c5dbe92d2d8451fae01a754a/src/node/oidcTypes.ts#L67">src/node/oidcTypes.ts:67</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/node/oidcTypes.ts#L68">src/node/oidcTypes.ts:68</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="introspection_endpoint"><code class="tsd-tag">Optional</code><span>introspection_<wbr/>endpoint</span><a href="#introspection_endpoint" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">introspection_endpoint</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>The mTLS introspection endpoint — RFC 7662 §2.1, which authenticates the caller.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ee31776793609900c5dbe92d2d8451fae01a754a/src/node/oidcTypes.ts#L65">src/node/oidcTypes.ts:65</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/node/oidcTypes.ts#L66">src/node/oidcTypes.ts:66</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="pushed_authorization_request_endpoint"><code class="tsd-tag">Optional</code><span>pushed_<wbr/>authorization_<wbr/>request_<wbr/>endpoint</span><a href="#pushed_authorization_request_endpoint" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">pushed_authorization_request_endpoint</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>The mTLS pushed authorization request endpoint — RFC 9126 §2, which authenticates the client.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ee31776793609900c5dbe92d2d8451fae01a754a/src/node/oidcTypes.ts#L69">src/node/oidcTypes.ts:69</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/node/oidcTypes.ts#L70">src/node/oidcTypes.ts:70</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="revocation_endpoint"><code class="tsd-tag">Optional</code><span>revocation_<wbr/>endpoint</span><a href="#revocation_endpoint" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">revocation_endpoint</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>The mTLS revocation endpoint — RFC 7009 §2.1, which authenticates the client.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ee31776793609900c5dbe92d2d8451fae01a754a/src/node/oidcTypes.ts#L63">src/node/oidcTypes.ts:63</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/node/oidcTypes.ts#L64">src/node/oidcTypes.ts:64</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="token_endpoint"><code class="tsd-tag">Optional</code><span>token_<wbr/>endpoint</span><a href="#token_endpoint" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">token_endpoint</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>The mTLS token endpoint — RFC 8705 §2 client authentication and §3 the mint of a certificate-bound token.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ee31776793609900c5dbe92d2d8451fae01a754a/src/node/oidcTypes.ts#L59">src/node/oidcTypes.ts:59</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/node/oidcTypes.ts#L60">src/node/oidcTypes.ts:60</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="userinfo_endpoint"><code class="tsd-tag">Optional</code><span>userinfo_<wbr/>endpoint</span><a href="#userinfo_endpoint" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">userinfo_endpoint</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>The mTLS userinfo endpoint — OIDC Core §5.3, reached with an access token that may carry <code>cnf</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ee31776793609900c5dbe92d2d8451fae01a754a/src/node/oidcTypes.ts#L61">src/node/oidcTypes.ts:61</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/node/oidcTypes.ts#L62">src/node/oidcTypes.ts:62</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -115,9 +127,9 @@ the same name, exactly as an absent object does.</p>
 <h3>On This Page</h3></summary>
 <div class="tsd-accordion-details">
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Properties</summary>
-<div><a href="#device_authorization_endpoint"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>device_<wbr/>authorization_<wbr/>endpoint</span></a><a href="#introspection_endpoint"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>introspection_<wbr/>endpoint</span></a><a href="#pushed_authorization_request_endpoint"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>pushed_<wbr/>authorization_<wbr/>request_<wbr/>endpoint</span></a><a href="#revocation_endpoint"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>revocation_<wbr/>endpoint</span></a><a href="#token_endpoint"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>token_<wbr/>endpoint</span></a><a href="#userinfo_endpoint"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>userinfo_<wbr/>endpoint</span></a></div></details></div></details></div>
+<div><a href="#backchannel_authentication_endpoint"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>backchannel_<wbr/>authentication_<wbr/>endpoint</span></a><a href="#device_authorization_endpoint"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>device_<wbr/>authorization_<wbr/>endpoint</span></a><a href="#introspection_endpoint"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>introspection_<wbr/>endpoint</span></a><a href="#pushed_authorization_request_endpoint"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>pushed_<wbr/>authorization_<wbr/>request_<wbr/>endpoint</span></a><a href="#revocation_endpoint"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>revocation_<wbr/>endpoint</span></a><a href="#token_endpoint"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>token_<wbr/>endpoint</span></a><a href="#userinfo_endpoint"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>userinfo_<wbr/>endpoint</span></a></div></details></div></details></div>
 <div class="site-menu">
-<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK - v1.0.0-beta17</a>
+<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK - v1.0.0</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
 <li>Loading...</li></ul></nav></div></div></div><footer>
 <p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>

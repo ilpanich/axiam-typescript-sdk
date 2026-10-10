@@ -1,0 +1,317 @@
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>SamlApi | AXIAM TypeScript SDK - v1.0.0</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK - v1.0.0</a>
+<div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
+<ul role="listbox" id="tsd-search-results"></ul>
+<div id="tsd-search-status" aria-live="polite" aria-atomic="true">
+<div>Preparing search index...</div></div></dialog><a href="#" class="tsd-widget menu" id="tsd-toolbar-menu-trigger" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-menu"></use></svg></a></div></header>
+<div class="container container-main">
+<div class="col-content">
+<div class="tsd-page-title">
+<ul class="tsd-breadcrumb" aria-label="Breadcrumb">
+<li><a href="../modules/index.html">index</a></li>
+<li><a href="" aria-current="page">SamlApi</a></li></ul>
+<h1>Class SamlApi</h1></div>
+<section class="tsd-panel tsd-comment">
+<div class="tsd-comment tsd-typography"><p>The <code>saml</code> namespace handle.</p>
+<p>A tenant's SAML 2.0 identity provider (CONTRACT §29): the registry of
+service providers, the import of an SP's metadata into a <em>draft</em>
+registration (never a write), and the lifecycle of the IdP signing
+credential. The protocol itself -- single sign-on, single logout, the IdP
+metadata document -- is browser and SP-to-IdP surface under
+/saml/v2/{tenant_id}, an SP's own SAML library speaks to it, and it is not
+in this registry.</p>
+<p>Acquiring one performs no I/O and allocates nothing meaningful (§27.2 rule
+1); it holds the client and cannot be constructed without one.</p>
+</div></section><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/management/ops/saml.ts#L40">src/management/ops/saml.ts:40</a></li></ul></aside>
+<section class="tsd-panel-group tsd-index-group">
+<section class="tsd-panel tsd-index-panel">
+<details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h5 class="tsd-index-heading uppercase">Index</h5></summary>
+<div class="tsd-accordion-details">
+<section class="tsd-index-section">
+<h3 class="tsd-index-heading tsd-anchor-link" id="methods">Methods<a href="#methods" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-index-list"><a href="#createserviceprovider" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>create<wbr/>Service<wbr/>Provider</span></a>
+<a href="#deleteserviceprovider" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>delete<wbr/>Service<wbr/>Provider</span></a>
+<a href="#fortenant" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>for<wbr/>Tenant</span></a>
+<a href="#getidp" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Idp</span></a>
+<a href="#getserviceprovider" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Service<wbr/>Provider</span></a>
+<a href="#issueidpcredential" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>issue<wbr/>Idp<wbr/>Credential</span></a>
+<a href="#listidpcredentials" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>list<wbr/>Idp<wbr/>Credentials</span></a>
+<a href="#listserviceproviders" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>list<wbr/>Service<wbr/>Providers</span></a>
+<a href="#listserviceprovidersall" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>list<wbr/>Service<wbr/>Providers<wbr/>All</span></a>
+<a href="#parsespmetadata" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>parse<wbr/>Sp<wbr/>Metadata</span></a>
+<a href="#promoteidpcredential" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>promote<wbr/>Idp<wbr/>Credential</span></a>
+<a href="#retireidpcredential" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>retire<wbr/>Idp<wbr/>Credential</span></a>
+<a href="#updateserviceprovider" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>update<wbr/>Service<wbr/>Provider</span></a>
+</div></section></div></details></section></section>
+<details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
+<section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="createserviceprovider"><span>create<wbr/>Service<wbr/>Provider</span><a href="#createserviceprovider" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="createserviceprovider-1"><span class="tsd-kind-call-signature">createServiceProvider</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">body</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/index.SamlServiceProviderInput.html" class="tsd-signature-type tsd-kind-interface">SamlServiceProviderInput</a><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlServiceProvider.html" class="tsd-signature-type tsd-kind-interface">SamlServiceProvider</a><span class="tsd-signature-symbol">&gt;</span><a href="#createserviceprovider-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p><code>POST /api/v1/tenants/{tenant_id}/saml/service-providers</code></p>
+<p><code>sp_signing_cert_pem</code> must be RSA (2048 bits or more) or ECDSA on P-256,
+P-384 or P-521; an <strong>ECDSA certificate verifies HTTP-POST requests only</strong>
+— the HTTP-Redirect binding is RSA-only (§29.3 rule 2).
+<code>encrypt_assertions: true</code> is refused while encryption is unimplemented.
+<code>entity_id</code> is unique per tenant (<code>409</code>) and immutable once created.</p>
+<p>Not retried on failure (§27.4 rule 8): every write on this surface is
+issued exactly once, including the ones that look idempotent.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">body</span>: <a href="../interfaces/index.SamlServiceProviderInput.html" class="tsd-signature-type tsd-kind-interface">SamlServiceProviderInput</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlServiceProvider.html" class="tsd-signature-type tsd-kind-interface">SamlServiceProvider</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/management/ops/saml.ts#L108">src/management/ops/saml.ts:108</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="deleteserviceprovider"><span>delete<wbr/>Service<wbr/>Provider</span><a href="#deleteserviceprovider" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="deleteserviceprovider-1"><span class="tsd-kind-call-signature">deleteServiceProvider</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">spId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span><a href="#deleteserviceprovider-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p><code>DELETE /api/v1/tenants/{tenant_id}/saml/service-providers/{sp_id}</code></p>
+<p>Ends no session: users already signed in to the SP stay signed in there
+until their SP session ends (§29.3 rule 5).</p>
+<p>Not retried on failure (§27.4 rule 8): every write on this surface is
+issued exactly once, including the ones that look idempotent.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">spId</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/management/ops/saml.ts#L174">src/management/ops/saml.ts:174</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="fortenant"><span>for<wbr/>Tenant</span><a href="#fortenant" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="fortenant-1"><span class="tsd-kind-call-signature">forTenant</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">tenantId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-class">SamlApi</a><a href="#fortenant-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Address a different tenant than the client's own (§27.4 rule 3).</p>
+<p>Returns a new handle; the original is unchanged.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">tenantId</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">SamlApi</a></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/management/ops/saml.ts#L55">src/management/ops/saml.ts:55</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="getidp"><span>get<wbr/>Idp</span><a href="#getidp" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="getidp-1"><span class="tsd-kind-call-signature">getIdp</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlIdpInfo.html" class="tsd-signature-type tsd-kind-interface">SamlIdpInfo</a><span class="tsd-signature-symbol">&gt;</span><a href="#getidp-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p><code>GET /api/v1/tenants/{tenant_id}/saml/idp</code></p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlIdpInfo.html" class="tsd-signature-type tsd-kind-interface">SamlIdpInfo</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/management/ops/saml.ts#L60">src/management/ops/saml.ts:60</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="getserviceprovider"><span>get<wbr/>Service<wbr/>Provider</span><a href="#getserviceprovider" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="getserviceprovider-1"><span class="tsd-kind-call-signature">getServiceProvider</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">spId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlServiceProvider.html" class="tsd-signature-type tsd-kind-interface">SamlServiceProvider</a><span class="tsd-signature-symbol">&gt;</span><a href="#getserviceprovider-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p><code>GET /api/v1/tenants/{tenant_id}/saml/service-providers/{sp_id}</code></p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">spId</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlServiceProvider.html" class="tsd-signature-type tsd-kind-interface">SamlServiceProvider</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/management/ops/saml.ts#L121">src/management/ops/saml.ts:121</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="issueidpcredential"><span>issue<wbr/>Idp<wbr/>Credential</span><a href="#issueidpcredential" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="issueidpcredential-1"><span class="tsd-kind-call-signature">issueIdpCredential</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">body</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/index.IssueSamlIdpCredential.html" class="tsd-signature-type tsd-kind-interface">IssueSamlIdpCredential</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlIdpCredential.html" class="tsd-signature-type tsd-kind-interface">SamlIdpCredential</a><span class="tsd-signature-symbol">&gt;</span><a href="#issueidpcredential-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p><code>POST /api/v1/tenants/{tenant_id}/saml/idp-credentials</code></p>
+<p>Generates an RSA-4096 key on the server, which takes seconds; the key is
+never returned. An occupied slot is <code>409</code> (§29.3 rule 7).</p>
+<p>Not retried on failure (§27.4 rule 8): every write on this surface is
+issued exactly once, including the ones that look idempotent.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">body</span>: <a href="../interfaces/index.IssueSamlIdpCredential.html" class="tsd-signature-type tsd-kind-interface">IssueSamlIdpCredential</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlIdpCredential.html" class="tsd-signature-type tsd-kind-interface">SamlIdpCredential</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/management/ops/saml.ts#L231">src/management/ops/saml.ts:231</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="listidpcredentials"><span>list<wbr/>Idp<wbr/>Credentials</span><a href="#listidpcredentials" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="listidpcredentials-1"><span class="tsd-kind-call-signature">listIdpCredentials</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlIdpCredential.html" class="tsd-signature-type tsd-kind-interface">SamlIdpCredential</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span><a href="#listidpcredentials-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p><code>GET /api/v1/tenants/{tenant_id}/saml/idp-credentials</code></p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlIdpCredential.html" class="tsd-signature-type tsd-kind-interface">SamlIdpCredential</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/management/ops/saml.ts#L211">src/management/ops/saml.ts:211</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="listserviceproviders"><span>list<wbr/>Service<wbr/>Providers</span><a href="#listserviceproviders" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="listserviceproviders-1"><span class="tsd-kind-call-signature">listServiceProviders</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">page</span><span class="tsd-signature-symbol">?:</span> <a href="../interfaces/index.PageRequest.html" class="tsd-signature-type tsd-kind-interface">PageRequest</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.Page.html" class="tsd-signature-type tsd-kind-interface">Page</a><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlServiceProvider.html" class="tsd-signature-type tsd-kind-interface">SamlServiceProvider</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">&gt;</span><a href="#listserviceproviders-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p><code>GET /api/v1/tenants/{tenant_id}/saml/service-providers</code></p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">page</span>: <a href="../interfaces/index.PageRequest.html" class="tsd-signature-type tsd-kind-interface">PageRequest</a><span class="tsd-signature-symbol"> = {}</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.Page.html" class="tsd-signature-type tsd-kind-interface">Page</a><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlServiceProvider.html" class="tsd-signature-type tsd-kind-interface">SamlServiceProvider</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/management/ops/saml.ts#L72">src/management/ops/saml.ts:72</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="listserviceprovidersall"><span>list<wbr/>Service<wbr/>Providers<wbr/>All</span><a href="#listserviceprovidersall" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="listserviceprovidersall-1"><span class="tsd-kind-call-signature">listServiceProvidersAll</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">start</span><span class="tsd-signature-symbol">?:</span> <a href="../interfaces/index.PageRequest.html" class="tsd-signature-type tsd-kind-interface">PageRequest</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlServiceProvider.html" class="tsd-signature-type tsd-kind-interface">SamlServiceProvider</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span><a href="#listserviceprovidersall-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Walk <code>saml.list_service_providers</code> to exhaustion, concatenating every
+page.</p>
+<p>The auto-paging form §27.4 rule 4 requires. It stops on an empty page even
+if <code>total</code> disagrees, so a misreporting server costs one wasted request
+rather than an unbounded loop.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">start</span>: <a href="../interfaces/index.PageRequest.html" class="tsd-signature-type tsd-kind-interface">PageRequest</a><span class="tsd-signature-symbol"> = {}</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlServiceProvider.html" class="tsd-signature-type tsd-kind-interface">SamlServiceProvider</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/management/ops/saml.ts#L92">src/management/ops/saml.ts:92</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="parsespmetadata"><span>parse<wbr/>Sp<wbr/>Metadata</span><a href="#parsespmetadata" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="parsespmetadata-1"><span class="tsd-kind-call-signature">parseSpMetadata</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">body</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/index.ParseSamlSpMetadata.html" class="tsd-signature-type tsd-kind-interface">ParseSamlSpMetadata</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlSpMetadataDraft.html" class="tsd-signature-type tsd-kind-interface">SamlSpMetadataDraft</a><span class="tsd-signature-symbol">&gt;</span><a href="#parsespmetadata-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p><code>POST /api/v1/tenants/{tenant_id}/saml/parse-sp-metadata</code></p>
+<p><strong>Parses and stores nothing</strong> (§29.3 rule 6): the result is a draft to
+review and pass to <code>createServiceProvider</code>. Exactly one of <code>metadata_xml</code>
+and <code>metadata_url</code> must be set (<code>parseSpMetadataFromUrl</code> /
+<code>parseSpMetadataFromXml</code> build one); both or neither is refused locally
+with a <code>ValidationError</code>, before any request. The metadata's own signature
+is not evaluated. <code>503</code> in a server built without SAML.</p>
+<p>Not retried on failure (§27.4 rule 8): every write on this surface is
+issued exactly once, including the ones that look idempotent.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">body</span>: <a href="../interfaces/index.ParseSamlSpMetadata.html" class="tsd-signature-type tsd-kind-interface">ParseSamlSpMetadata</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlSpMetadataDraft.html" class="tsd-signature-type tsd-kind-interface">SamlSpMetadataDraft</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/management/ops/saml.ts#L197">src/management/ops/saml.ts:197</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="promoteidpcredential"><span>promote<wbr/>Idp<wbr/>Credential</span><a href="#promoteidpcredential" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="promoteidpcredential-1"><span class="tsd-kind-call-signature">promoteIdpCredential</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">credentialId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlIdpCredentialPromotion.html" class="tsd-signature-type tsd-kind-interface">SamlIdpCredentialPromotion</a><span class="tsd-signature-symbol">&gt;</span><a href="#promoteidpcredential-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p><code>POST /api/v1/tenants/{tenant_id}/saml/idp-credentials/{credential_id}/promote</code></p>
+<p><code>credentialId</code> must be the tenant's current <code>next</code> credential; in one
+transaction the old <code>active</code> is retired — its key destroyed — and <code>next</code>
+becomes <code>active</code> (§29.3 rule 7).</p>
+<p>Not retried on failure (§27.4 rule 8): every write on this surface is
+issued exactly once, including the ones that look idempotent.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">credentialId</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlIdpCredentialPromotion.html" class="tsd-signature-type tsd-kind-interface">SamlIdpCredentialPromotion</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/management/ops/saml.ts#L254">src/management/ops/saml.ts:254</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="retireidpcredential"><span>retire<wbr/>Idp<wbr/>Credential</span><a href="#retireidpcredential" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="retireidpcredential-1"><span class="tsd-kind-call-signature">retireIdpCredential</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">credentialId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlIdpCredential.html" class="tsd-signature-type tsd-kind-interface">SamlIdpCredential</a><span class="tsd-signature-symbol">&gt;</span><a href="#retireidpcredential-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p><code>POST /api/v1/tenants/{tenant_id}/saml/idp-credentials/{credential_id}/retire</code></p>
+<p><strong>Retiring the <code>active</code> credential with no successor stops SAML sign-on
+for the whole tenant at once</strong> (§29.3 rule 7) — it is the incident
+response to a leaked key. The key is destroyed. The safe rotation is:
+issue into <code>next</code>, wait until every SP has refreshed the metadata, then
+promote.</p>
+<p>Not retried on failure (§27.4 rule 8): every write on this surface is
+issued exactly once, including the ones that look idempotent.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">credentialId</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlIdpCredential.html" class="tsd-signature-type tsd-kind-interface">SamlIdpCredential</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/management/ops/saml.ts#L278">src/management/ops/saml.ts:278</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="updateserviceprovider"><span>update<wbr/>Service<wbr/>Provider</span><a href="#updateserviceprovider" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="updateserviceprovider-1"><span class="tsd-kind-call-signature">updateServiceProvider</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">spId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">body</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/index.SamlServiceProviderInput.html" class="tsd-signature-type tsd-kind-interface">SamlServiceProviderInput</a><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlServiceProvider.html" class="tsd-signature-type tsd-kind-interface">SamlServiceProvider</a><span class="tsd-signature-symbol">&gt;</span><a href="#updateserviceprovider-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p><code>PUT /api/v1/tenants/{tenant_id}/saml/service-providers/{sp_id}</code></p>
+<p>An omitted member takes its <strong>default</strong>, not its stored value: <code>enabled</code>
+and <code>sign_responses</code> default to <code>true</code>, <code>name_id_format</code> to <code>persistent</code>,
+the other flags to <code>false</code>, certificates and <code>slo_url</code> / <code>slo_binding</code> to
+null, the lists to empty (§29.2). Start from
+<code>samlServiceProviderInputFrom(await saml.getServiceProvider(id))</code>.
+<code>entity_id</code> is immutable: changing it is <code>400</code> — register a new service
+provider instead (§29.3 rule 3). An ECDSA <code>sp_signing_cert_pem</code> verifies
+HTTP-POST requests only; HTTP-Redirect is RSA-only.</p>
+<p><strong>This is a replacement, not a patch</strong> (§27.4 rule 5). Only the required
+members must be set, but what you do not carry over from a prior read is
+not preserved: an optional member left out is overwritten with its
+default, not kept (except where noted above). Read first, change the field
+you mean, send the whole thing back.</p>
+<p>Not retried on failure (§27.4 rule 8): every write on this surface is
+issued exactly once, including the ones that look idempotent.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">spId</span>: <span class="tsd-signature-type">string</span></span></li>
+<li><span><span class="tsd-kind-parameter">body</span>: <a href="../interfaces/index.SamlServiceProviderInput.html" class="tsd-signature-type tsd-kind-interface">SamlServiceProviderInput</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.SamlServiceProvider.html" class="tsd-signature-type tsd-kind-interface">SamlServiceProvider</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/5eb83b38350ded90105131847cc00ed5da005bbf/src/management/ops/saml.ts#L153">src/management/ops/saml.ts:153</a></li></ul></aside></div></li></ul></section></section></details></div>
+<div class="col-sidebar">
+<div class="page-menu">
+<div class="tsd-navigation settings">
+<details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>Settings</h3></summary>
+<div class="tsd-accordion-details">
+<div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span>
+<ul id="tsd-filter-options">
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></div>
+<div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div>
+<details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>On This Page</h3></summary>
+<div class="tsd-accordion-details">
+<details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Methods</summary>
+<div><a href="#createserviceprovider"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>create<wbr/>Service<wbr/>Provider</span></a><a href="#deleteserviceprovider"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>delete<wbr/>Service<wbr/>Provider</span></a><a href="#fortenant"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>for<wbr/>Tenant</span></a><a href="#getidp"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Idp</span></a><a href="#getserviceprovider"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Service<wbr/>Provider</span></a><a href="#issueidpcredential"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>issue<wbr/>Idp<wbr/>Credential</span></a><a href="#listidpcredentials"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>list<wbr/>Idp<wbr/>Credentials</span></a><a href="#listserviceproviders"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>list<wbr/>Service<wbr/>Providers</span></a><a href="#listserviceprovidersall"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>list<wbr/>Service<wbr/>Providers<wbr/>All</span></a><a href="#parsespmetadata"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>parse<wbr/>Sp<wbr/>Metadata</span></a><a href="#promoteidpcredential"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>promote<wbr/>Idp<wbr/>Credential</span></a><a href="#retireidpcredential"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>retire<wbr/>Idp<wbr/>Credential</span></a><a href="#updateserviceprovider"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>update<wbr/>Service<wbr/>Provider</span></a></div></details></div></details></div>
+<div class="site-menu">
+<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK - v1.0.0</a>
+<ul class="tsd-small-nested-navigation" id="tsd-nav-container">
+<li>Loading...</li></ul></nav></div></div></div><footer>
+<p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>
+<div class="overlay"></div></body></html>
