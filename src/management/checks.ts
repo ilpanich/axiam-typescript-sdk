@@ -90,6 +90,14 @@ export function samlServiceProviderInputFrom(sp: SamlServiceProvider): SamlServi
  * left absent — absent keeps the stored header (unless the update moves
  * `endpoint_url` to another origin, §32.3 rule 5) — and so is
  * `clear_authorization_header`.
+ *
+ * `events_requested` is always sent, as read — `[]` stays `[]`, because omitting
+ * it would reset a receiver's narrowing to every allowed event — and
+ * `expected_updated_at` is the `updated_at` of the read, verbatim (contract
+ * 1.61, §32.2): the replacement lands only if nobody wrote the stream since,
+ * else `409` — reload, then retry. Delete it from the body to fall back to the
+ * server's version-at-request. An edit that lowers `events_allowed` must cut
+ * `events_requested` to the new ceiling itself.
  */
 export function ssfStreamInputFrom(stream: SsfStream): SsfStreamInput {
   return {
@@ -99,6 +107,7 @@ export function ssfStreamInputFrom(stream: SsfStream): SsfStreamInput {
     endpoint_url: stream.endpoint_url ?? null,
     events_allowed: [...stream.events_allowed],
     events_requested: [...stream.events_requested],
+    expected_updated_at: stream.updated_at,
     receiver_client_id: stream.receiver_client_id,
     status: stream.status,
     status_reason: stream.status_reason ?? null,

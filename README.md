@@ -20,12 +20,24 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to **contract 1.60**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
+This SDK conforms to **contract 1.61**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
 §20, §21, §22, §23, §24, §25, §26, §27, §28, §28.12, §29, §30, §31, §32 and §33, with §32.7 and
 §33.2 signed (including §6.1 mTLS client certificates, the
 §10.1 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
 `verifyWebhook` signature verifier). §12 is implemented in full at its 1.38 shape: all
 **thirteen** operations, including the four public "Sign in with X" entry points.
+
+### Contract 1.61 — the 1.0.1 fields (§34.5)
+
+Contract 1.61 is additive and clarifying: no route, no operation, one new optional member on
+each of three models, and rules about what a read-modify-write sends. What changed here:
+
+| Row | Rule | What this SDK does |
+|---|---|---|
+| `Certificate.user_id` | §27.11 rule 5 | `user_id?: string \| null` on `Certificate` and `GeneratedCertificate`: a UUID, `null` and an absent member all decode, the last two meaning "no account named"; never coalesced to a nil UUID or taken from `metadata`. On `CreateCertificateRequest` and `SignCertificateCsrRequest` it is sent exactly as given when you set it and the key is absent when you do not; the SDK does not judge the value (the server answers `400`). |
+| `SsfStreamInput.expected_updated_at` | §32.2, §32.3 rule 4 | Optional; sent exactly as the stream's `updated_at` was read (not re-formatted) and absent when unset. `ssfStreamInputFrom` fills it with the read's `updated_at`, so a stream written since (the receiver's pause or narrowing included) answers `409` (`ConflictError`, never retried). |
+| `events_requested` on update | §32.2 | Absent resets the stream to every allowed event, `[]` is stored as the receiver's "none", a list is stored as given. `ssfStreamInputFrom` always sends the list it read, `[]` as `[]`; if you lower `events_allowed` yourself, cut `events_requested` to it. |
+| `CibaPendingList.total_pending`, `truncated` | §33.3 rule 16 | Not modelled: the type belongs to the console's `GET /api/v1/ciba/requests` route, which no registry operation returns and no SDK drives. |
 
 ### Contract 1.60 — the answers to #588 and the release wave (§34.4)
 

@@ -103,6 +103,40 @@ describe('§32.8 (1) — updateStream puts every member it models', () => {
   });
 });
 
+describe('§32.8 (1), contract 1.61 — expected_updated_at and events_requested on an update', () => {
+  it('sends expected_updated_at verbatim, omits it when unset, and keeps [] apart from absent', async () => {
+    const server = mockServer();
+    const id = freshId();
+    const seen = capture(server, 'PUT', `${STREAMS}/${id}`, 200, streamBody());
+    // Nanosecond precision and a numeric offset: the instant is compared, so
+    // the string must reach the wire untouched.
+    const stamp = '2026-10-04T00:00:00.123456789+00:00';
+    await managementClient().ssf.updateStream(id, {
+      ...input(),
+      expected_updated_at: stamp,
+      events_requested: [],
+    });
+    await managementClient().ssf.updateStream(id, input());
+    const set = seen[0]?.json as Record<string, unknown>;
+    const unset = seen[1]?.json as Record<string, unknown>;
+    expect(set.expected_updated_at).toBe(stamp);
+    expect(set.events_requested).toEqual([]);
+    expect('expected_updated_at' in unset, 'unset is absent, never null').toBe(false);
+    expect('events_requested' in unset, 'unset is absent, never []').toBe(false);
+  });
+
+  it('a 409 on a conditional update is a ConflictError and is not retried', async () => {
+    const server = mockServer();
+    const id = freshId();
+    const hits = capture(server, 'PUT', `${STREAMS}/${id}`, 409, { error: 'conflict', message: 'stale' });
+    const err = await retryingManagementClient()
+      .ssf.updateStream(id, { ...input(), expected_updated_at: '2026-10-04T00:00:00Z' })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictError);
+    expect(hits).toHaveLength(1);
+  });
+});
+
 // ── 2. The header is Sensitive ──────────────────────────────────────────────
 
 describe('§32.8 (2) — the push header is sent and never rendered or decoded', () => {
@@ -262,5 +296,23 @@ describe('read-modify-write', () => {
     expect('clear_authorization_header' in body).toBe(false);
     expect(body.events_requested).toEqual(stream.events_requested);
     expect(body.description).toBeNull();
+  });
+
+  it('carries the events_requested and updated_at it read, and [] as []', async () => {
+    const stream = streamBody({
+      events_requested: [],
+      events_delivered: [],
+      updated_at: '2026-10-04T08:15:30.5Z',
+    }) as unknown as SsfStream;
+    const body = ssfStreamInputFrom(stream);
+    expect(body.events_requested).toEqual([]);
+    expect(body.expected_updated_at).toBe('2026-10-04T08:15:30.5Z');
+
+    const server = mockServer();
+    const seen = capture(server, 'PUT', `${STREAMS}/${stream.id}`, 200, streamBody());
+    await managementClient().ssf.updateStream(stream.id, body);
+    const sent = seen[0]?.json as Record<string, unknown>;
+    expect(sent.events_requested).toEqual([]);
+    expect(sent.expected_updated_at).toBe('2026-10-04T08:15:30.5Z');
   });
 });
