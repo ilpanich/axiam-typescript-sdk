@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-13
+
+Contract 1.61 (axiam `058d8e0`, branch `claude/release-1.0.1`): additive and clarifying, no
+route and no operation. `CONTRACT.md`, `openapi.json`, `management-registry.json` and
+`proto/` are vendored from that commit.
+
+### Added
+
+- **`Certificate.user_id`** (§27.11 rule 5): optional and nullable on `Certificate` and
+  `GeneratedCertificate` — a UUID, `null` and an absent member all decode, the last two as "no
+  account named", never coalesced or synthesised from `metadata` — and an optional request
+  member on `certificates.generate` and `certificates.signCsr`, sent exactly as given and
+  absent when unset (never `null`). The SDK does not judge it; the server answers `400`.
+- **`SsfStreamInput.expected_updated_at`** (§32.2, §32.3 rule 4): optional, sent exactly as the
+  stream's `updated_at` was read and absent when unset. A `409` on the update is a
+  `ConflictError` and is not retried.
+
+### Changed
+
+- **`ssfStreamInputFrom` sends `expected_updated_at`** — the read's `updated_at` — so a
+  read-modify-write of a stream written since (a receiver's pause or narrowing) answers `409`
+  instead of putting the old value back; delete it from the body for the previous
+  last-writer-wins. It already sent `events_requested` as read; `[]` stays `[]` (§32.2: absent
+  would reset the receiver's narrowing to every allowed event).
+
+### Notes
+
+- `CibaPendingList.total_pending` and `truncated` (§33.3 rule 16) are not modelled: the type
+  belongs to a console route no operation returns and no SDK drives.
+
 ## [1.0.0] - 2026-10-10
 
 `axiam-sdk` 1.0.0 is the first stable release: from here the SDK follows semantic versioning,

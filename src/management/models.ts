@@ -533,7 +533,14 @@ export interface Certificate {
   issuer_ca_id: string;
   /** `key_algorithm`. */
   key_algorithm: KeyAlgorithm;
-  /** Arbitrary key-value metadata (e.g., device serial, user ID binding). */
+  /**
+   * Arbitrary key-value metadata (e.g., a device serial).
+   *
+   * Free-form and never authoritative: the account a `User` certificate was
+   * issued for is `user_id`. A `metadata.user_id` is still read, by the
+   * revocation of a user's certificates, for a row issued before the binding
+   * existed (schema v98, #533).
+   */
   metadata: unknown;
   /** Validity end. */
   not_after: string;
@@ -553,6 +560,20 @@ export interface Certificate {
   subject: string;
   /** The tenant this certificate belongs to. */
   tenant_id: string;
+  /**
+   * The user account a `User` certificate was issued for, in this tenant
+   * (#533); `null` for every other type, for a `User` certificate issued
+   * without one, and for every certificate issued before schema v98.
+   *
+   * What revoking a user's certificates matches on — directory linking,
+   * administrator deletion and Art. 17 erasure. A row with `None` is matched
+   * by the older convention instead (`metadata.user_id`, or a subject common
+   * name equal to the account's username or email); a row naming another
+   * account never is. It does not make the certificate authenticate as the
+   * user: a certificate authenticates only as the service account it is bound
+   * to.
+   */
+  user_id?: string | null;
 }
 
 /** Certificate issuance constraints. */
@@ -979,6 +1000,15 @@ export interface CreateCertificateRequest {
    * administrator lists names.
    */
   subject_alt_names?: SubjectAltName[] | null;
+  /**
+   * The user account a `User` certificate is issued for (#533), returned as
+   * the certificate's `user_id`. Optional; accepted only for `cert_type:
+   * User`, and it must name a user of this tenant that has not been deleted or
+   * erased. A `metadata.user_id` in the same request must agree with it.
+   * Revoking the account's certificates — directory linking, deletion, erasure
+   * — matches on it.
+   */
+  user_id?: string | null;
   /** Validity duration in days. */
   validity_days: number;
 }
@@ -1225,7 +1255,12 @@ export interface CreateOAuth2ClientRequest {
   backchannel_client_notification_endpoint?: string | null;
   /**
    * B5 — where OIDC back-channel logout tokens are delivered. Omit for a
-   * client that does not participate.
+   * client that does not participate. Must be an absolute `https` URL with no
+   * credentials and no fragment, naming a public host: an IP literal that is
+   * loopback, private, link-local or the cloud metadata address, and the names
+   * `localhost`, `*.localhost`, `*.local` and `*.internal`, are refused with
+   * `400`. Delivery is one request that does not follow redirects, and a name
+   * that resolves to a non-public address is refused when it is sent.
    */
   backchannel_logout_uri?: string | null;
   /**
@@ -2229,7 +2264,14 @@ export interface GeneratedCertificate {
   issuer_ca_id: string;
   /** `key_algorithm`. */
   key_algorithm: KeyAlgorithm;
-  /** Arbitrary key-value metadata (e.g., device serial, user ID binding). */
+  /**
+   * Arbitrary key-value metadata (e.g., a device serial).
+   *
+   * Free-form and never authoritative: the account a `User` certificate was
+   * issued for is `user_id`. A `metadata.user_id` is still read, by the
+   * revocation of a user's certificates, for a row issued before the binding
+   * existed (schema v98, #533).
+   */
   metadata: unknown;
   /** Validity end. */
   not_after: string;
@@ -2256,6 +2298,20 @@ export interface GeneratedCertificate {
   subject: string;
   /** The tenant this certificate belongs to. */
   tenant_id: string;
+  /**
+   * The user account a `User` certificate was issued for, in this tenant
+   * (#533); `null` for every other type, for a `User` certificate issued
+   * without one, and for every certificate issued before schema v98.
+   *
+   * What revoking a user's certificates matches on — directory linking,
+   * administrator deletion and Art. 17 erasure. A row with `None` is matched
+   * by the older convention instead (`metadata.user_id`, or a subject common
+   * name equal to the account's username or email); a row naming another
+   * account never is. It does not make the certificate authenticate as the
+   * user: a certificate authenticates only as the service account it is bound
+   * to.
+   */
+  user_id?: string | null;
 }
 
 /**
@@ -2280,6 +2336,7 @@ export interface GeneratedCertificateWire {
   status: CertificateStatus;
   subject: string;
   tenant_id: string;
+  user_id?: string | null;
 }
 
 /** Wrap the secret fields a `GeneratedCertificate` response carries (§27.5). */
@@ -4862,6 +4919,8 @@ export interface SignCertificateCsrRequest {
    * path is refused; use `POST /api/v1/certificates`.
    */
   subject_alt_names?: SubjectAltName[] | null;
+  /** See [`CreateCertificateRequest::user_id`]. */
+  user_id?: string | null;
   /** Validity duration in days. */
   validity_days: number;
 }
@@ -5064,9 +5123,22 @@ export interface SsfStreamInput {
   events_allowed: SsfEventType[];
   /**
    * A subset of `events_allowed`; absent means all of them. The receiver may
-   * narrow it later, never widen it.
+   * narrow it later, never widen it. On update, absent therefore *resets* a
+   * narrowing the receiver made to every allowed event, and `[]` keeps a
+   * receiver's "none": a client that edits a stream sends the value it read
+   * (cut to the new `events_allowed`), never an absent field.
    */
   events_requested?: SsfEventType[] | null;
+  /**
+   * The `updated_at` of the stream as the client read it (R1W2-03, T-406).
+   * **Update only; create ignores it.** When present, the replacement lands
+   * only if the stream still has that version, else `409` (reload and retry):
+   * a pause or a narrowing the receiver made after the form was read is not
+   * silently reverted. When absent the replacement is conditional on the
+   * version the server reads during the request — an old client keeps that
+   * behaviour, and the console always sends it.
+   */
+  expected_updated_at?: string | null;
   /**
    * An OAuth2 client of the tenant with the `client_credentials` grant and the
    * `ssf.manage` scope.
@@ -5095,6 +5167,7 @@ export interface SsfStreamInputWire {
   endpoint_url?: string | null;
   events_allowed: SsfEventType[];
   events_requested?: SsfEventType[] | null;
+  expected_updated_at?: string | null;
   receiver_client_id: string;
   status?: SsfStreamStatus;
   status_reason?: string | null;
@@ -5797,7 +5870,8 @@ export interface UpdateOAuth2ClientRequest {
   backchannel_client_notification_endpoint?: string | null;
   /**
    * Pass an empty string to clear a previously registered URI — the one edit
-   * an operator makes when an RP is decommissioned.
+   * an operator makes when an RP is decommissioned. Any other value is held to
+   * the same rule as on create.
    */
   backchannel_logout_uri?: string | null;
   /** G-7 — see the create DTO. `""` clears. */
