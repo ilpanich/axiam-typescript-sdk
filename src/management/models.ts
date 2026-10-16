@@ -972,7 +972,10 @@ export interface CreateCaCertificateRequest {
    *
    * A **common name**, not a distinguished name. A single `CN=` prefix is
    * accepted and stripped; anything else containing `=` — `O=Acme, CN=ACME
-   * Corp Root CA` — is refused with `400`.
+   * Corp Root CA` — is refused with `400`, as is a name of more than 64
+   * characters (RFC 5280 `ub-common-name`) or one holding a control character,
+   * a tab or line break, an invisible or bidirectional formatting character,
+   * or two spaces in a row.
    */
   subject: string;
   /** Validity duration in days. */
@@ -989,7 +992,14 @@ export interface CreateCertificateRequest {
   key_algorithm: KeyAlgorithm;
   /** `metadata`. */
   metadata?: unknown;
-  /** `subject`. */
+  /**
+   * The certificate's common name, e.g. `device-001`: a bare name or one `CN=`
+   * component, at most 64 characters (RFC 5280 `ub-common-name`), printable —
+   * a control character, tab or line break, an invisible or bidirectional
+   * formatting character, or two spaces in a row is refused with `400`. A name
+   * that is to be written into another system's configuration (a FreeRADIUS
+   * table, an ACL) should match `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`.
+   */
   subject: string;
   /**
    * The names a `Server` certificate is issued for, as `[{"dns":
@@ -1187,6 +1197,49 @@ export interface CreateIntermediateCaRequest {
   subject: string;
   /** Validity duration in days, capped to the parent's own expiry. */
   validity_days: number;
+}
+
+/** The body of `POST /api/v1/network/profiles`. */
+export interface CreateNetworkReplyProfileRequest {
+  /**
+   * The profile: a typed record of the `axiam-radius-reply/1` dictionary. The
+   * VLAN is never a field; it is the segment's.
+   */
+  profile: NetworkReplyProfileInput;
+  /** The segment the profile belongs to (at most one profile per segment). */
+  segment_id: string;
+  /**
+   * The segment's `version` as the caller read it: the envelope the profile
+   * was written against. A segment written since is `409`.
+   */
+  segment_version: number;
+}
+
+/** The body of `POST /api/v1/network/segments`. */
+export interface CreateNetworkSegmentRequest {
+  /** Whether the segment starts as a placement candidate. Defaults to `true`. */
+  enabled?: boolean;
+  /**
+   * The `Filter-Id` names the segment's profile may choose from: its envelope.
+   * At most 32, each matching the pattern above.
+   */
+  filter_ids?: string[];
+  /** `access` or `quarantine`. Decides the branch the segment lives under. */
+  kind: NetworkSegmentKind;
+  /** The segment's name, same pattern, unique within the site. */
+  name: string;
+  /**
+   * The placement rank (unique within the site): required for `access`, absent
+   * for `quarantine`.
+   */
+  rank?: number | null;
+  /**
+   * The site key (`^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$`). A single-site tenant
+   * uses `default`.
+   */
+  site_key: string;
+  /** The VLAN (1 to 4094), unique within the site. */
+  vlan_id: number;
 }
 
 /** `CreateNotificationRuleRequest` (generated from openapi.json). */
@@ -2161,6 +2214,11 @@ export interface GeneratedCaCertificate {
    * PEM-encoded private key — returned only on generation, and only when there
    * is one to return.
    *
+   * An unencrypted PKCS#8 `PRIVATE KEY` block. An Ed25519 key is RFC 8410
+   * version 1 (`version` INTEGER 0, the 32-byte seed and no embedded public
+   * key), which OpenSSL 3.0 reads; an RSA-4096 key is the usual PKCS#8
+   * `RSAPrivateKey`.
+   *
    * Absent under `vault_pki` custody, where the key was generated inside Vault
    * and no API exports it. The field is omitted rather than sent as `null` so
    * a client that has always read it keeps working unchanged for every
@@ -2279,6 +2337,11 @@ export interface GeneratedCertificate {
   not_before: string;
   /**
    * PEM-encoded private key — returned only on generation.
+   *
+   * An unencrypted PKCS#8 `PRIVATE KEY` block. An Ed25519 key AXIAM generated
+   * is RFC 8410 version 1 (`version` INTEGER 0, the 32-byte seed and no
+   * embedded public key), which OpenSSL 3.0 reads; the longer RFC 5958 v2 form
+   * it does not. An RSA-4096 key is the usual PKCS#8 `RSAPrivateKey`.
    *
    * **Secret.** Redacted from every string, log and JSON rendering; call
    * `.expose()` to read it.
@@ -2794,6 +2857,157 @@ export type NameIdFormat =
   | "email_address"
   // eslint-disable-next-line @typescript-eslint/ban-types
   | (string & {});
+
+/** The tenant's network policy, as the management API returns it. */
+export interface NetworkPolicyResponse {
+  /**
+   * `network.session_timeout_max_secs`: the most a reply profile's
+   * `Session-Timeout` may be, in seconds (300 to 86 400; 3600 until the tenant
+   * writes one). A stored profile above it is clamped at read.
+   */
+  session_timeout_max_secs: number;
+  /** The owning tenant. */
+  tenant_id: string;
+  /** Last write time; absent while it is the default. */
+  updated_at?: string | null;
+  /** The administrator who last wrote it; absent while it is the default. */
+  updated_by?: string | null;
+  /** The version the next `PUT` must name; `0` until the tenant first writes. */
+  version: number;
+}
+
+/**
+ * A segment's reply profile as read: **the effective one**, with the
+ * `Session-Timeout` already clamped to the tenant's current cap (design note
+ * §3.4) and `Idle-Timeout` kept within it.
+ */
+export interface NetworkReplyProfile {
+  /** Creation time. */
+  created_at: string;
+  /** The administrator who created it. */
+  created_by: string;
+  /** The dictionary version the profile was validated against. */
+  dictionary: string;
+  /** `Filter-Id`, one of the segment's declared names. */
+  filter_id?: string | null;
+  /** `Idle-Timeout`, seconds, never above the effective `Session-Timeout`. */
+  idle_timeout_secs?: number | null;
+  /**
+   * The owning segment, which is also this profile's id: one profile per
+   * segment, at most.
+   */
+  segment_id: string;
+  /** `service_type`. */
+  service_type?: RadiusServiceType | null;
+  /** Whether the stored value was above the cap and has been lowered. */
+  session_timeout_clamped: boolean;
+  /**
+   * `Session-Timeout`, seconds: the stored value lowered to the tenant's
+   * current cap. This is the value a reply carries.
+   */
+  session_timeout_secs: number;
+  /** The owning tenant. */
+  tenant_id: string;
+  /** `Termination-Action`. */
+  termination_action: RadiusTerminationAction;
+  /** Last write time. */
+  updated_at: string;
+  /** The administrator who last wrote it. */
+  updated_by: string;
+  /** The version the next replace or delete must name. Starts at 1. */
+  version: number;
+}
+
+/**
+ * What a writer supplies for a profile. Closed: an unknown key is a refusal
+ * naming it, never ignored (design note §3.4).
+ */
+export interface NetworkReplyProfileInput {
+  /**
+   * The dictionary version the profile is written against; defaults to
+   * [`REPLY_DICTIONARY_V1`]. An unknown version is refused.
+   */
+  dictionary?: string;
+  /** `Filter-Id`: one of the owning segment's declared `filter_ids`. */
+  filter_id?: string | null;
+  /**
+   * `Idle-Timeout`, seconds: [`IDLE_TIMEOUT_FLOOR_SECS`] up to
+   * `session_timeout_secs`.
+   */
+  idle_timeout_secs?: number | null;
+  /** `service_type`. */
+  service_type?: RadiusServiceType | null;
+  /**
+   * `Session-Timeout`, seconds: [`SESSION_TIMEOUT_FLOOR_SECS`] up to the
+   * tenant cap. Never zero.
+   */
+  session_timeout_secs: number;
+  /** `Termination-Action`; defaults to `RADIUS-Request`. */
+  termination_action?: RadiusTerminationAction;
+}
+
+/**
+ * What a segment is for.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type NetworkSegmentKind =
+  | "access"
+  | "quarantine"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
+
+/** A network segment, as the management API returns it. */
+export interface NetworkSegmentResponse {
+  /** Creation time. */
+  created_at: string;
+  /** The administrator who created it. */
+  created_by: string;
+  /** Whether the segment is a placement candidate. */
+  enabled: boolean;
+  /** The `Filter-Id` names the segment's profile may choose from. */
+  filter_ids: string[];
+  /**
+   * The segment id; also the id of its resource node, which `check_access` is
+   * asked about, and of its reply profile.
+   */
+  id: string;
+  /**
+   * `access` (under `/network/zones`) or `quarantine` (under
+   * `/network/quarantine`); fixed for the segment's life.
+   */
+  kind: NetworkSegmentKind;
+  /** The segment's name, unique within its site. */
+  name: string;
+  /**
+   * The segment's place in the reserved subtree,
+   * `/network/{zones|quarantine}/<site_key>/<name>`.
+   */
+  path: string;
+  /**
+   * The placement rank among a site's `access` segments (lowest wins); absent
+   * for a quarantine segment.
+   */
+  rank?: number | null;
+  /** The site key. */
+  site_key: string;
+  /** The owning tenant. */
+  tenant_id: string;
+  /** Last write time. */
+  updated_at: string;
+  /** The administrator who last wrote it. */
+  updated_by: string;
+  /** The version the next replace or delete must name. */
+  version: number;
+  /** The VLAN the tunnel attributes carry (1 to 4094), unique per site. */
+  vlan_id: number;
+}
 
 /**
  * Events that can trigger an admin notification.
@@ -3596,6 +3810,40 @@ export type ProviderConfig =
       kind: "brevo";
     } & ApiProviderConfig);
 
+/**
+ * `Service-Type` (RFC 2865 §5.6). Option B accepts only `framed_user`; the
+ * administrative values are refused with a 400.
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type RadiusServiceType =
+  | "framed_user"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
+
+/**
+ * `Termination-Action` (RFC 2865 §5.29).
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type RadiusTerminationAction =
+  | "default"
+  | "radius_request"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
+
 /** One hookable event, as the registry describes it. */
 export interface ReactorEventDescriptor {
   /** `default_failure_policy`. */
@@ -3714,6 +3962,57 @@ export interface RegistrationTokenResponse {
    * here.
    */
   used_by_client_id?: string | null;
+}
+
+/** The body of `PUT /api/v1/network/policy`: a **replacement** of the policy. */
+export interface ReplaceNetworkPolicyRequest {
+  /**
+   * The new cap on a reply profile's `Session-Timeout`, in seconds: 300 to 86
+   * 400. Lowering it below an existing profile's value is fine (reads clamp);
+   * raising it is allowed and audited as a raise.
+   */
+  session_timeout_max_secs: number;
+  /**
+   * The policy's `version` as the caller read it (`0` for a tenant that has
+   * never written one). A stale one is `409`.
+   */
+  version: number;
+}
+
+/** The body of `PUT /api/v1/network/profiles/{segment_id}`. */
+export interface ReplaceNetworkReplyProfileRequest {
+  /** The profile. */
+  profile: NetworkReplyProfileInput;
+  /**
+   * The segment's `version` as the caller read it, as for
+   * [`CreateReplyProfileRequest::segment_version`].
+   */
+  segment_version: number;
+  /** The profile's `version` as the caller read it. A stale one is `409`. */
+  version: number;
+}
+
+/**
+ * The body of `PUT /api/v1/network/segments/{id}`: a **replacement** of the
+ * envelope. The kind and the place in the tree do not change.
+ */
+export interface ReplaceNetworkSegmentRequest {
+  /** Whether the segment is a placement candidate. */
+  enabled: boolean;
+  /**
+   * The `Filter-Id` names the segment's profile may choose from. Removing the
+   * one the profile uses is `409`, naming the profile.
+   */
+  filter_ids: string[];
+  /**
+   * The placement rank: required for an `access` segment, absent for a
+   * `quarantine` one.
+   */
+  rank?: number | null;
+  /** The segment's `version` as the caller read it. A stale one is `409`. */
+  version: number;
+  /** The VLAN (1 to 4094). */
+  vlan_id: number;
 }
 
 /**
@@ -4898,7 +5197,11 @@ export interface SignAuditBatchRequest {
  * No `subject` and no `key_algorithm`: both are read out of the CSR, which
  * is the only place they can be stated without the row and the certificate
  * being able to disagree. No key is returned, so there is no key field
- * anywhere on this exchange.
+ * anywhere on this exchange. The CSR's common name meets the rules of
+ * `subject` on `POST /api/v1/certificates` (printable, at most 64
+ * characters) and is refused, not rewritten, when it does not. So does the
+ * value of every other attribute of the CSR's subject, and a subject with
+ * more than one common name is refused.
  */
 export interface SignCertificateCsrRequest {
   /** `cert_type`. */
@@ -5903,7 +6206,12 @@ export interface UpdateOAuth2ClientRequest {
   redirect_uris?: string[] | null;
   /** `require_par`. */
   require_par?: boolean | null;
-  /** `scopes`. */
+  /**
+   * Replace the client's scopes. On a `managed_by: dcr | cimd` client a scope
+   * the request adds that is outside the tenant's effective
+   * `dcr_allowed_scopes` is refused with `422` (#636); an
+   * administrator-managed client is not bounded.
+   */
   scopes?: string[] | null;
   /** `self_signed_tls_client_auth_thumbprints`. */
   self_signed_tls_client_auth_thumbprints?: string[] | null;

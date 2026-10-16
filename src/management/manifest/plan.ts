@@ -4,7 +4,14 @@
 
 import { NetworkError } from '../../core/errors.js';
 import type { Sensitive } from '../../core/sensitive.js';
-import { inheritOf, resourceKeyOf, roleKeyOf, type ManagementManifest, type RoleBinding } from './spec.js';
+import {
+  inheritOf,
+  resourceKeyOf,
+  roleKeyOf,
+  type ManagementManifest,
+  type NetworkSpec,
+  type RoleBinding,
+} from './spec.js';
 
 /** What reconciling one spec would do. */
 export type Change = 'create' | 'update' | 'no-change';
@@ -22,7 +29,10 @@ export type Target =
   | 'user-role'
   | 'group-member'
   | 'service-account'
-  | 'service-account-role';
+  | 'service-account-role'
+  | 'network-policy'
+  | 'network-segment'
+  | 'network-profile';
 
 /** One step of a plan. */
 export interface PlannedAction {
@@ -41,7 +51,9 @@ export interface PlannedAction {
  *
  * Ordering is derived, not incidental: resources (parents before children),
  * then scopes, permissions, roles, role grants, groups, group bindings, users,
- * and finally the user bindings that need all of the above to exist. Two plans
+ * and finally the user bindings that need all of the above to exist. A `network`
+ * section (contract 1.62, §27.6.2) follows, in its own order: the policy, then
+ * the segments, then the profiles — a profile after its segment. Two plans
  * over unchanged state are equal, in the same order (§27.6 rule 8) — a plan
  * that reorders between runs cannot be diffed, and diffing it is most of the
  * reason it exists.
@@ -101,6 +113,14 @@ export type StepOutcome =
       status: 'failed';
       /** The error the server or transport gave. */
       message: string;
+      /**
+       * The `reason_code` of a `409` (contract 1.62, §27.6.2 item 5), as the
+       * server spelled it — `stale_version`, `strands_profile`, `has_children`,
+       * `profile_exists`, `duplicate_vlan`, … The vocabulary is open: an
+       * unknown value is surfaced verbatim. Absent for every other failure and
+       * for a `409` whose body names none. Branch on this, never on `message`.
+       */
+      reasonCode?: string;
     }
   | {
       /** Never attempted, because an earlier step failed. */
@@ -138,6 +158,8 @@ export interface ManifestFailure {
   action: PlannedAction;
   /** The error the server or transport gave. */
   message: string;
+  /** The failed step's `reason_code`, when it was a `409` that named one (§27.6.2 item 5). */
+  reasonCode?: string;
 }
 
 /**
@@ -174,7 +196,11 @@ export function failure(report: ApplyReport): ManifestFailure | undefined {
     found.outcome.status === 'rebind-failed'
       ? `${found.outcome.message}${found.outcome.restoreSucceeded ? ' (previous binding restored)' : ` (restore also failed: ${found.outcome.restoreMessage ?? 'unknown error'})`}`
       : (found.outcome as { message: string }).message;
-  return { action: found.action, message };
+  const reasonCode =
+    found.outcome.status === 'failed' ? found.outcome.reasonCode : undefined;
+  return reasonCode === undefined
+    ? { action: found.action, message }
+    : { action: found.action, message, reasonCode };
 }
 
 /** Whether every step that was meant to run did. */
@@ -207,6 +233,7 @@ export function validate(manifest: ManagementManifest): void {
   const groups = manifest.groups ?? [];
   const users = manifest.users ?? [];
   const serviceAccounts = manifest.serviceAccounts ?? [];
+  const network = manifest.network;
 
   const resourceKeys = new Set(resources.map((r) => r.key));
   const scopeKeys = new Set(resources.flatMap((r) => (r.scopes ?? []).map((s) => s.key)));
@@ -222,6 +249,8 @@ export function validate(manifest: ManagementManifest): void {
   duplicates('group', groups.map((g) => g.key), problems);
   duplicates('user', users.map((u) => u.key), problems);
   duplicates('service account', serviceAccounts.map((s) => s.key), problems);
+
+  if (network !== undefined) validateNetwork(network, problems);
 
   for (const resource of resources) {
     if (resource.parent && !resourceKeys.has(resource.parent)) {
@@ -329,6 +358,58 @@ export function validate(manifest: ManagementManifest): void {
 }
 
 const q = (s: string) => JSON.stringify(s);
+
+/**
+ * §27.6.2 item 1: the `network` section's refusals, all before any request.
+ *
+ * A natural key named twice (two segments with one site, kind and name; two
+ * profiles for one segment; two policies) cannot be reconciled with one server
+ * row. Neither can a segment that lists one Filter-Id twice: `filter_ids` is
+ * compared as a set, and a set has no repeated member. A profile whose
+ * `segment` names no segment spec is a dangling key (§27.6 rule 2).
+ */
+function validateNetwork(network: NetworkSpec, problems: string[]): void {
+  if (Array.isArray(network.policy)) {
+    problems.push('network declares more than one policy; the tenant has exactly one');
+  }
+  const segments = network.segments ?? [];
+  const profiles = network.profiles ?? [];
+
+  duplicates('network segment', segments.map((s) => s.key), problems);
+  const naturalKeys = new Set<string>();
+  for (const segment of segments) {
+    const natural = `${segment.site}/${segment.kind}/${segment.name}`;
+    if (naturalKeys.has(natural)) {
+      problems.push(
+        `network segment ${q(natural)} (site, kind, name) is declared more than once`,
+      );
+    }
+    naturalKeys.add(natural);
+    const seenFilters = new Set<string>();
+    for (const filter of segment.filterIds ?? []) {
+      if (seenFilters.has(filter)) {
+        problems.push(
+          `network segment ${q(segment.key)} lists Filter-Id ${q(filter)} more than once in filterIds`,
+        );
+      }
+      seenFilters.add(filter);
+    }
+  }
+
+  const segmentKeys = new Set(segments.map((s) => s.key));
+  const profiled = new Set<string>();
+  for (const profile of profiles) {
+    if (!segmentKeys.has(profile.segment)) {
+      problems.push(
+        `network profile names segment ${q(profile.segment)}, which no network segment declares`,
+      );
+    }
+    if (profiled.has(profile.segment)) {
+      problems.push(`network segment ${q(profile.segment)} has more than one profile in the manifest`);
+    }
+    profiled.add(profile.segment);
+  }
+}
 
 function duplicates(kind: string, keys: string[], problems: string[]): void {
   const seen = new Set<string>();

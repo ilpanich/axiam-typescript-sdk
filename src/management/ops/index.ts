@@ -33,6 +33,7 @@ export * from './directory.js';
 export * from './saml.js';
 export * from './ssf.js';
 export * from './scim_targets.js';
+export * from './network.js';
 export * from './settings.js';
 export * from './scim_tokens.js';
 export * from './reactors.js';
@@ -62,6 +63,7 @@ import { DirectoryApi } from './directory.js';
 import { SamlApi } from './saml.js';
 import { SsfApi } from './ssf.js';
 import { ScimTargetsApi } from './scim_targets.js';
+import { NetworkApi } from './network.js';
 import { SettingsApi } from './settings.js';
 import { ScimTokensApi } from './scim_tokens.js';
 import { ReactorsApi } from './reactors.js';
@@ -166,6 +168,17 @@ export interface ManagementNamespaces {
    * Deleting a target does not deprovision anything downstream.
    */
   readonly scimTargets: ScimTargetsApi;
+  /**
+   * A tenant's network segments and the RADIUS reply profile each owns (RADIUS
+   * D4): a segment is a node of the reserved /network subtree of the resource
+   * tree (kind, VLAN, Filter-Id envelope, placement rank), and its profile is
+   * the typed `axiam-radius-reply/1` record a decision renders. Every write is
+   * conditional on the `version` the caller read and passes the server's write
+   * gate. The tenant's Session-Timeout cap is one more row of it (get_policy,
+   * replace_policy): lowering it is always allowed, raising it is allowed and
+   * audited. The decision route FreeRADIUS calls is not in this registry.
+   */
+  readonly network: NetworkApi;
   /** Effective settings, and the organization/tenant layers they resolve from. */
   readonly settings: SettingsApi;
   /** Bearer tokens for the SCIM 2.0 provisioning endpoint. */
@@ -263,6 +276,9 @@ export function managementNamespaces(client: AxiamClient): ManagementNamespaces 
     },
     get scimTargets() {
       return new ScimTargetsApi(client);
+    },
+    get network() {
+      return new NetworkApi(client);
     },
     get settings() {
       return new SettingsApi(client);

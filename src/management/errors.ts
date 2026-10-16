@@ -51,11 +51,26 @@ export class NotFoundError extends AuthzError {
 export class ConflictError extends AuthzError {
   /** The registry operation that conflicted. */
   readonly operation: string;
+  /**
+   * The body's `reason_code`, as the server spelled it (contract 1.62, §36.4),
+   * or `undefined` when the body carries none (a server that predates it, or a
+   * `409` of an operation that does not name one).
+   *
+   * The `409` of every `network` operation says which conflict it is:
+   * `stale_version`, `strands_profile`, `has_children`, `site_gone`,
+   * `duplicate_name`, `duplicate_vlan`, `duplicate_rank`, `profile_exists` or
+   * `other` (§36.3 rule 2). The vocabulary is **open**: a value this SDK does
+   * not know is surfaced verbatim, and a caller branches on this member —
+   * never on `message`, which an SDK must not parse. It is not the `reason` of
+   * an authorization decision (§3), which is a human string.
+   */
+  readonly reasonCode?: string;
 
-  constructor(operation: string, message: string) {
+  constructor(operation: string, message: string, reasonCode?: string) {
     super(message);
     this.name = 'ConflictError';
     this.operation = operation;
+    this.reasonCode = reasonCode;
     Object.setPrototypeOf(this, ConflictError.prototype);
   }
 }

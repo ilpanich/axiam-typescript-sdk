@@ -1203,6 +1203,19 @@ function projectionMap() {
   return out;
 }
 
+/**
+ * Whether a query parameter is an integer in the spec.
+ *
+ * Until contract 1.62 every required query parameter was a string. The
+ * conditional `DELETE`s of `network` (§36.3 rule 2) carry the row `version`,
+ * an integer, and a caller who holds one as a number should not have to
+ * stringify it: the method takes a `number` and sends its decimal form.
+ */
+function isIntegerParam(q) {
+  const types = Array.isArray(q.type) ? q.type : [q.type];
+  return types.includes('integer');
+}
+
 function emitFilters(namespace, nsdef) {
   const out = [];
   for (const [opname, op] of Object.entries(nsdef.operations)) {
@@ -1252,7 +1265,7 @@ function emitOperation(namespace, opname, op, secrets) {
   const optionalQ = extra.filter((q) => !q.required);
   const filterType =
     optionalQ.length > 2 ? `${pascal(namespace)}${pascal(opname)}Filter` : null;
-  for (const q of requiredQ) args.push(`${camel(q.name)}: string`);
+  for (const q of requiredQ) args.push(`${camel(q.name)}: ${isIntegerParam(q) ? 'number' : 'string'}`);
   if (filterType) args.push(`filter: ${filterType} = {}`);
   else for (const q of optionalQ) args.push(`${camel(q.name)}?: string`);
   if (op.paginated) args.push('page: PageRequest = {}');
@@ -1297,7 +1310,12 @@ function emitOperation(namespace, opname, op, secrets) {
 
   const queryEntries = [];
   if (op.paginated) queryEntries.push('...pageQuery(page)');
-  for (const q of requiredQ) queryEntries.push(`${JSON.stringify(q.name)}: ${camel(q.name)}`);
+  for (const q of requiredQ) {
+    // A query string is text: an integer parameter (the `version` of a
+    // conditional `DELETE`, §36.3 rule 2) is sent as its decimal form.
+    const v = isIntegerParam(q) ? `String(${camel(q.name)})` : camel(q.name);
+    queryEntries.push(`${JSON.stringify(q.name)}: ${v}`);
+  }
   for (const q of optionalQ) {
     const src = filterType ? `filter.${camel(q.name)}` : camel(q.name);
     queryEntries.push(`'${q.name}': ${src}`);
@@ -1358,7 +1376,10 @@ function emitOperation(namespace, opname, op, secrets) {
 
   if (op.paginated) {
     const lead = args.filter((a) => !a.startsWith('page:'));
-    const forward = lead.map((a) => a.split(/[:=]/)[0].trim());
+    // `site?: string` forwards as `site`: the `?` is declaration syntax, not
+    // part of the name (§36.1's `site` is the first optional filter that rides
+    // beside a `PageRequest`).
+    const forward = lead.map((a) => a.split(/[:=]/)[0].trim().replace(/\?$/, ''));
     lines.push(
       ...doc(
         `Walk \`${canonical}\` to exhaustion, concatenating every page.\n\nThe auto-paging form §27.4 rule 4 requires. It stops on an empty page even if \`total\` disagrees, so a misreporting server costs one wasted request rather than an unbounded loop.`,
@@ -1585,7 +1606,7 @@ function callArguments(namespace, opname, op, secrets) {
   const extra = extraQueryParams(op);
   const requiredQ = extra.filter((q) => q.required);
   const optionalQ = extra.filter((q) => !q.required);
-  for (const _ of requiredQ) args.push("'example'");
+  for (const q of requiredQ) args.push(isIntegerParam(q) ? '1' : "'example'");
   if (optionalQ.length > 2) args.push('{}');
   else for (const _ of optionalQ) args.push('undefined');
   if (op.paginated) args.push('{ limit: 50 }');

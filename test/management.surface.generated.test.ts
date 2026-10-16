@@ -1049,6 +1049,83 @@ describe('scim_targets namespace', () => {
   });
 });
 
+describe('network namespace', () => {
+  it('network.list_segments', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/network/segments`, 200, {"items":[{"created_at":"2026-08-26T00:00:00Z","created_by":"11111111-1111-4111-8111-111111111111","enabled":true,"filter_ids":[],"id":"11111111-1111-4111-8111-111111111111","kind":"access","name":"example","path":"example","site_key":"example","tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z","updated_by":"11111111-1111-4111-8111-111111111111","version":1,"vlan_id":1}],"total":1,"offset":0,"limit":50});
+      await client.network.listSegments(undefined, { limit: 50 });
+      await client.network.listSegmentsAll(undefined, { limit: 50 });
+    });
+  });
+  it('network.create_segment', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'POST', `/api/v1/network/segments`, 201, {"created_at":"2026-08-26T00:00:00Z","created_by":"11111111-1111-4111-8111-111111111111","enabled":true,"filter_ids":[],"id":"11111111-1111-4111-8111-111111111111","kind":"access","name":"example","path":"example","site_key":"example","tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z","updated_by":"11111111-1111-4111-8111-111111111111","version":1,"vlan_id":1});
+      await client.network.createSegment({ kind: "access", name: 'example', site_key: 'example', vlan_id: 1 });
+    });
+  });
+  it('network.get_segment', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/network/segments/${EXAMPLE_ID}`, 200, {"created_at":"2026-08-26T00:00:00Z","created_by":"11111111-1111-4111-8111-111111111111","enabled":true,"filter_ids":[],"id":"11111111-1111-4111-8111-111111111111","kind":"access","name":"example","path":"example","site_key":"example","tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z","updated_by":"11111111-1111-4111-8111-111111111111","version":1,"vlan_id":1});
+      await client.network.getSegment(EXAMPLE_ID);
+    });
+  });
+  it('network.replace_segment', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'PUT', `/api/v1/network/segments/${EXAMPLE_ID}`, 200, {"created_at":"2026-08-26T00:00:00Z","created_by":"11111111-1111-4111-8111-111111111111","enabled":true,"filter_ids":[],"id":"11111111-1111-4111-8111-111111111111","kind":"access","name":"example","path":"example","site_key":"example","tenant_id":"11111111-1111-4111-8111-111111111111","updated_at":"2026-08-26T00:00:00Z","updated_by":"11111111-1111-4111-8111-111111111111","version":1,"vlan_id":1});
+      await client.network.replaceSegment(EXAMPLE_ID, { enabled: true, filter_ids: [], version: 1, vlan_id: 1 });
+    });
+  });
+  it('network.delete_segment', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'DELETE', `/api/v1/network/segments/${EXAMPLE_ID}`, 204, undefined);
+      await client.network.deleteSegment(EXAMPLE_ID, 1);
+    });
+  });
+  it('network.list_profiles', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/network/profiles`, 200, {"items":[{"created_at":"2026-08-26T00:00:00Z","created_by":"11111111-1111-4111-8111-111111111111","dictionary":"example","segment_id":"11111111-1111-4111-8111-111111111111","session_timeout_clamped":true,"session_timeout_secs":1,"tenant_id":"11111111-1111-4111-8111-111111111111","termination_action":"default","updated_at":"2026-08-26T00:00:00Z","updated_by":"11111111-1111-4111-8111-111111111111","version":1}],"total":1,"offset":0,"limit":50});
+      await client.network.listProfiles({ limit: 50 });
+      await client.network.listProfilesAll({ limit: 50 });
+    });
+  });
+  it('network.create_profile', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'POST', `/api/v1/network/profiles`, 201, {"created_at":"2026-08-26T00:00:00Z","created_by":"11111111-1111-4111-8111-111111111111","dictionary":"example","segment_id":"11111111-1111-4111-8111-111111111111","session_timeout_clamped":true,"session_timeout_secs":1,"tenant_id":"11111111-1111-4111-8111-111111111111","termination_action":"default","updated_at":"2026-08-26T00:00:00Z","updated_by":"11111111-1111-4111-8111-111111111111","version":1});
+      await client.network.createProfile({ profile: { session_timeout_secs: 1 }, segment_id: '11111111-1111-4111-8111-111111111111', segment_version: 1 });
+    });
+  });
+  it('network.get_profile', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/network/profiles/${EXAMPLE_ID}`, 200, {"created_at":"2026-08-26T00:00:00Z","created_by":"11111111-1111-4111-8111-111111111111","dictionary":"example","segment_id":"11111111-1111-4111-8111-111111111111","session_timeout_clamped":true,"session_timeout_secs":1,"tenant_id":"11111111-1111-4111-8111-111111111111","termination_action":"default","updated_at":"2026-08-26T00:00:00Z","updated_by":"11111111-1111-4111-8111-111111111111","version":1});
+      await client.network.getProfile(EXAMPLE_ID);
+    });
+  });
+  it('network.replace_profile', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'PUT', `/api/v1/network/profiles/${EXAMPLE_ID}`, 200, {"created_at":"2026-08-26T00:00:00Z","created_by":"11111111-1111-4111-8111-111111111111","dictionary":"example","segment_id":"11111111-1111-4111-8111-111111111111","session_timeout_clamped":true,"session_timeout_secs":1,"tenant_id":"11111111-1111-4111-8111-111111111111","termination_action":"default","updated_at":"2026-08-26T00:00:00Z","updated_by":"11111111-1111-4111-8111-111111111111","version":1});
+      await client.network.replaceProfile(EXAMPLE_ID, { profile: { session_timeout_secs: 1 }, segment_version: 1, version: 1 });
+    });
+  });
+  it('network.delete_profile', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'DELETE', `/api/v1/network/profiles/${EXAMPLE_ID}`, 204, undefined);
+      await client.network.deleteProfile(EXAMPLE_ID, 1);
+    });
+  });
+  it('network.get_policy', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'GET', `/api/v1/network/policy`, 200, {"session_timeout_max_secs":1,"tenant_id":"11111111-1111-4111-8111-111111111111","version":1});
+      await client.network.getPolicy();
+    });
+  });
+  it('network.replace_policy', async () => {
+    await withServer(async (server, client) => {
+      mountJson(server, 'PUT', `/api/v1/network/policy`, 200, {"session_timeout_max_secs":1,"tenant_id":"11111111-1111-4111-8111-111111111111","version":1});
+      await client.network.replacePolicy({ session_timeout_max_secs: 1, version: 1 });
+    });
+  });
+});
+
 describe('settings namespace', () => {
   it('settings.get_org', async () => {
     await withServer(async (server, client) => {
@@ -1321,6 +1398,18 @@ describe('generated surface', () => {
           "groups.remove_member",
           "groups.remove_service_account",
           "groups.update",
+          "network.create_profile",
+          "network.create_segment",
+          "network.delete_profile",
+          "network.delete_segment",
+          "network.get_policy",
+          "network.get_profile",
+          "network.get_segment",
+          "network.list_profiles",
+          "network.list_segments",
+          "network.replace_policy",
+          "network.replace_profile",
+          "network.replace_segment",
           "notification_rules.create",
           "notification_rules.delete",
           "notification_rules.get",
