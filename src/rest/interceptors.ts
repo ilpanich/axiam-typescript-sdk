@@ -36,6 +36,12 @@ export const SKIP_REFRESH = [
   // regardless of what session state came before it.
   '/api/v1/auth/device',
   '/oauth2/token',
+  // CONTRACT.md §14.2 rule 5 (contract 1.62): a client that fails to
+  // authenticate at the device endpoints is `401 invalid_client`, which is not
+  // an expired session and which refreshing cannot fix. `/oauth2/token` (the
+  // poll) was already here; the authorization endpoint now authenticates the
+  // client too, so its 401 must not enter the §9 guard either.
+  '/oauth2/device_authorization',
   '/oauth2/introspect',
   '/oauth2/revoke',
 ];

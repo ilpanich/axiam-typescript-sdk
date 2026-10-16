@@ -1431,9 +1431,21 @@ export class OidcClient {
    * and obtain the code pair.
    *
    * @remarks
-   * **Unauthenticated by design.** A device that cannot show a browser also
-   * cannot hold a client secret, so this never sends `client_secret` and never
-   * refuses a client built without one (§14.1).
+   * **The client authenticates as it does at every other token request
+   * (contract 1.62, §14.1 rule 2).** A client built with a `clientSecret` sends
+   * it as `client_secret` in the **form body** — never as `Authorization:
+   * Basic`, whatever the client is registered for (§12.1 rule 3 stands for
+   * this route, and the maintainer's 2026-10-16 "same rules" reading fixes the
+   * form body) — and a client with a §6.1 client certificate presents it on the
+   * connection, through the `mtls_endpoint_aliases` entry when discovery
+   * publishes one (§21.3). **A public client sends no credential at all** and
+   * is never refused client-side, so a device that cannot hold a secret still
+   * works. The SDK sends a credential only when its caller configured one: it
+   * never borrows one from another configuration. `private_key_jwt` client
+   * authentication is not implemented by this SDK.
+   *
+   * A `401` with `{"error":"invalid_client"}` is an {@link OAuthProtocolError}
+   * (§14.2 rule 5), is made once, and does not enter the §9 refresh guard.
    */
   async deviceAuthorize(params: DeviceAuthorizeParams = {}): Promise<DeviceAuthorization> {
     const configuration = params.configuration ?? (await this.oidcDiscover());
@@ -1448,6 +1460,9 @@ export class OidcClient {
 
     const form = new URLSearchParams();
     form.set('client_id', this.#options.clientId);
+    // §14.1 rule 2: a configured secret rides in the form body; a public
+    // client's form carries none.
+    this.#appendClientSecret(form);
     if (params.scope !== undefined) {
       form.set('scope', Array.isArray(params.scope) ? params.scope.join(' ') : params.scope);
     }
@@ -1597,6 +1612,15 @@ export class OidcClient {
    * {@link OAuthProtocolError} — `authorization_pending` and `slow_down`
    * included — so a hand-rolled loop sees exactly what {@link deviceLogin}
    * sees. Most callers want {@link deviceLogin}.
+   *
+   * Client authentication is the one {@link deviceAuthorize} describes
+   * (contract 1.62, §14.1 rule 2): a configured `clientSecret` is sent as
+   * `client_secret` in the form body, never as `Authorization: Basic`; a public
+   * client sends none; `client_id` is sent on **every** poll (§14.1 rule 3). A
+   * `401 invalid_client` surfaces as {@link OAuthProtocolError}, is not retried
+   * and does not enter the §9 refresh guard (§14.2 rule 5). This SDK ships no
+   * DPoP proof generator, so it cannot drive a client registered for DPoP; it
+   * surfaces that client's refusal as the same `invalid_client`.
    */
   async devicePoll(params: DevicePollParams): Promise<OidcTokenSet> {
     const configuration = params.configuration ?? (await this.oidcDiscover());
@@ -1604,6 +1628,8 @@ export class OidcClient {
     form.set('grant_type', DEVICE_CODE_GRANT_TYPE);
     form.set('device_code', exposeSecret(params.deviceCode));
     form.set('client_id', this.#options.clientId);
+    // §14.1 rule 2, as at deviceAuthorize and every other token request.
+    this.#appendClientSecret(form);
 
     const wire = await this.#postToken(configuration, form, params.tenantId);
     // No nonce: the device grant has no authorization request to carry one,
