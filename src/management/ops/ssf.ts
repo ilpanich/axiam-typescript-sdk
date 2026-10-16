@@ -88,7 +88,7 @@ export class SsfApi {
       method: 'POST',
       pathTemplate: '/api/v1/tenants/{tenant_id}/ssf/streams',
       path: `/api/v1/tenants/${tenantId}/ssf/streams`,
-      body: models.ssfStreamInputToWire(body),
+      body: models.omitNullMembers(models.ssfStreamInputToWire(body), ["expected_updated_at"]),
     });
     return models.scrubSsfStream(wire);
   }
@@ -113,8 +113,19 @@ export class SsfApi {
    * update moves `endpoint_url` to another scheme, host or port while a header
    * is stored: then it must carry `authorization_header` again or
    * `clear_authorization_header: true`, else `400` (§32.3 rule 5). Start from
-   * `ssfStreamInputFrom(await ssf.getStream(id))`. An update overtaken by the
-   * receiver's own write is `409`: read the stream again.
+   * `ssfStreamInputWith(await ssf.getStream(id), changes)`, which sends the
+   * `events_requested` and `expected_updated_at` it read and cuts
+   * `events_requested` to a lowered `events_allowed` (or from the plain
+   * converter `ssfStreamInputFrom`, where the cut is yours). An update
+   * overtaken by the receiver's own write is `409`: read the stream again.
+   * **`events_requested` has three meanings on an update** (§32.2, contract
+   * 1.62): **absent resets** the stream to every event of `events_allowed` —
+   * widening what the receiver narrowed; **`[]` is stored as the receiver's
+   * "none"** and the stream carries nothing; **a list is stored as given** and
+   * refused (`400`) if any entry is outside `events_allowed`. A raw API client
+   * is bound by the same meaning: an `events_requested` left out of the `PUT`
+   * resets the stream. `expected_updated_at` is the `updated_at` you read, as
+   * the server's own string; an assigned `null` is "none" and is not sent.
    *
    * **This is a replacement, not a patch** (§27.4 rule 5). Only the required
    * members must be set, but what you do not carry over from a prior read is
@@ -132,7 +143,7 @@ export class SsfApi {
       method: 'PUT',
       pathTemplate: '/api/v1/tenants/{tenant_id}/ssf/streams/{stream_id}',
       path: `/api/v1/tenants/${tenantId}/ssf/streams/${encodeURIComponent(streamId)}`,
-      body: models.ssfStreamInputToWire(body),
+      body: models.omitNullMembers(models.ssfStreamInputToWire(body), ["expected_updated_at"]),
     });
     return models.scrubSsfStream(wire);
   }

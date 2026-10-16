@@ -61,6 +61,29 @@ export function omitEmptyTenantScope<T>(body: T): T {
 }
 
 /**
+ * Drops each of `members` whose value is `null` (contract 1.62, item (f)).
+ *
+ * CONTRACT.md §27.11 rule 5 and §32.2: for `user_id` on the two certificate
+ * requests and `expected_updated_at` on `ssf.update_stream` and
+ * `scim_targets.update`, an explicitly assigned `null` means the same as never
+ * having set the member — the key is left out of the body and `null` is never
+ * sent. `JSON.stringify` drops `undefined` by itself; `null` it keeps, so
+ * `{ user_id: null }` would reach the server as a member the server was told
+ * to read as a value. Only the named members are touched: every other `null` in
+ * the body is meaningful (a cleared optional of a replacement) and is sent.
+ *
+ * Returns the body itself when there is nothing to drop.
+ */
+export function omitNullMembers<T>(body: T, members: readonly string[]): T {
+  if (!body || typeof body !== 'object') return body;
+  const record = body as Record<string, unknown>;
+  if (!members.some((m) => m in record && record[m] === null)) return body;
+  const copy: Record<string, unknown> = { ...record };
+  for (const m of members) if (copy[m] === null) delete copy[m];
+  return copy as T;
+}
+
+/**
  * Read a role-side assignment listing's `inherit` (contract 1.51,
  * §27.13 S-10 rule 3).
  *
