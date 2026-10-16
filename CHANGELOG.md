@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.0] - 2026-10-16
 
-`axiam-sdk` 1.1.0 conforms to **contract 1.62** (axiam `d76c5a80b`, the release plan branch for
+`axiam-sdk` 1.1.0 conforms to **contract 1.62** (axiam `d25413506`, the release plan branch for
 platform 1.1.0). It carries everything the never-tagged 1.0.1 prepared (contract 1.61, marked
 below) together with contract 1.62: one new management namespace, `network`, a device grant whose
 client authenticates, a change-taking read-modify-write form for an SSF stream, and the rule that an
@@ -95,6 +95,14 @@ The first is a source-level break; the other two change what a call sends.
 
 ### Changed
 
+- **Re-vendored the contract 1.62 corrections from axiam `d25413506`** (`CONTRACT.md`,
+  `openapi.json` and `management-registry.json`, byte for byte; `proto/` is unchanged; the spec is
+  now version 1.1.0, digest `sha256:cf0fc71c…59a7`), and **no session or adopted bearer reaches any
+  `/oauth2/*` request** (§6.1 rule 11, §12.1 rule 3, §14.6; review finding C162-05): the §6.1
+  device credential `authenticateDevice()` adopts used to ride every same-origin request,
+  `device_authorize`, `device_poll` and the token requests included. It now rides none of them
+  (the session cookie stays out as before); the RFC 7591/7592 registration token the caller passes
+  to one call is unchanged.
 - **`/oauth2/device_authorization` is a `SKIP_REFRESH` url** (§14.2 rule 5): a `401
   invalid_client` there is an `OAuthProtocolError`, made once, and does not enter the §9 refresh
   guard even for a client whose session is authenticated (the poll's `/oauth2/token` already was).

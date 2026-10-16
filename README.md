@@ -24,7 +24,7 @@ This SDK conforms to **contract 1.62**: CONTRACT.md §1–§13 and §12.7, §14,
 §20, §21, §22, §23, §24, §25, §26, §27 (with §27.6.2), §28, §28.12, §29, §30, §31, §32, §33 and §36,
 with §32.7 and §33.2 signed (including §6.1 mTLS client certificates, the
 §10.1 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
-`verifyWebhook` signature verifier). §12 is implemented in full at its 1.38 shape: all
+`verifyWebhook` signature verifier). Manifest pruning: not offered in any namespace (§27.10). §12 is implemented in full at its 1.38 shape: all
 **thirteen** operations, including the four public "Sign in with X" entry points.
 
 ### Contract 1.62 — the 1.1.0 release (§34.6)
