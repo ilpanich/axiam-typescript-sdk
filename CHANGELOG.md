@@ -7,35 +7,128 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.1] - 2026-10-13
+## [1.1.0] - 2026-10-16
 
-Contract 1.61 (axiam `058d8e0`, branch `claude/release-1.0.1`): additive and clarifying, no
-route and no operation. `CONTRACT.md`, `openapi.json`, `management-registry.json` and
-`proto/` are vendored from that commit.
+`axiam-sdk` 1.1.0 conforms to **contract 1.62** (axiam `d76c5a80b`, the release plan branch for
+platform 1.1.0). It carries everything the never-tagged 1.0.1 prepared (contract 1.61, marked
+below) together with contract 1.62: one new management namespace, `network`, a device grant whose
+client authenticates, a change-taking read-modify-write form for an SSF stream, and the rule that an
+assigned `null` is "none". `CONTRACT.md`, `openapi.json`, `management-registry.json` and `proto/`
+are vendored byte for byte from that commit. The management surface is now **202 operations in
+29 namespaces** (it was 190 in 28).
+
+### Breaking changes
+
+The first is a source-level break; the other two change what a call sends.
+
+- **`Target` (a manifest `PlannedAction`'s kind) gains `network-policy`, `network-segment` and
+  `network-profile`.** An exhaustive `switch` over `action.target` with no `default` branch no
+  longer compiles. *Migration:* add the three cases, or a `default`.
+- **A `null` you assign to `user_id` (on `certificates.generate` and `certificates.signCsr`) or to
+  `expected_updated_at` (on `ssf.createStream`, `ssf.updateStream`, `scimTargets.create` and
+  `scimTargets.update`) is no longer sent** (§27.11 rule 5, §32.2): it means the same as leaving
+  the member out, and the key is absent from the body. It used to reach the server as `null`.
+  *Migration:* none needed; to ask for the server's version-at-request, `null` now does what
+  deleting the member always did.
+- **A confidential device-grant client now authenticates** (§14.1): a `deviceAuthorize` and a
+  `devicePoll` on an `OidcClient` built with a `clientSecret` send `client_secret` in the form body,
+  where 1.0.x sent none. A public client is unchanged. A 1.1.0 platform refuses a confidential
+  client that sends no credential and a public one that sends one (§14.1), so a deployment upgrading
+  its platform finds out at its devices' next request.
 
 ### Added
 
-- **`Certificate.user_id`** (§27.11 rule 5): optional and nullable on `Certificate` and
-  `GeneratedCertificate` — a UUID, `null` and an absent member all decode, the last two as "no
+- **The `network` management namespace** (§36, contract 1.62 item (l)): twelve operations, from the
+  regenerated §27 surface. `client.network.listSegments(site?, page)` (+ `listSegmentsAll`),
+  `createSegment`, `getSegment`, `replaceSegment`, `deleteSegment(id, version)`,
+  `listProfiles(page)` (+ `listProfilesAll`), `createProfile`, `getProfile(segmentId)`,
+  `replaceProfile`, `deleteProfile(segmentId, version)`, `getPolicy` and `replacePolicy`. Every
+  write is conditional on the `version` you read and is sent exactly as given; the delete methods
+  cannot be called without one (a `number`, sent as `?version=`). The decision route
+  `POST /api/v1/network/decide` is not SDK work and has no method. The records are closed: an unset
+  optional member is absent from the body, never `null`.
+- **`ConflictError.reasonCode`** (§36.4): the `reason_code` of a `409` (`stale_version`,
+  `strands_profile`, `has_children`, `site_gone`, `duplicate_name`, `duplicate_vlan`,
+  `duplicate_rank`, `profile_exists`, `other`), as the server spelled it. The vocabulary is open: an
+  unknown value is surfaced verbatim, and a body without one leaves it `undefined`. Branch on it,
+  never on `message`.
+- **`AuthzError.action` and `.resourceId` on a management `403`** (§36.3 rule 1, §2's SDK-Q02
+  members): the management request path did not hand the response body to the error mapper, so a
+  `403` such as `{"action":"network:grant","resource_id":"…"}` reached the caller without them. It
+  does now.
+- **`network` in the declarative manifest** (§27.6.2): `ManagementManifest.network` with `policy`
+  (a singleton), `segments[]` (natural key site + kind + name, `kind` the wire spelling `access` or
+  `quarantine`) and `profiles[]` (natural key: its segment). `plan` reads `getPolicy`,
+  `listSegments` and `listProfiles` and nothing else for a manifest that states only `network`, and
+  judges every stated member on the value as read — a profile's effective (clamped) timeout, a
+  segment's `filter_ids` as a **set** (a reorder is `NoChange`; a name listed twice is refused at
+  `plan` and `apply` with zero wire calls). Actions are ordered policy, segments, profiles. An
+  `Update` is the version-conditional full replacement built from the read (an unstated member
+  carried, a stated `null` left out, no `kind`/`site_key`/`name`); a profile's `segment_version` is
+  the version of **this apply's** segment write when there was one. A stated timeout above the cap
+  is an `Update` whose `apply` the server refuses with `403`; `apply` reports it and stops. A `409`
+  is that action's failure and `failure(report).reasonCode` / `outcome.reasonCode` carry the code.
+  Nothing is retried or re-read. New targets: `network-policy`, `network-segment`,
+  `network-profile`. This SDK offers no pruning for any namespace, so none for `network`.
+- **`ssfStreamInputWith(stream, changes)`** (§32.2, contract 1.62 item (e)): the change-taking
+  read-modify-write form for `ssf.updateStream`. It applies `changes` over the read, sends
+  `events_requested` (`[]` as `[]`) and `expected_updated_at` **as read** — the stream's own
+  `updated_at` string, byte for byte — and **cuts `events_requested` to the new `events_allowed`**
+  when `changes` lowers the ceiling and does not name `events_requested`. `ssfStreamInputFrom`
+  remains.
+- **Device grant client authentication** (§14.1 rule 2, contract 1.62 item (m), the maintainer's
+  option (a) and the 2026-10-16 "same rules" reading): `deviceAuthorize` and every `devicePoll` send
+  the configured `clientSecret` as `client_secret` in the **form body** — never `Authorization:
+  Basic`, whatever the client is registered for — and a client with a §6.1 certificate presents it
+  (through the `mtls_endpoint_aliases` entry). A public client sends no credential and is not
+  refused client-side. The poll sends `client_id` on every poll. `private_key_jwt` client
+  authentication and DPoP proof generation are not implemented by this SDK.
+
+- **`Certificate.user_id`** (contract 1.61, §27.11 rule 5): optional and nullable on `Certificate`
+  and `GeneratedCertificate` — a UUID, `null` and an absent member all decode, the last two as "no
   account named", never coalesced or synthesised from `metadata` — and an optional request
   member on `certificates.generate` and `certificates.signCsr`, sent exactly as given and
   absent when unset (never `null`). The SDK does not judge it; the server answers `400`.
-- **`SsfStreamInput.expected_updated_at`** (§32.2, §32.3 rule 4): optional, sent exactly as the
-  stream's `updated_at` was read and absent when unset. A `409` on the update is a
+- **`SsfStreamInput.expected_updated_at`** (contract 1.61, §32.2, §32.3 rule 4): optional, sent
+  exactly as the stream's `updated_at` was read and absent when unset. A `409` on the update is a
   `ConflictError` and is not retried.
 
 ### Changed
 
-- **`ssfStreamInputFrom` sends `expected_updated_at`** — the read's `updated_at` — so a
-  read-modify-write of a stream written since (a receiver's pause or narrowing) answers `409`
+- **`/oauth2/device_authorization` is a `SKIP_REFRESH` url** (§14.2 rule 5): a `401
+  invalid_client` there is an `OAuthProtocolError`, made once, and does not enter the §9 refresh
+  guard even for a client whose session is authenticated (the poll's `/oauth2/token` already was).
+- **The `update_stream` documentation repeats the three meanings of `events_requested`** (§32.2,
+  item (h)): absent resets the stream to every event of `events_allowed`; `[]` is the receiver's
+  "none"; a list is stored as given and refused (`400`) outside `events_allowed`. The plain
+  converter `ssfStreamInputFrom` documents the caller's duty to cut `events_requested` when it
+  lowers `events_allowed`, and points at `ssfStreamInputWith`.
+- **The generator** types a required integer query parameter (the `version` of a conditional
+  `DELETE`) as a `number`, and forwards an optional filter that rides beside a `PageRequest`
+  (`listSegments`' `site`) through the auto-pager.
+- **A manifest that states only `network` reads only the network**, not the tenant's resources,
+  permissions, roles, groups and users: the namespace is human-only and has its own permissions.
+  Every manifest with another section reads exactly what it did before.
+- **`ssfStreamInputFrom` sends `expected_updated_at`** (contract 1.61) — the read's `updated_at` —
+  so a read-modify-write of a stream written since (a receiver's pause or narrowing) answers `409`
   instead of putting the old value back; delete it from the body for the previous
   last-writer-wins. It already sent `events_requested` as read; `[]` stays `[]` (§32.2: absent
   would reset the receiver's narrowing to every allowed event).
 
+### Verified, already holding
+
+- **The request `user_id` is an untyped string** (§27.11 rule 5, item (i)): it is
+  `string | null` on `CreateCertificateRequest` and `SignCertificateCsrRequest`, so a value that is
+  not a UUID reaches the server and its `400` is surfaced. Nothing changes here, and nothing is
+  source-breaking. The **response** `Certificate.user_id` stays `string | null | undefined`.
+- **`expected_updated_at` is the server's own string** (§32.2, item (g)): `SsfStream.updated_at` is
+  a `string`, never parsed, and both converters send it unchanged.
+
 ### Notes
 
-- `CibaPendingList.total_pending` and `truncated` (§33.3 rule 16) are not modelled: the type
-  belongs to a console route no operation returns and no SDK drives.
+- `CibaPendingList.total_pending` and `truncated` (contract 1.61, §33.3 rule 16; contract 1.62
+  item (d): "SDK work: no") are not modelled: the type belongs to a console route no operation
+  returns and no SDK drives.
 
 ## [1.0.0] - 2026-10-10
 

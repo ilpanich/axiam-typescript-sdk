@@ -20,14 +20,36 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to **contract 1.61**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
-§20, §21, §22, §23, §24, §25, §26, §27, §28, §28.12, §29, §30, §31, §32 and §33, with §32.7 and
-§33.2 signed (including §6.1 mTLS client certificates, the
+This SDK conforms to **contract 1.62**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
+§20, §21, §22, §23, §24, §25, §26, §27 (with §27.6.2), §28, §28.12, §29, §30, §31, §32, §33 and §36,
+with §32.7 and §33.2 signed (including §6.1 mTLS client certificates, the
 §10.1 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
 `verifyWebhook` signature verifier). §12 is implemented in full at its 1.38 shape: all
 **thirteen** operations, including the four public "Sign in with X" entry points.
 
-### Contract 1.61 — the 1.0.1 fields (§34.5)
+### Contract 1.62 — the 1.1.0 release (§34.6)
+
+Contract 1.62 accompanies the 1.1.0 platform release; this SDK's release of it is **1.1.0**
+(release 1.0.1 was never tagged, so contract 1.61 below ships in the same release). Every item of
+§34.6 that names TypeScript, and what this SDK does:
+
+| Item | Rule | What this SDK does |
+|---|---|---|
+| (l) the `network` namespace | §36 | `client.network`: twelve operations (202 in 29 namespaces in all) — `listSegments`/`listSegmentsAll`, `createSegment`, `getSegment`, `replaceSegment`, `deleteSegment(id, version)`, `listProfiles`/`listProfilesAll`, `createProfile`, `getProfile`, `replaceProfile`, `deleteProfile(segmentId, version)`, `getPolicy`, `replacePolicy`. Every write carries the version you read, exactly as given, and is never retried; a `409` is a `ConflictError` whose `reasonCode` is the body's `reason_code`; a `403` is an `AuthzError` carrying `action` and `resourceId`. The decision route `POST /network/decide` is not SDK work and has no method. |
+| (n), (u), (v), (w) `network` in a manifest | §27.6.2 | `ManagementManifest.network` — `policy`, `segments[]` (key: site + kind + name, `kind` the wire spelling `access`/`quarantine`), `profiles[]` (key: its segment). Ordered policy, segments, profiles; drift judged on the read (a clamped timeout, `filterIds` as a set); duplicate natural keys and a repeated Filter-Id refused at `plan` with zero wire calls; `Update`s are version-conditional full replacements; a `409` stops the apply and `failure(report).reasonCode` names it. **No pruning**: like every namespace here, `network` is never deleted from. |
+| (e) the change-taking form | §32.2 | `ssfStreamInputWith(stream, changes)` sends `events_requested` and `expected_updated_at` as read and cuts `events_requested` to a lowered `events_allowed`. `ssfStreamInputFrom` stays, and its documentation names the caller's duty. |
+| (f) an assigned `null` is "none" | §27.11 rule 5, §32.2 | `user_id` on `certificates.generate`/`signCsr` and `expected_updated_at` on `ssf` and `scimTargets` writes: a `null` is dropped from the body, never sent. |
+| (g) `expected_updated_at` is the server's string | §32.2 | Already held: `SsfStream.updated_at` is the response's own string and both converters send it unchanged. |
+| (h) the three meanings at the call site | §32.2 | The TSDoc of `ssf.updateStream` states them. |
+| (i) the request `user_id` is an untyped string | §27.11 rule 5 | Already held: `user_id?: string \| null` on both requests; the response `Certificate.user_id` stays as it was. |
+| (m), (t) the device grant authenticates its client | §14.1 rule 2 | `deviceAuthorize` and each `devicePoll` send a configured `clientSecret` as `client_secret` in the form body (never `Authorization: Basic`) and an mTLS client presents its certificate; a public client sends none and is not refused; the poll sends `client_id`; a `401 invalid_client` is an `OAuthProtocolError`, made once, outside the §9 refresh guard. `private_key_jwt` client authentication and DPoP proof generation are not implemented by this SDK. |
+| (a)–(d), (k), (p)–(s) | | Informative or no SDK work: nothing to do (`CibaPendingList` stays unmodelled). |
+
+**SemVer.** A contract record may add a member or widen a type in a **minor** release; a removal
+waits for **2.0.0**. 1.1.0 is a minor release: the one source-level break it records (the manifest
+`Target` union gains three members) is of the additive kind, and it is named in the CHANGELOG.
+
+### Contract 1.61 — the 1.0.1 fields (§34.5), released in 1.1.0
 
 Contract 1.61 is additive and clarifying: no route, no operation, one new optional member on
 each of three models, and rules about what a read-modify-write sends. What changed here:
@@ -85,7 +107,7 @@ throws the failure (the first form's outcome).
 | §28.12 RFC 7592 client configuration (1.53) | `readClientRegistration`, `updateClientRegistration`, `deleteClientRegistration`, `ClientRegistration` | `AxiamClient` (see [below](#rfc-7592-client-configuration-contract-153-2812)) |
 | §30 directory configuration (1.54) | the `directory` namespace, explicit-`null` sparse update, `setDirectoryConfigFrom` | `client.directory` |
 | §29 SAML service-provider registration (1.55) | the `saml` namespace, `parseSpMetadataFromUrl` / `FromXml`, `samlServiceProviderInputFrom` | `client.saml` |
-| §32 SSF stream registration (1.56) | the `ssf` namespace, `ssfStreamInputFrom` | `client.ssf` |
+| §32 SSF stream registration (1.56) | the `ssf` namespace, `ssfStreamInputFrom`, `ssfStreamInputWith` (1.62) | `client.ssf` |
 | §32.7 SSF receiver helper (1.56) | `SsfReceiver.verifySet` / `.poll` | `axiam-sdk/node` |
 | §31 outbound SCIM targets (1.57) | the `scim_targets` namespace, `scimTargetInputFrom` | `client.scimTargets` |
 | §33 CIBA, and §33.2's signed form (1.58) | `cibaInitiate`, `cibaPoll`, `cibaAwait`, `cibaHandlePing`, `CibaRequestSigner` (PS256, ES256, EdDSA) | `OidcClient` (`axiam-sdk/node`) |
@@ -121,7 +143,7 @@ browser bundle pulls in no Node-only code. §12.2 forbids splitting them across 
 the four operations contract 1.38 adds are on `OidcClient` too, with the nine that preceded
 them, even though three of them need no Node-only code at all.
 
-§27 is implemented **in full**, both halves: the 190-operation imperative surface *and*
+§27 is implemented **in full**, both halves: the 202-operation imperative surface *and*
 the §27.6 declarative manifest with its §27.7 `defineManifest` and decorator forms. The
 contract asks an SDK that ships only one half to say which; this one ships both.
 
@@ -193,11 +215,13 @@ See [`CONTRACT.md`](./CONTRACT.md) for the full cross-language behavioral contra
 ## Install
 
 ```bash
-npm install axiam-sdk@^1.0.0
+npm install axiam-sdk@^1.1.0
 ```
 
 From 1.0.0 the SDK is stable and follows semantic versioning: a breaking change to its
-public API waits for the next major version. Releases are published on npm's `latest`
+public API waits for the next major version. A contract record may add a member or widen a
+type in a **minor** release (a new management namespace, an optional request member, a wider
+union); **a removal waits for 2.0.0**. Releases are published on npm's `latest`
 dist-tag, so a bare `npm install axiam-sdk` resolves the newest one.
 
 ## Supported Node versions
@@ -2233,7 +2257,8 @@ contract makes an SDK repeat in their TSDoc. Every write is issued once; reads r
 
 ```ts
 import { Sensitive, setDirectoryConfigFrom, parseSpMetadataFromUrl,
-         samlServiceProviderInputFrom, ssfStreamInputFrom, scimTargetInputFrom } from 'axiam-sdk';
+         samlServiceProviderInputFrom, ssfStreamInputFrom, ssfStreamInputWith,
+         scimTargetInputFrom } from 'axiam-sdk';
 
 // §30 directory — a sparse update: undefined keeps, null CLEARS.
 await client.directory.update({ group_filter: null });           // sends {"group_filter":null}
@@ -2254,6 +2279,10 @@ await client.saml.updateServiceProvider(sp.id, { ...body, display_name: 'Payroll
 // §32 SSF and §31 SCIM targets — read-modify-write; the secret is left absent (kept).
 const stream = ssfStreamInputFrom(await client.ssf.getStream(streamId));
 await client.ssf.updateStream(streamId, { ...stream, description: 'rotated' });
+// Lowering events_allowed? The change-taking form cuts events_requested for you (§32.2, 1.62),
+// and sends events_requested and expected_updated_at exactly as read.
+const read = await client.ssf.getStream(streamId);
+await client.ssf.updateStream(streamId, ssfStreamInputWith(read, { events_allowed: [onlyThisOne] }));
 const target = scimTargetInputFrom(await client.scimTargets.get(targetId));
 await client.scimTargets.update(targetId, { ...target, push_groups: true });
 ```
@@ -2266,6 +2295,13 @@ await client.scimTargets.update(targetId, { ...target, push_groups: true });
 - Enums and the `ScimTargetAuth` / `ScimTargetScope` unions are open: an unknown value
   decodes. An unknown `auth.type` / `scope.type` is refused before it is sent back.
 - `getIdp` is never cached: readiness changes with every credential write.
+- **`events_requested` has three meanings on an update** (§32.2): absent *resets* the stream
+  to every event of `events_allowed`; `[]` is stored as the receiver's "none"; a list is
+  stored as given and refused (`400`) outside `events_allowed`. `ssfStreamInputFrom` sends the
+  list it read — cutting it to a lowered `events_allowed` is then your duty;
+  `ssfStreamInputWith(stream, changes)` does the cut.
+- An assigned `null` is "none" for `user_id` (certificate requests) and `expected_updated_at`
+  (`ssf`, `scimTargets`): the key is omitted and `null` is never sent (§27.11 rule 5).
 
 ## SSF receiver (`axiam-sdk/node`, contract 1.56, §32.7)
 
@@ -2504,7 +2540,7 @@ entries are keyed by subject rather than by session.
 Everything above assumes a populated tenant. `login` signs a user in,
 `checkAccess` asks about a resource, `verifyWebhook` checks a delivery signature — and
 none of them can create the user, declare the resource or register the webhook. The
-management surface is the part that can: **190 operations across 28 namespaces**,
+management surface is the part that can: **202 operations across 29 namespaces**,
 generated from `management-registry.json`, which is the whole server API minus what other
 contract sections own and minus organization creation and deletion (§27.0 keeps those out
 of reach of a client library on purpose).
@@ -2615,7 +2651,7 @@ back.
 
 ### Declarative manifests (§27.6, §27.7)
 
-Calling 190 operations one at a time is rarely what an application wants. What it does at
+Calling 202 operations one at a time is rarely what an application wants. What it does at
 start-up, in a migration, or in a test fixture is assert a shape:
 
 ```ts
@@ -2653,7 +2689,7 @@ actions that would reconcile the tenant.
   a tenant that also holds hand-made state.
 - **Applying twice converges**: the second plan is all `no-change`. That is what makes
   re-running after a failure safe.
-- **There is no transaction** across 160 independent HTTP endpoints, and `ApplyReport` does
+- **There is no transaction** across 202 independent HTTP endpoints, and `ApplyReport` does
   not pretend there is. If step 12 of 30 fails, steps 1–11 have happened; the report says
   which, execution stops rather than continuing blindly, and there is no `rollback` —
   because this SDK could not honour one.
@@ -2724,6 +2760,37 @@ enables neither — so these are dual-protocol plain functions that work under b
 under neither: `AxiamResource(spec)(Documents)` is exactly what the `@` syntax desugars to.
 
 `@AxiamServiceAccount({ key, name, roles })` (contract 1.51) joins the set the same way.
+
+#### The `network` namespace in a manifest (§27.6.2, contract 1.62)
+
+```ts
+const desired = defineManifest({
+  network: {
+    policy: { sessionTimeoutMaxSecs: 7200 },                    // a singleton: the tenant's cap
+    segments: [
+      { key: 'staff', site: 'hq', kind: 'access', name: 'staff', vlanId: 20, rank: 1,
+        filterIds: ['acl-a', 'acl-b'] },
+    ],
+    profiles: [{ segment: 'staff', sessionTimeoutSecs: 3600, filterId: 'acl-a' }],
+  },
+});
+const report = await client.manifest.apply(desired);
+const failed = failure(report);        // failed?.reasonCode: 'stale_version', 'duplicate_vlan', …
+```
+
+- A segment is keyed by **site + kind + name**, `kind` being the wire spelling (`access` or
+  `quarantine`); a profile by **its segment**; the policy is a singleton. The order is policy,
+  segments, profiles. The namespace is human-only: a service-account token meets `401`.
+- Every stated member is compared with the value **as the read returns it**: a profile's
+  effective (clamped) timeout, and `filterIds` as a *set* (a reorder is `no-change`; a name
+  listed twice is refused by `plan` and `apply` with no request made). A timeout stated above
+  the tenant's cap is an `update` the server refuses with `403`; `apply` reports it and stops.
+- An `update` is a full, version-conditional replacement built from the read: members you
+  did not state are carried, a stated `null` is left out, and a profile's `segment_version`
+  is the version of this apply's own segment write when there was one. Nothing is retried or
+  re-read: a `409` is that action's failure, and `outcome.reasonCode` names it.
+- **No pruning.** As for every other namespace here, `apply` never deletes; this SDK has no
+  prune option for `network` either (§27.10).
 
 ### Examples
 
