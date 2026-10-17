@@ -103,6 +103,12 @@ The first is a source-level break; the other two change what a call sends.
   `device_authorize`, `device_poll` and the token requests included. It now rides none of them
   (the session cookie stays out as before); the RFC 7591/7592 registration token the caller passes
   to one call is unchanged.
+- **Re-vendored `openapi.json` and `management-registry.json` from axiam `e8722b668`** (release PR
+  #716, the atomicity-race fixes): the spec documents the `409` responses (and `403`/`404` on the
+  account-deletion cancel) the server gained; digest
+  `sha256:7c3a5091d9d515b1aa3e157e74d342faf64a2c88e735f3c873b66951b3fac8a1`. `CONTRACT.md` and
+  `proto/` are unchanged, the generated management surface is unchanged
+  (`node scripts/gen-management.mjs --check` is clean), and no source changed.
 - **`/oauth2/device_authorization` is a `SKIP_REFRESH` url** (§14.2 rule 5): a `401
   invalid_client` there is an `OAuthProtocolError`, made once, and does not enter the §9 refresh
   guard even for a client whose session is authenticated (the poll's `/oauth2/token` already was).
