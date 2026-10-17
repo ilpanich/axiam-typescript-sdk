@@ -86,18 +86,29 @@ export function samlServiceProviderInputFrom(sp: SamlServiceProvider): SamlServi
 }
 
 /**
- * Read-modify-write for `ssf.updateStream` (§32.2). `authorization_header` is
- * left absent — absent keeps the stored header (unless the update moves
- * `endpoint_url` to another origin, §32.3 rule 5) — and so is
+ * Read-modify-write for `ssf.updateStream` (§32.2): the **plain converter**.
+ * `authorization_header` is left absent — absent keeps the stored header (unless
+ * the update moves `endpoint_url` to another origin, §32.3 rule 5) — and so is
  * `clear_authorization_header`.
  *
  * `events_requested` is always sent, as read — `[]` stays `[]`, because omitting
  * it would reset a receiver's narrowing to every allowed event — and
- * `expected_updated_at` is the `updated_at` of the read, verbatim (contract
- * 1.61, §32.2): the replacement lands only if nobody wrote the stream since,
- * else `409` — reload, then retry. Delete it from the body to fall back to the
- * server's version-at-request. An edit that lowers `events_allowed` must cut
- * `events_requested` to the new ceiling itself.
+ * `expected_updated_at` is the `updated_at` of the read, **the server's own
+ * string** (contract 1.61, 1.62, §32.2): the replacement lands only if nobody
+ * wrote the stream since, else `409` — reload, then retry. Delete it from the
+ * body to fall back to the server's version-at-request.
+ *
+ * **The caller's duty (contract 1.62, §32.2).** This function cannot know that
+ * you are about to lower `events_allowed`, so it does not cut
+ * `events_requested`: if you lower the ceiling on the result you MUST cut
+ * `events_requested` to the new `events_allowed` yourself, or the server answers
+ * `400` for a request outside the ceiling. Remember the three meanings of
+ * `events_requested` on an update — **absent** resets the stream to every event
+ * of `events_allowed` (widening what the receiver narrowed), **`[]`** is stored
+ * as the receiver's "none", a list is stored as given and refused (`400`)
+ * outside `events_allowed` — and that a stream written since you read it
+ * (the receiver included) is `409`. {@link ssfStreamInputWith} is the form that
+ * takes the changes and does the cut for you.
  */
 export function ssfStreamInputFrom(stream: SsfStream): SsfStreamInput {
   return {
@@ -113,6 +124,60 @@ export function ssfStreamInputFrom(stream: SsfStream): SsfStreamInput {
     status_reason: stream.status_reason ?? null,
     subject_format: stream.subject_format,
   };
+}
+
+/**
+ * The **change-taking** read-modify-write form for `ssf.updateStream`
+ * (contract 1.62, §32.2): `(stream, changes) → SsfStreamInput`.
+ *
+ * It applies `changes` over what was read and returns the replacement body:
+ *
+ * - `events_requested` and `expected_updated_at` are sent **as read** — an `[]`
+ *   stays `[]`, and the timestamp is the stream's own `updated_at` string, byte
+ *   for byte, never re-rendered — so the replacement lands only on the version
+ *   you read (a write made since, the receiver's included, is `409`: reload,
+ *   then retry) and a receiver's narrowing is not widened.
+ * - When `changes` names `events_allowed` and not `events_requested`,
+ *   `events_requested` is **cut to the new `events_allowed`**: the entries of
+ *   the read list that are in the new ceiling, in their order. An
+ *   `events_requested` named in `changes` is sent as given — the server judges
+ *   it (`400` outside `events_allowed`).
+ *
+ * The three meanings of `events_requested` on an update still hold for what you
+ * name: **absent** resets the stream to every event of `events_allowed`, **`[]`**
+ * is stored as the receiver's "none", a list is stored as given. To reset
+ * deliberately, name `events_requested: null` — the key is then left out of the
+ * body. Likewise `expected_updated_at: null` is "none": the key is left out and
+ * the replacement is conditional only on the version the server reads during the
+ * request. A member of `changes` whose value is `undefined` is not a change.
+ *
+ * `authorization_header` and `clear_authorization_header` are left absent unless
+ * `changes` names them (absent keeps the stored header, §32.3 rule 5).
+ *
+ * @param stream - The stream as `ssf.getStream` returned it.
+ * @param changes - The members to change, applied over the read.
+ */
+export function ssfStreamInputWith(
+  stream: SsfStream,
+  changes: Partial<SsfStreamInput> = {},
+): SsfStreamInput {
+  const body: SsfStreamInput = ssfStreamInputFrom(stream);
+  const named = Object.entries(changes).filter(([, v]) => v !== undefined);
+  const record = body as unknown as Record<string, unknown>;
+  for (const [key, value] of named) record[key] = value;
+
+  const names = new Set(named.map(([key]) => key));
+  if (names.has('events_allowed') && !names.has('events_requested')) {
+    const ceiling = new Set<string>(body.events_allowed);
+    body.events_requested = (stream.events_requested as string[]).filter((e) =>
+      ceiling.has(e),
+    ) as SsfStreamInput['events_requested'];
+  }
+  // An assigned null is "none" (§27.11 rule 5): the key is left out, which for
+  // `events_requested` is the reset the caller named.
+  if (body.events_requested === null) delete body.events_requested;
+  if (body.expected_updated_at === null) delete body.expected_updated_at;
+  return body;
 }
 
 /**

@@ -138,7 +138,15 @@ function mapManagementError(operation: string, err: unknown): unknown {
     );
   }
   if (status === 409) {
-    return new ConflictError(operation, `${operation}: conflict${detail}`);
+    // §36.4: a `409` of the `network` operations names its sub-code in
+    // `reason_code`. Any string is surfaced as the server spelled it (the
+    // vocabulary is open, §36.3 rule 2); a body without one leaves it unset.
+    const code = (body as { reason_code?: unknown } | null | undefined)?.reason_code;
+    return new ConflictError(
+      operation,
+      `${operation}: conflict${detail}`,
+      typeof code === 'string' ? code : undefined,
+    );
   }
   if (status === 400 || status === 422) {
     return new ValidationError(
@@ -148,7 +156,9 @@ function mapManagementError(operation: string, err: unknown): unknown {
       parseFieldErrors(body),
     );
   }
-  return mapHttpStatusToError(status, `${operation}${detail}`, { cause: err });
+  // The body rides along so a `403` surfaces the `action` and `resource_id` the
+  // server named (§2's SDK-Q02 members; §36.3 rule 1) on the `AuthzError`.
+  return mapHttpStatusToError(status, `${operation}${detail}`, { cause: err, body });
 }
 
 function describe(body: unknown): string {

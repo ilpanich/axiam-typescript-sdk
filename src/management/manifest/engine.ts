@@ -3,6 +3,7 @@
  */
 
 import { NetworkError } from '../../core/errors.js';
+import { ConflictError } from '../errors.js';
 import type { Sensitive } from '../../core/sensitive.js';
 import type { AxiamClient } from '../../rest/client.js';
 import * as models from '../models.js';
@@ -19,6 +20,8 @@ import {
   resourceKeyOf,
   roleKeyOf,
   type ManagementManifest,
+  type NetworkProfileSpec,
+  type NetworkSegmentSpec,
   type ResourceSpec,
   type RoleBinding,
 } from './spec.js';
@@ -35,6 +38,14 @@ interface Resolved {
   groups: Map<string, string>;
   users: Map<string, string>;
   serviceAccounts: Map<string, string>;
+  /** Network segment key -> id (§27.6.2 item 4: a new segment's id comes from its create response). */
+  segments: Map<string, string>;
+  /**
+   * Network segment key -> the `version` a profile write must send as
+   * `segment_version`: the read's at plan time, replaced by the response of
+   * this apply's own `create_segment` / `replace_segment` (§27.6.2 item 4).
+   */
+  segmentVersions: Map<string, number>;
 }
 
 const emptyResolved = (): Resolved => ({
@@ -45,6 +56,8 @@ const emptyResolved = (): Resolved => ({
   groups: new Map(),
   users: new Map(),
   serviceAccounts: new Map(),
+  segments: new Map(),
+  segmentVersions: new Map(),
 });
 
 /** Which kind of subject a role-binding step acts on — one set of step kinds serves all three (§27.6.1 item 2). */
@@ -87,6 +100,22 @@ type Step =
   | { kind: 'add-group-member'; group: string; user: string }
   | { kind: 'create-service-account'; key: string; name: string; description?: string }
   | { kind: 'update-service-account'; key: string; description: string }
+  | { kind: 'update-network-policy'; body: models.ReplaceNetworkPolicyRequest }
+  | { kind: 'create-network-segment'; key: string; body: models.CreateNetworkSegmentRequest }
+  | {
+      kind: 'update-network-segment';
+      key: string;
+      id: string;
+      body: models.ReplaceNetworkSegmentRequest;
+    }
+  | { kind: 'create-network-profile'; segment: string; profile: models.NetworkReplyProfileInput }
+  | {
+      kind: 'update-network-profile';
+      segment: string;
+      /** The profile's `version` as `plan` read it. */
+      version: number;
+      profile: models.NetworkReplyProfileInput;
+    }
   | {
       /** A role bound to a subject the server does not yet hold — §27.6.1 item 2's `Create`. */
       kind: 'assign-role';
@@ -128,6 +157,13 @@ interface Snapshot {
   /** Role id -> existing binding, per subject id (service accounts). */
   roleServiceAccountBindings: Map<string, Map<string, ExistingBinding>>;
   groupMembers: Map<string, string[]>;
+  /** Present only when the manifest has a `network` section (§27.6.2 item 3). */
+  network?: {
+    policy?: models.NetworkPolicyResponse;
+    segments: models.NetworkSegmentResponse[];
+    /** Profile per owning segment id. */
+    profiles: Map<string, models.NetworkReplyProfile>;
+  };
 }
 
 /** The declarative-management handle, reached as `client.manifest`. */
@@ -167,6 +203,28 @@ export class ManifestApi {
   async #read(manifest: ManagementManifest): Promise<Snapshot> {
     const c = this.#client;
     const start = { limit: PLAN_PAGE };
+    // A manifest that states only `network` (contract 1.62, §27.6.2) reads only
+    // the network: the tenant-shape reads below are for specs it does not have,
+    // and the namespace is human-only with its own permissions, so a caller who
+    // may administer segments need not be allowed to list users to plan them.
+    // Every manifest with any other section reads exactly what it read before.
+    if (manifest.network !== undefined && !hasShapeSections(manifest)) {
+      return {
+        resources: [],
+        scopes: new Map(),
+        permissions: [],
+        roles: [],
+        groups: [],
+        users: [],
+        serviceAccounts: [],
+        roleGrants: new Map(),
+        roleUserBindings: new Map(),
+        roleGroupBindings: new Map(),
+        roleServiceAccountBindings: new Map(),
+        groupMembers: new Map(),
+        network: await this.#readNetwork(manifest.network, start),
+      };
+    }
     const resources = await c.resources.listAll(start);
     const permissions = await c.permissions.listAll(start);
     const roles = await c.roles.listAll(start);
@@ -230,7 +288,31 @@ export class ManifestApi {
       roleGroupBindings,
       roleServiceAccountBindings,
       groupMembers,
+      network: manifest.network ? await this.#readNetwork(manifest.network, start) : undefined,
     };
+  }
+
+  /**
+   * §27.6.2 item 3: `get_policy`, `list_segments` and `list_profiles`, each
+   * list walked to exhaustion, and nothing else — `plan` issues `GET`s only.
+   * A section that states no policy does not read it; one that states no
+   * profile does not list them.
+   */
+  async #readNetwork(
+    spec: NonNullable<ManagementManifest['network']>,
+    start: { limit: number },
+  ): Promise<NonNullable<Snapshot['network']>> {
+    const c = this.#client;
+    const policy = spec.policy ? await c.network.getPolicy() : undefined;
+    const wantSegments = (spec.segments ?? []).length > 0 || (spec.profiles ?? []).length > 0;
+    const segments = wantSegments ? await c.network.listSegmentsAll(undefined, start) : [];
+    const profiles = new Map<string, models.NetworkReplyProfile>();
+    if ((spec.profiles ?? []).length) {
+      for (const profile of await c.network.listProfilesAll(start)) {
+        profiles.set(profile.segment_id, profile);
+      }
+    }
+    return { policy, segments, profiles };
   }
 
   // -------------------------------------------------------------------
@@ -559,7 +641,113 @@ export class ManifestApi {
       );
     }
 
+    if (manifest.network && snapshot.network) {
+      this.#networkSteps(manifest.network, snapshot.network, resolved, push);
+    }
+
     return out;
+  }
+
+  /**
+   * §27.6.2 — the `network` section: the policy, then the segments, then the
+   * profiles, a profile after its segment (item 2). Every comparison is with
+   * the value **as the read returns it** (item 3): a profile's effective
+   * (clamped) `session_timeout_secs`, a segment's `filter_ids` as a set.
+   * Silence is not an assertion (rule 3): a member left off never drifts, and
+   * the `Update` body carries the read's value for it (item 4).
+   */
+  #networkSteps(
+    spec: NonNullable<ManagementManifest['network']>,
+    read: NonNullable<Snapshot['network']>,
+    resolved: Resolved,
+    push: (change: PlannedAction['change'], target: Target, key: string, summary: string, step: Step) => void,
+  ): void {
+    if (spec.policy) {
+      // The tenant's policy always exists (the default, version 0, until it
+      // first writes one), so it is never `Create`.
+      const current = read.policy as models.NetworkPolicyResponse;
+      const drifted = current.session_timeout_max_secs !== spec.policy.sessionTimeoutMaxSecs;
+      push(
+        drifted ? 'update' : 'no-change',
+        'network-policy',
+        'network.policy',
+        'network policy (Session-Timeout cap)',
+        drifted
+          ? {
+              kind: 'update-network-policy',
+              body: {
+                session_timeout_max_secs: spec.policy.sessionTimeoutMaxSecs,
+                version: current.version,
+              },
+            }
+          : { kind: 'noop' },
+      );
+    }
+
+    const segments = spec.segments ?? [];
+    for (const segment of segments) {
+      const found = read.segments.find(
+        (r) => r.site_key === segment.site && r.kind === segment.kind && r.name === segment.name,
+      );
+      const summary = `network segment ${JSON.stringify(`${segment.site}/${segment.kind}/${segment.name}`)}`;
+      if (!found) {
+        push('create', 'network-segment', segment.key, summary, {
+          kind: 'create-network-segment',
+          key: segment.key,
+          body: segmentCreateBody(segment),
+        });
+        continue;
+      }
+      resolved.segments.set(segment.key, found.id);
+      resolved.segmentVersions.set(segment.key, found.version);
+      const drifted = segmentDrifted(segment, found);
+      push(
+        drifted ? 'update' : 'no-change',
+        'network-segment',
+        segment.key,
+        summary,
+        drifted
+          ? {
+              kind: 'update-network-segment',
+              key: segment.key,
+              id: found.id,
+              body: segmentReplaceBody(segment, found),
+            }
+          : { kind: 'noop' },
+      );
+    }
+
+    const bySegment = new Map((spec.profiles ?? []).map((p) => [p.segment, p] as const));
+    for (const segment of segments) {
+      const profile = bySegment.get(segment.key);
+      if (!profile) continue;
+      const segmentId = resolved.segments.get(segment.key);
+      const found = segmentId ? read.profiles.get(segmentId) : undefined;
+      const summary = `network profile of ${JSON.stringify(`${segment.site}/${segment.kind}/${segment.name}`)}`;
+      if (!found) {
+        push('create', 'network-profile', segment.key, summary, {
+          kind: 'create-network-profile',
+          segment: segment.key,
+          profile: profileCreateInput(profile),
+        });
+        continue;
+      }
+      const drifted = profileDrifted(profile, found);
+      push(
+        drifted ? 'update' : 'no-change',
+        'network-profile',
+        segment.key,
+        summary,
+        drifted
+          ? {
+              kind: 'update-network-profile',
+              segment: segment.key,
+              version: found.version,
+              profile: profileReplaceInput(profile, found),
+            }
+          : { kind: 'noop' },
+      );
+    }
   }
 
   /**
@@ -663,9 +851,16 @@ export class ManifestApi {
         }
       } catch (err) {
         stopped = true;
+        // §27.6.2 item 5: a `409` is that action's failure and exposes its
+        // `reason_code`, so a caller branches on it rather than on `message`.
+        const reasonCode = err instanceof ConflictError ? err.reasonCode : undefined;
         out.push({
           action,
-          outcome: { status: 'failed', message: err instanceof Error ? err.message : String(err) },
+          outcome: {
+            status: 'failed',
+            message: err instanceof Error ? err.message : String(err),
+            ...(reasonCode === undefined ? {} : { reasonCode }),
+          },
         });
       }
     }
@@ -775,6 +970,36 @@ export class ManifestApi {
       case 'update-service-account':
         await c.serviceAccounts.update(lookup(resolved.serviceAccounts, step.key, 'service account'), {
           description: step.description,
+        });
+        return undefined;
+      case 'update-network-policy':
+        await c.network.replacePolicy(step.body);
+        return undefined;
+      case 'create-network-segment': {
+        const created = await c.network.createSegment(step.body);
+        // §27.6.2 item 4: the new segment's id, and the version a profile
+        // written next must send as `segment_version`, come from this response.
+        resolved.segments.set(step.key, created.id);
+        resolved.segmentVersions.set(step.key, created.version);
+        return undefined;
+      }
+      case 'update-network-segment': {
+        const replaced = await c.network.replaceSegment(step.id, step.body);
+        resolved.segmentVersions.set(step.key, replaced.version);
+        return undefined;
+      }
+      case 'create-network-profile':
+        await c.network.createProfile({
+          segment_id: lookup(resolved.segments, step.segment, 'network segment'),
+          segment_version: lookupVersion(resolved.segmentVersions, step.segment),
+          profile: step.profile,
+        });
+        return undefined;
+      case 'update-network-profile':
+        await c.network.replaceProfile(lookup(resolved.segments, step.segment, 'network segment'), {
+          version: step.version,
+          segment_version: lookupVersion(resolved.segmentVersions, step.segment),
+          profile: step.profile,
         });
         return undefined;
       case 'assign-role':
@@ -937,6 +1162,136 @@ function lookup(map: Map<string, string>, key: string, kind: string): string {
     );
   }
   return id;
+}
+
+/** Whether the manifest states any section other than `network`. */
+function hasShapeSections(manifest: ManagementManifest): boolean {
+  return [
+    manifest.resources,
+    manifest.permissions,
+    manifest.roles,
+    manifest.groups,
+    manifest.users,
+    manifest.serviceAccounts,
+  ].some((section) => (section ?? []).length > 0);
+}
+
+function lookupVersion(map: Map<string, number>, key: string): number {
+  const version = map.get(key);
+  if (version === undefined) {
+    throw new NetworkError(
+      `internal: network segment key ${JSON.stringify(key)} has no version; its segment write did not run`,
+    );
+  }
+  return version;
+}
+
+// ---------------------------------------------------------------------------
+// The `network` section (CONTRACT.md §27.6.2)
+// ---------------------------------------------------------------------------
+
+/** Whether two Filter-Id lists hold the same names, order aside (§27.6.2 item 3). */
+function sameSet(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  const left = new Set(a);
+  return left.size === new Set(b).size && b.every((name) => left.has(name));
+}
+
+/** A stated optional member against a read that may hold `null` or nothing: `null` is "none". */
+function sameOptional<T>(stated: T | null, read: T | null | undefined): boolean {
+  return (stated ?? null) === (read ?? null);
+}
+
+/** `create_segment`: the stated members only, `filter_ids` in the stated order. */
+function segmentCreateBody(spec: NetworkSegmentSpec): models.CreateNetworkSegmentRequest {
+  const body: models.CreateNetworkSegmentRequest = {
+    kind: spec.kind,
+    site_key: spec.site,
+    name: spec.name,
+    vlan_id: spec.vlanId,
+  };
+  if (spec.filterIds !== undefined) body.filter_ids = [...spec.filterIds];
+  if (spec.rank !== undefined && spec.rank !== null) body.rank = spec.rank;
+  if (spec.enabled !== undefined) body.enabled = spec.enabled;
+  return body;
+}
+
+/** Whether any member the segment spec *states* differs from the read (kind, site and name are the key). */
+function segmentDrifted(spec: NetworkSegmentSpec, read: models.NetworkSegmentResponse): boolean {
+  if (spec.vlanId !== read.vlan_id) return true;
+  if (spec.rank !== undefined && !sameOptional(spec.rank, read.rank)) return true;
+  if (spec.enabled !== undefined && spec.enabled !== read.enabled) return true;
+  if (spec.filterIds !== undefined && !sameSet(spec.filterIds, read.filter_ids)) return true;
+  return false;
+}
+
+/**
+ * `replace_segment`: the **full** replacement built from the read (item 4).
+ * Every stated member replaces the read's, every unstated one is carried, a
+ * stated `null` is left out, and there is no `kind`, `site_key` or `name`.
+ * `version` is the one `plan` read, exactly.
+ */
+function segmentReplaceBody(
+  spec: NetworkSegmentSpec,
+  read: models.NetworkSegmentResponse,
+): models.ReplaceNetworkSegmentRequest {
+  const body: models.ReplaceNetworkSegmentRequest = {
+    version: read.version,
+    vlan_id: spec.vlanId,
+    filter_ids: [...(spec.filterIds ?? read.filter_ids)],
+    enabled: spec.enabled ?? read.enabled,
+  };
+  const rank = spec.rank === undefined ? read.rank : spec.rank;
+  if (rank !== undefined && rank !== null) body.rank = rank;
+  return body;
+}
+
+/** `create_profile`'s `profile`: the stated members; the VLAN is the segment's and is never here. */
+function profileCreateInput(spec: NetworkProfileSpec): models.NetworkReplyProfileInput {
+  const profile: models.NetworkReplyProfileInput = { session_timeout_secs: spec.sessionTimeoutSecs };
+  if (spec.terminationAction != null) profile.termination_action = spec.terminationAction;
+  if (spec.idleTimeoutSecs != null) profile.idle_timeout_secs = spec.idleTimeoutSecs;
+  if (spec.filterId != null) profile.filter_id = spec.filterId;
+  if (spec.serviceType != null) profile.service_type = spec.serviceType;
+  return profile;
+}
+
+/** Whether any stated member differs from the **effective** profile the read returned (item 3). */
+function profileDrifted(spec: NetworkProfileSpec, read: models.NetworkReplyProfile): boolean {
+  if (spec.sessionTimeoutSecs !== read.session_timeout_secs) return true;
+  if (spec.terminationAction !== undefined && spec.terminationAction !== null
+    && spec.terminationAction !== read.termination_action) return true;
+  if (spec.idleTimeoutSecs !== undefined && !sameOptional(spec.idleTimeoutSecs, read.idle_timeout_secs)) return true;
+  if (spec.filterId !== undefined && !sameOptional(spec.filterId, read.filter_id)) return true;
+  if (spec.serviceType !== undefined && !sameOptional(spec.serviceType, read.service_type)) return true;
+  return false;
+}
+
+/**
+ * `replace_profile`'s `profile`: the stated members over the read's. A stated
+ * `null` is "none" and the key is left out; an unstated member is carried from
+ * the read (a replacement would otherwise clear it), and the carried
+ * `session_timeout_secs` is the read's *effective* value, so an `Update` of a
+ * clamped profile that does not state its timeout stores the clamped value from
+ * then on (§36.3 rule 6).
+ */
+function profileReplaceInput(
+  spec: NetworkProfileSpec,
+  read: models.NetworkReplyProfile,
+): models.NetworkReplyProfileInput {
+  const profile: models.NetworkReplyProfileInput = {
+    dictionary: read.dictionary,
+    session_timeout_secs: spec.sessionTimeoutSecs,
+  };
+  const termination = spec.terminationAction === undefined ? read.termination_action : spec.terminationAction;
+  if (termination != null) profile.termination_action = termination;
+  const idle = spec.idleTimeoutSecs === undefined ? read.idle_timeout_secs : spec.idleTimeoutSecs;
+  if (idle != null) profile.idle_timeout_secs = idle;
+  const filter = spec.filterId === undefined ? read.filter_id : spec.filterId;
+  if (filter != null) profile.filter_id = filter;
+  const serviceType = spec.serviceType === undefined ? read.service_type : spec.serviceType;
+  if (serviceType != null) profile.service_type = serviceType;
+  return profile;
 }
 
 /**

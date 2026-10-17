@@ -36,6 +36,12 @@ export const SKIP_REFRESH = [
   // regardless of what session state came before it.
   '/api/v1/auth/device',
   '/oauth2/token',
+  // CONTRACT.md §14.2 rule 5 (contract 1.62): a client that fails to
+  // authenticate at the device endpoints is `401 invalid_client`, which is not
+  // an expired session and which refreshing cannot fix. `/oauth2/token` (the
+  // poll) was already here; the authorization endpoint now authenticates the
+  // client too, so its 401 must not enter the §9 guard either.
+  '/oauth2/device_authorization',
   '/oauth2/introspect',
   '/oauth2/revoke',
 ];
@@ -142,10 +148,20 @@ export function installRefreshInterceptor(axiosInstance: AxiosInstance, session:
   );
 }
 
+/** True for a request to an `/oauth2/*` endpoint (absolute or relative `url`; query ignored). */
+function isOAuth2Endpoint(url: string | undefined): boolean {
+  if (!url) {
+    return false;
+  }
+  const path = url.split(/[?#]/, 1)[0] ?? '';
+  return path.includes('/oauth2/');
+}
+
 /**
  * Request interceptor: once `authenticateDevice()` has adopted a token
  * (`session.deviceAccessToken`), every same-origin request carries it as
- * `Authorization: Bearer` and rides the jar-free agent pair
+ * `Authorization: Bearer` — except to `/oauth2/*`, which gets no `Authorization`
+ * header at all (§6.1 rule 11, §14.6, C162-05) — and rides the jar-free agent pair
  * `noCredentialsConfig()` builds — TLS-configured (the client certificate
  * stays on the connection), but with no cookie jar attached (CONTRACT.md
  * §6.1 rules 6-10, contract 1.51).
@@ -175,6 +191,17 @@ export function installDeviceTokenInterceptor(axiosInstance: AxiosInstance, sess
     const noCred = session.noCredentialsConfig();
     Object.assign(config, noCred);
     config.headers = config.headers ?? {};
+    if (isOAuth2Endpoint(config.url)) {
+      // CONTRACT.md §6.1 rule 11, §12.1 rule 3 and §14.6 (contract 1.62, C162-05):
+      // an `/oauth2/*` endpoint authenticates the client through the form body
+      // (or the TLS certificate), so the adopted device credential never rides
+      // on it — and neither does the session cookie, which stays out through the
+      // jar-free agent pair above. A credential the caller passes explicitly to
+      // one call (RFC 7591/7592 registration tokens) travels on the bare
+      // transport, which never reaches this interceptor.
+      // An `Authorization` the caller set on this one call is left as given.
+      return config;
+    }
     config.headers['Authorization'] = `Bearer ${deviceToken.expose()}`;
     // Belt and braces alongside the agent swap above: an explicit empty
     // Cookie header is what the reference Rust SDK relies on to make sure a

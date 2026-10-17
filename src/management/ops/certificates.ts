@@ -76,7 +76,7 @@ export class CertificatesApi {
       method: 'POST',
       pathTemplate: '/api/v1/certificates',
       path: '/api/v1/certificates',
-      body: body,
+      body: models.omitNullMembers(body, ["user_id"]),
     });
     return models.generatedCertificateFromWire(wire);
   }
@@ -94,7 +94,7 @@ export class CertificatesApi {
       method: 'POST',
       pathTemplate: '/api/v1/certificates/sign-csr',
       path: '/api/v1/certificates/sign-csr',
-      body: body,
+      body: models.omitNullMembers(body, ["user_id"]),
     });
     return wire;
   }
