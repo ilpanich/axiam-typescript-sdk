@@ -79,7 +79,7 @@ export class ScimTargetsApi {
       method: 'POST',
       pathTemplate: '/api/v1/scim-targets',
       path: '/api/v1/scim-targets',
-      body: models.scimTargetInputToWire(body),
+      body: models.omitNullMembers(models.scimTargetInputToWire(body), ["expected_updated_at"]),
     });
     return models.scrubScimTargetResponse(wire);
   }
@@ -128,7 +128,7 @@ export class ScimTargetsApi {
       method: 'PUT',
       pathTemplate: '/api/v1/scim-targets/{id}',
       path: `/api/v1/scim-targets/${encodeURIComponent(id)}`,
-      body: models.scimTargetInputToWire(body),
+      body: models.omitNullMembers(models.scimTargetInputToWire(body), ["expected_updated_at"]),
     });
     return models.scrubScimTargetResponse(wire);
   }

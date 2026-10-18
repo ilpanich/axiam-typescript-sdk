@@ -12,7 +12,11 @@
  */
 
 import type { Sensitive } from '../../core/sensitive.js';
-import type { PermissionEffect } from '../models.js';
+import type {
+  PermissionEffect,
+  RadiusServiceType,
+  RadiusTerminationAction,
+} from '../models.js';
 
 /** A scope, always beneath the resource that declares it. */
 export interface ScopeSpec {
@@ -186,6 +190,96 @@ export interface ServiceAccountSpec {
 }
 
 /**
+ * A network segment (CONTRACT.md §27.6.2 item 1, contract 1.62).
+ *
+ * **The natural key is `site` + `kind` + `name`**, where `kind` is the **wire**
+ * spelling — `'access'` or `'quarantine'`, the value `createSegment` writes
+ * and every segment read returns. This SDK keeps no mapping between it and
+ * anything else and has no `zones` spelling (`zones` is a server-side path
+ * segment). The three are never drift (a segment's kind, site and name do not
+ * change, §36.3 rule 4); every other member is a field.
+ *
+ * A member left off is silent (rule 3): it never drifts, and an `Update`
+ * carries the read's value for it. A member stated as `null` is "none" — the
+ * key is left out of the write, which is how a replacement clears an optional
+ * member.
+ */
+export interface NetworkSegmentSpec {
+  /** Manifest-local identifier, referred to by a {@link NetworkProfileSpec}'s `segment`. */
+  key: string;
+  /** The segment's site — the wire `site_key`. A single-site tenant uses `default`. */
+  site: string;
+  /** `'access'` or `'quarantine'` — the wire spelling, and part of the natural key. */
+  kind: 'access' | 'quarantine';
+  /** The segment's name — with `site` and `kind`, its natural key. */
+  name: string;
+  /** The VLAN, 1 to 4094; the server judges it (§36.3 rule 5). */
+  vlanId: number;
+  /** The placement rank: required by the server for `access`, absent for `quarantine`. */
+  rank?: number | null;
+  /**
+   * The segment's envelope: the `Filter-Id` names its profile may choose from.
+   * **Compared as a set** (a reorder alone is never an `Update`, names compare
+   * as exact strings); a name listed twice is refused by `plan` before any
+   * request. When the SDK writes the segment it sends the names in the order
+   * stated here.
+   */
+  filterIds?: string[];
+  /** Whether the segment is a placement candidate. The server defaults it to `true` on create. */
+  enabled?: boolean;
+}
+
+/**
+ * A reply profile (CONTRACT.md §27.6.2 item 1, contract 1.62), **identified by
+ * its segment**: it has no name or id of its own.
+ *
+ * Every stated member is compared with the **effective** profile as the read
+ * returns it (§27.6.2 item 3): a `sessionTimeoutSecs` above the tenant's cap
+ * differs from the read, `plan` shows an `Update`, and `apply` reports the
+ * server's `403` refusal as that action's failure — nothing is lowered, retried
+ * or adjusted by the SDK.
+ */
+export interface NetworkProfileSpec {
+  /** The `key` of a {@link NetworkSegmentSpec} of the same manifest. */
+  segment: string;
+  /** `Session-Timeout`, seconds. */
+  sessionTimeoutSecs: number;
+  /** `Termination-Action`; the server defaults it to `radius_request` on create. */
+  terminationAction?: RadiusTerminationAction | null;
+  /** `Idle-Timeout`, seconds. */
+  idleTimeoutSecs?: number | null;
+  /** `Filter-Id`: one of the segment's `filterIds`. */
+  filterId?: string | null;
+  /** `Service-Type`; only `'framed_user'` is accepted. */
+  serviceType?: RadiusServiceType | null;
+}
+
+/** The tenant's `Session-Timeout` cap — a singleton (CONTRACT.md §27.6.2 item 1). */
+export interface NetworkPolicySpec {
+  /** The cap on a reply profile's `Session-Timeout`, seconds (300 to 86 400). */
+  sessionTimeoutMaxSecs: number;
+}
+
+/**
+ * The `network` section of a manifest (CONTRACT.md §27.6.2, contract 1.62).
+ *
+ * Applied in this order: the policy, then the segments, then the profiles (a
+ * profile follows its segment). The namespace is **human-only**: an `apply`
+ * whose manifest has a `network` section needs a human caller, and a
+ * service-account token meets `401` at the first network action.
+ *
+ * This SDK offers no pruning for any namespace, so nothing here is ever deleted.
+ */
+export interface NetworkSpec {
+  /** The tenant's cap. At most one per manifest. It is never `Create`: the policy always exists. */
+  policy?: NetworkPolicySpec;
+  /** Segments, in any order within the section. */
+  segments?: NetworkSegmentSpec[];
+  /** Reply profiles, one per segment. */
+  profiles?: NetworkProfileSpec[];
+}
+
+/**
  * The shape a tenant should have.
  *
  * Deliberately covers only the namespaces that describe a tenant's *shape*.
@@ -213,6 +307,13 @@ export interface ManagementManifest {
    * a `Create`.
    */
   serviceAccounts?: ServiceAccountSpec[];
+  /**
+   * Network segments, their reply profiles and the tenant's `Session-Timeout`
+   * cap (CONTRACT.md §27.6.2, contract 1.62). Appended last in the plan: a
+   * manifest without a `network` section plans, reads and applies exactly as it
+   * did before.
+   */
+  network?: NetworkSpec;
 }
 
 /** The role key a {@link RoleBinding} names, whichever shape it is. */

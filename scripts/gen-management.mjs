@@ -162,7 +162,7 @@ const CALL_SITE_NOTES = {
   'saml.retire_idp_credential':
     '**Retiring the `active` credential with no successor stops SAML sign-on for the whole tenant at once** (§29.3 rule 7) — it is the incident response to a leaked key. The key is destroyed. The safe rotation is: issue into `next`, wait until every SP has refreshed the metadata, then promote.',
   'ssf.update_stream':
-    "An omitted optional member takes its default (§32.2) — **except `authorization_header`, which absent keeps the stored one** — unless the update moves `endpoint_url` to another scheme, host or port while a header is stored: then it must carry `authorization_header` again or `clear_authorization_header: true`, else `400` (§32.3 rule 5). Start from `ssfStreamInputFrom(await ssf.getStream(id))`. An update overtaken by the receiver's own write is `409`: read the stream again.",
+    "An omitted optional member takes its default (§32.2) — **except `authorization_header`, which absent keeps the stored one** — unless the update moves `endpoint_url` to another scheme, host or port while a header is stored: then it must carry `authorization_header` again or `clear_authorization_header: true`, else `400` (§32.3 rule 5). Start from `ssfStreamInputWith(await ssf.getStream(id), changes)`, which sends the `events_requested` and `expected_updated_at` it read and cuts `events_requested` to a lowered `events_allowed` (or from the plain converter `ssfStreamInputFrom`, where the cut is yours). An update overtaken by the receiver's own write is `409`: read the stream again. **`events_requested` has three meanings on an update** (§32.2, contract 1.62): **absent resets** the stream to every event of `events_allowed` — widening what the receiver narrowed; **`[]` is stored as the receiver's \"none\"** and the stream carries nothing; **a list is stored as given** and refused (`400`) if any entry is outside `events_allowed`. A raw API client is bound by the same meaning: an `events_requested` left out of the `PUT` resets the stream. `expected_updated_at` is the `updated_at` you read, as the server's own string; an assigned `null` is \"none\" and is not sent.",
   'scim_targets.create':
     '`credential` is required here (§31.3 rule 2). It is write-only: no response ever carries it, and the SDK keeps no copy.',
   'scim_targets.update':
@@ -171,6 +171,23 @@ const CALL_SITE_NOTES = {
     '**Deprovisions nothing downstream** (§31.3 rule 8): the users and groups AXIAM created in the service provider stay there, and AXIAM no longer knows them. To remove them, set `deprovision` to `delete`, let AXIAM push, and only then delete the target.',
   'scim_targets.reconcile':
     "Starts a reconciliation in the background and answers `202`; its outcome is on the target's `state` (§31.3 rule 7). `409` while a run holds the claim, within five minutes of the last one, or for a disabled target.",
+};
+
+// CONTRACT §27.11 rule 5 and §32.2 (contract 1.62, item (f)): an explicitly
+// assigned `null` on these request members is "none" — the same as never
+// having set the member. The key is left out of the body and `null` is never
+// sent. TypeScript's `T | null | undefined` can hold `null` apart from
+// "unset", and `JSON.stringify` drops only `undefined`, so the rule has to be
+// applied: `user_id` of `certificates.generate` / `sign_csr`, and
+// `expected_updated_at` of `ssf.update_stream` (`create_stream` shares the type
+// and ignores the member) and `scim_targets.update` (likewise `create`). Keyed
+// by request schema, so a body type that gains one of these names elsewhere
+// does not silently change meaning.
+const NEVER_NULL_MEMBERS = {
+  CreateCertificateRequest: ['user_id'],
+  SignCertificateCsrRequest: ['user_id'],
+  SsfStreamInput: ['expected_updated_at'],
+  ScimTargetInput: ['expected_updated_at'],
 };
 
 // Local checks a generated operation runs before any I/O, by name of a
@@ -602,6 +619,29 @@ export function omitEmptyTenantScope<T>(body: T): T {
     return rest as T;
   }
   return body;
+}
+
+/**
+ * Drops each of \`members\` whose value is \`null\` (contract 1.62, item (f)).
+ *
+ * CONTRACT.md §27.11 rule 5 and §32.2: for \`user_id\` on the two certificate
+ * requests and \`expected_updated_at\` on \`ssf.update_stream\` and
+ * \`scim_targets.update\`, an explicitly assigned \`null\` means the same as never
+ * having set the member — the key is left out of the body and \`null\` is never
+ * sent. \`JSON.stringify\` drops \`undefined\` by itself; \`null\` it keeps, so
+ * \`{ user_id: null }\` would reach the server as a member the server was told
+ * to read as a value. Only the named members are touched: every other \`null\` in
+ * the body is meaningful (a cleared optional of a replacement) and is sent.
+ *
+ * Returns the body itself when there is nothing to drop.
+ */
+export function omitNullMembers<T>(body: T, members: readonly string[]): T {
+  if (!body || typeof body !== 'object') return body;
+  const record = body as Record<string, unknown>;
+  if (!members.some((m) => m in record && record[m] === null)) return body;
+  const copy: Record<string, unknown> = { ...record };
+  for (const m of members) if (copy[m] === null) delete copy[m];
+  return copy as T;
 }
 
 /**
@@ -1203,6 +1243,19 @@ function projectionMap() {
   return out;
 }
 
+/**
+ * Whether a query parameter is an integer in the spec.
+ *
+ * Until contract 1.62 every required query parameter was a string. The
+ * conditional `DELETE`s of `network` (§36.3 rule 2) carry the row `version`,
+ * an integer, and a caller who holds one as a number should not have to
+ * stringify it: the method takes a `number` and sends its decimal form.
+ */
+function isIntegerParam(q) {
+  const types = Array.isArray(q.type) ? q.type : [q.type];
+  return types.includes('integer');
+}
+
 function emitFilters(namespace, nsdef) {
   const out = [];
   for (const [opname, op] of Object.entries(nsdef.operations)) {
@@ -1252,7 +1305,7 @@ function emitOperation(namespace, opname, op, secrets) {
   const optionalQ = extra.filter((q) => !q.required);
   const filterType =
     optionalQ.length > 2 ? `${pascal(namespace)}${pascal(opname)}Filter` : null;
-  for (const q of requiredQ) args.push(`${camel(q.name)}: string`);
+  for (const q of requiredQ) args.push(`${camel(q.name)}: ${isIntegerParam(q) ? 'number' : 'string'}`);
   if (filterType) args.push(`filter: ${filterType} = {}`);
   else for (const q of optionalQ) args.push(`${camel(q.name)}?: string`);
   if (op.paginated) args.push('page: PageRequest = {}');
@@ -1268,6 +1321,10 @@ function emitOperation(namespace, opname, op, secrets) {
     // on the operations that have no such field.
     if (SCHEMAS[schema]?.properties?.tenant_scope) {
       bodyExpr = `models.omitEmptyTenantScope(${bodyExpr})`;
+    }
+    // Contract 1.62 item (f) — see NEVER_NULL_MEMBERS.
+    if (NEVER_NULL_MEMBERS[schema]) {
+      bodyExpr = `models.omitNullMembers(${bodyExpr}, ${JSON.stringify(NEVER_NULL_MEMBERS[schema])})`;
     }
     // CONTRACT.md §27.13 / CONTRACT 1.52 N3 (C-12): refuse client-side,
     // before any request, a request-body array field typed as an
@@ -1297,7 +1354,12 @@ function emitOperation(namespace, opname, op, secrets) {
 
   const queryEntries = [];
   if (op.paginated) queryEntries.push('...pageQuery(page)');
-  for (const q of requiredQ) queryEntries.push(`${JSON.stringify(q.name)}: ${camel(q.name)}`);
+  for (const q of requiredQ) {
+    // A query string is text: an integer parameter (the `version` of a
+    // conditional `DELETE`, §36.3 rule 2) is sent as its decimal form.
+    const v = isIntegerParam(q) ? `String(${camel(q.name)})` : camel(q.name);
+    queryEntries.push(`${JSON.stringify(q.name)}: ${v}`);
+  }
   for (const q of optionalQ) {
     const src = filterType ? `filter.${camel(q.name)}` : camel(q.name);
     queryEntries.push(`'${q.name}': ${src}`);
@@ -1358,7 +1420,10 @@ function emitOperation(namespace, opname, op, secrets) {
 
   if (op.paginated) {
     const lead = args.filter((a) => !a.startsWith('page:'));
-    const forward = lead.map((a) => a.split(/[:=]/)[0].trim());
+    // `site?: string` forwards as `site`: the `?` is declaration syntax, not
+    // part of the name (§36.1's `site` is the first optional filter that rides
+    // beside a `PageRequest`).
+    const forward = lead.map((a) => a.split(/[:=]/)[0].trim().replace(/\?$/, ''));
     lines.push(
       ...doc(
         `Walk \`${canonical}\` to exhaustion, concatenating every page.\n\nThe auto-paging form §27.4 rule 4 requires. It stops on an empty page even if \`total\` disagrees, so a misreporting server costs one wasted request rather than an unbounded loop.`,
@@ -1585,7 +1650,7 @@ function callArguments(namespace, opname, op, secrets) {
   const extra = extraQueryParams(op);
   const requiredQ = extra.filter((q) => q.required);
   const optionalQ = extra.filter((q) => !q.required);
-  for (const _ of requiredQ) args.push("'example'");
+  for (const q of requiredQ) args.push(isIntegerParam(q) ? '1' : "'example'");
   if (optionalQ.length > 2) args.push('{}');
   else for (const _ of optionalQ) args.push('undefined');
   if (op.paginated) args.push('{ limit: 50 }');
