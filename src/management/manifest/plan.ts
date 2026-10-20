@@ -408,6 +408,14 @@ function validateNetwork(network: NetworkSpec, problems: string[]): void {
       problems.push(`network segment ${q(profile.segment)} has more than one profile in the manifest`);
     }
     profiled.add(profile.segment);
+    // §27.6.2 item 4 (contract 1.62, Q3): `termination_action` has no "none" in a manifest —
+    // the server would write its default — so a stated `null` is refused here, before any request.
+    if (profile.terminationAction === null) {
+      problems.push(
+        `network profile of segment ${q(profile.segment)} states terminationAction as null; ` +
+          'it has no "none" in a manifest (leave it out to keep the server default)',
+      );
+    }
   }
 }
 

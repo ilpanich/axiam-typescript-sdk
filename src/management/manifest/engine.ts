@@ -3,7 +3,7 @@
  */
 
 import { NetworkError } from '../../core/errors.js';
-import { ConflictError } from '../errors.js';
+import { ConflictError, ValidationError } from '../errors.js';
 import type { Sensitive } from '../../core/sensitive.js';
 import type { AxiamClient } from '../../rest/client.js';
 import * as models from '../models.js';
@@ -1267,6 +1267,26 @@ function profileDrifted(spec: NetworkProfileSpec, read: models.NetworkReplyProfi
   return false;
 }
 
+const KNOWN_TERMINATION_ACTIONS: readonly string[] = ['default', 'radius_request'];
+const KNOWN_SERVICE_TYPES: readonly string[] = ['framed_user'];
+
+/** `plan` refuses, before any write, an `Update` that would re-send an unknown open-enum value of an unstated member. */
+function refuseUnknownCarried(
+  member: string,
+  stated: unknown,
+  read: string | null | undefined,
+  known: readonly string[],
+): void {
+  if (stated !== undefined || read == null || known.includes(read)) return;
+  throw new ValidationError(
+    'manifest.plan',
+    400,
+    `network profile: ${member} was read as ${JSON.stringify(read)}, a value this SDK does not know, ` +
+      `and the manifest does not state it; state ${member} to update this profile (CONTRACT.md §27.6.2 item 4)`,
+    [{ field: member, message: `unknown value ${JSON.stringify(read)} on an unstated member` }],
+  );
+}
+
 /**
  * `replace_profile`'s `profile`: the stated members over the read's. A stated
  * `null` is "none" and the key is left out; an unstated member is carried from
@@ -1283,6 +1303,10 @@ function profileReplaceInput(
     dictionary: read.dictionary,
     session_timeout_secs: spec.sessionTimeoutSecs,
   };
+  // §27.6.2 item 4 (contract 1.62, 1.63): a value the read returned and this SDK does not
+  // know is never carried into a replacement; an unstated member holding one is refused.
+  refuseUnknownCarried('termination_action', spec.terminationAction, read.termination_action, KNOWN_TERMINATION_ACTIONS);
+  refuseUnknownCarried('service_type', spec.serviceType, read.service_type, KNOWN_SERVICE_TYPES);
   const termination = spec.terminationAction === undefined ? read.termination_action : spec.terminationAction;
   if (termination != null) profile.termination_action = termination;
   const idle = spec.idleTimeoutSecs === undefined ? read.idle_timeout_secs : spec.idleTimeoutSecs;

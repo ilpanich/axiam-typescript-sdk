@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-20
+
+`axiam-sdk` 1.1.1 conforms to **contract 1.63** (axiam `a6cd10eba`, the release 1.1.1 plan branch).
+`CONTRACT.md`, `openapi.json`, `management-registry.json` and `proto/` are vendored byte for byte
+from that commit (the registry differs from 1.1.0 only in its spec digest and the wording of one
+namespace doc; the generated `network` sources follow). Nothing here is source-breaking, so this is a
+patch release. It closes #142.
+
+### Fixed
+
+- **No `axiam_*` session cookie and no `X-CSRF-Token` on any `/oauth2/*` request** (§6.1 rule 11,
+  §12.1 rule 3, §14.6). Contract 1.62 withheld the adopted bearer; a client whose jar held a session
+  still sent the cookies, and the `X-CSRF-Token`, with a device authorization, a device poll and a
+  token request. They now go on the jar-free agent pair and carry no CSRF header.
+- **A manifest `network` profile `Update` no longer re-sends a value it read as unknown**
+  (§27.6.2 item 4, C162-07): when the read returns a `termination_action` or `service_type` this SDK
+  does not know and the manifest does not state that member, `plan` raises a `ValidationError` naming
+  the member and the value, before any write. Stating the member resolves it; a profile with no
+  other drift is still `NoChange`.
+- **A stated `terminationAction: null` in a manifest profile is refused at `plan`** with zero wire
+  calls (§27.6.2 item 4, C162-08). It has no "none"; it used to be dropped, so the server wrote its
+  default. Leave the member out to keep the default.
+
+### Notes
+
+- Contract 1.63 (c), the AMQP producer's local refusal of `tenants.` / `gdpr.` actions, is a MAY and
+  this SDK has no audit-event producer (the `amqp` entry consumes and verifies; it publishes only
+  reactor replies), so there is nothing to guard.
+- `DeviceAuthorizationRequest.client_id` becoming optional in the spec needs no change: the device
+  grant takes its `client_id` from the `OidcClient` configuration and has no request model.
+- This SDK generates no DPoP proofs, so the §21.7.4 key-lifetime rule does not apply to it.
+
 ## [1.1.0] - 2026-10-16
 
 `axiam-sdk` 1.1.0 conforms to **contract 1.62** (axiam `d25413506`, the release plan branch for
