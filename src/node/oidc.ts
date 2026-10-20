@@ -41,6 +41,7 @@ import {
 } from '../core/index.js';
 import { ValidationError } from '../management/errors.js';
 import { retryableNetworkError, statusIsRetryable } from '../rest/bareTransport.js';
+import { isOAuth2Endpoint } from '../rest/interceptors.js';
 import { withRetry } from '../rest/retry.js';
 import type { SharedSession } from '../rest/session.js';
 import { createJwksVerifier, type JwksVerifier } from './jwks.js';
@@ -2721,7 +2722,7 @@ export class OidcClient {
     this.#session.axios.interceptors.request.use((config) => {
       const adopted = this.#adoptedCredential;
       const url = config.url ?? '';
-      if (!adopted || this.#session.isForeignHost(url) || url.includes('/oauth2/')) {
+      if (!adopted || this.#session.isForeignHost(url) || isOAuth2Endpoint(url, this.#session.baseUrl)) {
         return config;
       }
       config.headers = config.headers ?? {};

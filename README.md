@@ -31,10 +31,10 @@ with §32.7 and §33.2 signed (including §6.1 mTLS client certificates, the
 
 | Item | Rule | What this SDK does |
 |---|---|---|
-| (a) no session cookie, no CSRF header on `/oauth2/*` | §6.1 rule 11, §12.1 rule 3, §14.6 | Every `/oauth2/*` request goes through the jar-free agent pair and carries no `X-CSRF-Token`, whether or not a device credential is adopted. |
+| (a) no session cookie, no CSRF header on `/oauth2/*` | §6.1 rule 11, §12.1 rule 3, §14.6 | Every `/oauth2/*` request goes through the jar-free agent pair and carries no `X-CSRF-Token`, whether or not a device credential is adopted (a path-prefix match: the federation `oauth2/start`/`callback` routes are session endpoints and are unaffected). |
 | (ab) an unknown open-enum value on an unstated manifest member | §27.6.2 item 4 | `plan` raises a `ValidationError` naming the member and the value, before any write; stating the member resolves it. |
 | (ac) `termination_action` has no "none" in a manifest | §27.6.2 item 4 | A stated `terminationAction: null` is refused at `plan` with zero wire calls. |
-| (c) the AMQP producer's local refusal | §8 (MAY) | Not applicable: this SDK publishes no audit events. |
+| (c) the AMQP producer's local refusal | §8 (MAY) | Not applicable: this SDK ships no helper that builds or signs an `AuditEventMessage`. |
 
 ### Contract 1.62 — the 1.1.0 release (§34.6)
 

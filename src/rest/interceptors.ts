@@ -66,7 +66,7 @@ export function installCsrfInterceptor(axiosInstance: AxiosInstance, session: Sh
     // CONTRACT.md §6.1 rule 11, §12.1 rule 3, §14.6 (contract 1.63): no
     // `X-CSRF-Token` on an `/oauth2/*` request — it authenticates the client
     // through the form body (or the TLS certificate), never the session.
-    if (isOAuth2Endpoint(config.url)) {
+    if (isOAuth2Endpoint(config.url, session.baseUrl)) {
       return config;
     }
     const method = (config.method ?? 'get').toLowerCase();
@@ -154,13 +154,27 @@ export function installRefreshInterceptor(axiosInstance: AxiosInstance, session:
   );
 }
 
-/** True for a request to an `/oauth2/*` endpoint (absolute or relative `url`; query ignored). */
-function isOAuth2Endpoint(url: string | undefined): boolean {
+/**
+ * True for a request to an `/oauth2/*` endpoint: the request path, relative to the base
+ * URL's own path, begins with `/oauth2/` (absolute or relative `url`; query ignored). A prefix
+ * match, not a substring one — `/api/v1/auth/federation/oauth2/callback` is an ordinary
+ * session endpoint whose `Set-Cookie` the jar must keep.
+ */
+export function isOAuth2Endpoint(url: string | undefined, baseUrl: string): boolean {
   if (!url) {
     return false;
   }
-  const path = url.split(/[?#]/, 1)[0] ?? '';
-  return path.includes('/oauth2/');
+  try {
+    const base = new URL(baseUrl);
+    let path = new URL(url, base).pathname;
+    const prefix = base.pathname.replace(/\/+$/, '');
+    if (prefix !== '' && path.startsWith(`${prefix}/`)) {
+      path = path.slice(prefix.length);
+    }
+    return path.startsWith('/oauth2/');
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -191,7 +205,7 @@ function isOAuth2Endpoint(url: string | undefined): boolean {
 export function installDeviceTokenInterceptor(axiosInstance: AxiosInstance, session: SharedSession): void {
   axiosInstance.interceptors.request.use((config) => {
     const deviceToken = session.deviceAccessToken;
-    const oauth2 = isOAuth2Endpoint(config.url);
+    const oauth2 = isOAuth2Endpoint(config.url, session.baseUrl);
     if (session.isForeignHost(config.url) || (deviceToken === undefined && !oauth2)) {
       return config;
     }
