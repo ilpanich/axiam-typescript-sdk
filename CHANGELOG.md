@@ -9,9 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.1] - 2026-10-20
 
-`axiam-sdk` 1.1.1 conforms to **contract 1.63** (axiam `a6cd10eba`, the release 1.1.1 plan branch).
+`axiam-sdk` 1.1.1 conforms to **contract 1.63** (axiam `d919ba0cc`, the release 1.1.1 plan branch).
 `CONTRACT.md`, `openapi.json`, `management-registry.json` and `proto/` are vendored byte for byte
-from that commit (the registry differs from 1.1.0 only in its spec digest and the wording of one
+from that commit (the registry differs from 1.1.0 only in its spec digest, `spec_version` 1.1.1 and the wording of one
 namespace doc; the generated `network` sources follow). Nothing here is source-breaking, so this is a
 patch release. It closes #142.
 
