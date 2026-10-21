@@ -63,6 +63,12 @@ export function installCsrfInterceptor(axiosInstance: AxiosInstance, session: Sh
     if (session.isForeignHost(config.url)) {
       return config;
     }
+    // CONTRACT.md §6.1 rule 11, §12.1 rule 3, §14.6 (contract 1.63): no
+    // `X-CSRF-Token` on an `/oauth2/*` request — it authenticates the client
+    // through the form body (or the TLS certificate), never the session.
+    if (isOAuth2Endpoint(config.url, session.baseUrl)) {
+      return config;
+    }
     const method = (config.method ?? 'get').toLowerCase();
     const cookieString = typeof document !== 'undefined' ? document.cookie : '';
     const csrfToken =
@@ -148,13 +154,27 @@ export function installRefreshInterceptor(axiosInstance: AxiosInstance, session:
   );
 }
 
-/** True for a request to an `/oauth2/*` endpoint (absolute or relative `url`; query ignored). */
-function isOAuth2Endpoint(url: string | undefined): boolean {
+/**
+ * True for a request to an `/oauth2/*` endpoint: the request path, relative to the base
+ * URL's own path, begins with `/oauth2/` (absolute or relative `url`; query ignored). A prefix
+ * match, not a substring one — `/api/v1/auth/federation/oauth2/callback` is an ordinary
+ * session endpoint whose `Set-Cookie` the jar must keep.
+ */
+export function isOAuth2Endpoint(url: string | undefined, baseUrl: string): boolean {
   if (!url) {
     return false;
   }
-  const path = url.split(/[?#]/, 1)[0] ?? '';
-  return path.includes('/oauth2/');
+  try {
+    const base = new URL(baseUrl);
+    let path = new URL(url, base).pathname;
+    const prefix = base.pathname.replace(/\/+$/, '');
+    if (prefix !== '' && path.startsWith(`${prefix}/`)) {
+      path = path.slice(prefix.length);
+    }
+    return path.startsWith('/oauth2/');
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -185,24 +205,27 @@ function isOAuth2Endpoint(url: string | undefined): boolean {
 export function installDeviceTokenInterceptor(axiosInstance: AxiosInstance, session: SharedSession): void {
   axiosInstance.interceptors.request.use((config) => {
     const deviceToken = session.deviceAccessToken;
-    if (session.isForeignHost(config.url) || deviceToken === undefined) {
+    const oauth2 = isOAuth2Endpoint(config.url, session.baseUrl);
+    if (session.isForeignHost(config.url) || (deviceToken === undefined && !oauth2)) {
       return config;
     }
     const noCred = session.noCredentialsConfig();
     Object.assign(config, noCred);
     config.headers = config.headers ?? {};
-    if (isOAuth2Endpoint(config.url)) {
-      // CONTRACT.md §6.1 rule 11, §12.1 rule 3 and §14.6 (contract 1.62, C162-05):
+    if (oauth2) {
+      // CONTRACT.md §6.1 rule 11, §12.1 rule 3 and §14.6 (contract 1.62, C162-05;
+      // contract 1.63 extends it to the session cookies and `X-CSRF-Token`):
       // an `/oauth2/*` endpoint authenticates the client through the form body
-      // (or the TLS certificate), so the adopted device credential never rides
-      // on it — and neither does the session cookie, which stays out through the
-      // jar-free agent pair above. A credential the caller passes explicitly to
+      // (or the TLS certificate), so neither the adopted device credential nor
+      // an `axiam_*` session cookie rides on it — the cookie stays out through
+      // the jar-free agent pair above, and the CSRF interceptor adds no
+      // `X-CSRF-Token` there. A credential the caller passes explicitly to
       // one call (RFC 7591/7592 registration tokens) travels on the bare
       // transport, which never reaches this interceptor.
       // An `Authorization` the caller set on this one call is left as given.
       return config;
     }
-    config.headers['Authorization'] = `Bearer ${deviceToken.expose()}`;
+    config.headers['Authorization'] = `Bearer ${deviceToken!.expose()}`;
     // Belt and braces alongside the agent swap above: an explicit empty
     // Cookie header is what the reference Rust SDK relies on to make sure a
     // stale session cookie cannot ride beside this token even if something

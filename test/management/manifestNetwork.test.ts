@@ -11,6 +11,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { NetworkError } from '../../src/core/errors.js';
+import { ValidationError } from '../../src/management/errors.js';
 import type { ManagementManifest } from '../../src/management/manifest/index.js';
 import { changes, failure, isComplete, isConverged } from '../../src/management/manifest/index.js';
 import type { NetworkReplyProfile, NetworkSegmentResponse } from '../../src/management/models.js';
@@ -626,6 +627,67 @@ describe('§27.6.2 item 1 — refused before any request', () => {
       expect(net.log).toEqual([]);
     });
   }
+});
+
+describe('§27.6.2 item 4 — an unknown open-enum value on an unstated member (C162-07)', () => {
+  for (const [member, stored] of [
+    ['termination_action', { termination_action: 'future' }],
+    ['service_type', { service_type: 'future' }],
+  ] as const) {
+    it(`${member} read as "future" and not stated: plan refuses naming member and value, no non-GET request; stating it resolves`, async () => {
+      const { net, manifest } = setup();
+      const seg = net.seedSegment();
+      net.seedProfile(seg.id, stored as Partial<Parameters<typeof net.seedProfile>[1]>);
+      const other: ManagementManifest = {
+        network: { segments: [staff], profiles: [{ segment: 'staff', sessionTimeoutSecs: 1800 }] },
+      };
+
+      const err = await manifest.plan(other).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ValidationError);
+      expect((err as Error).message).toContain(member);
+      expect((err as Error).message).toContain('"future"');
+      expect(net.writes()).toEqual([]);
+
+      const stated = member === 'termination_action'
+        ? { terminationAction: 'radius_request' as const }
+        : { serviceType: 'framed_user' as const };
+      const plan = await manifest.plan({
+        network: { segments: [staff], profiles: [{ segment: 'staff', sessionTimeoutSecs: 1800, ...stated }] },
+      });
+      expect(plan.actions.find((a) => a.target === 'network-profile')!.change).toBe('update');
+      await manifest.apply({
+        network: { segments: [staff], profiles: [{ segment: 'staff', sessionTimeoutSecs: 1800, ...stated }] },
+      });
+      const put = net.writes().find((w) => w.method === 'PUT' && w.path.startsWith('/profiles/'))!;
+      expect(JSON.stringify(put.body)).not.toContain('future');
+    });
+  }
+
+  it('the same read with nothing that differs is NoChange, with no write', async () => {
+    const { net, manifest } = setup();
+    const seg = net.seedSegment();
+    net.seedProfile(seg.id, { termination_action: 'future' } as never);
+    const plan = await manifest.plan({
+      network: { segments: [staff], profiles: [{ segment: 'staff', sessionTimeoutSecs: 3600 }] },
+    });
+    expect(plan.actions.find((a) => a.target === 'network-profile')!.change).toBe('no-change');
+    expect(net.writes()).toEqual([]);
+  });
+});
+
+describe('§27.6.2 item 4 — a stated terminationAction null (C162-08)', () => {
+  it('is refused at plan and at apply with zero wire calls', async () => {
+    const { net, manifest } = setup();
+    const m: ManagementManifest = {
+      network: { segments: [staff], profiles: [{ segment: 'staff', sessionTimeoutSecs: 600, terminationAction: null }] },
+    };
+    for (const run of [() => manifest.plan(m), () => manifest.apply(m)]) {
+      const err = await run().catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(NetworkError);
+      expect((err as Error).message).toMatch(/terminationAction as null/);
+    }
+    expect(net.log).toEqual([]);
+  });
 });
 
 describe('§27.6.2 item 6 — pruning', () => {
