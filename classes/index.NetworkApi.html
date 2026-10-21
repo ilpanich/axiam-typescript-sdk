@@ -1,5 +1,5 @@
-<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>NetworkApi | AXIAM TypeScript SDK - v1.1.0</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
-<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK - v1.1.0</a>
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>NetworkApi | AXIAM TypeScript SDK - v1.1.1</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK - v1.1.1</a>
 <div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
 <ul role="listbox" id="tsd-search-results"></ul>
 <div id="tsd-search-status" aria-live="polite" aria-atomic="true">
@@ -14,18 +14,19 @@
 <section class="tsd-panel tsd-comment">
 <div class="tsd-comment tsd-typography"><p>The <code>network</code> namespace handle.</p>
 <p>A tenant's network segments and the RADIUS reply profile each owns (RADIUS
-D4): a segment is a node of the reserved /network subtree of the resource
-tree (kind, VLAN, Filter-Id envelope, placement rank), and its profile is
-the typed <code>axiam-radius-reply/1</code> record a decision renders. Every write is
-conditional on the <code>version</code> the caller read and passes the server's write
-gate. The tenant's Session-Timeout cap is one more row of it (get_policy,
-replace_policy): lowering it is always allowed, raising it is allowed and
-audited. The decision route FreeRADIUS calls is not in this registry.</p>
+Live profile): a segment is a node of the reserved /network subtree of the
+resource tree (kind, VLAN, Filter-Id envelope, placement rank), and its
+profile is the typed <code>axiam-radius-reply/1</code> record a decision renders.
+Every write is conditional on the <code>version</code> the caller read and passes the
+server's write gate. The tenant's Session-Timeout cap is one more row of
+it (get_policy, replace_policy): lowering it is always allowed, raising it
+is allowed and audited. The decision route FreeRADIUS calls is not in this
+registry.</p>
 <p>Acquiring one performs no I/O and allocates nothing meaningful (§27.2 rule
 1); it holds the client and cannot be constructed without one.</p>
 </div></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/9a028f5c95836001c1338dc0650e15ae54f9ae21/src/management/ops/network.ts#L40">src/management/ops/network.ts:40</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/management/ops/network.ts#L42">src/management/ops/network.ts:42</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -67,7 +68,7 @@ issued exactly once, including the ones that look idempotent.</p>
 <li><span><span class="tsd-kind-parameter">body</span>: <a href="../interfaces/index.CreateNetworkReplyProfileRequest.html" class="tsd-signature-type tsd-kind-interface">CreateNetworkReplyProfileRequest</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.NetworkReplyProfile.html" class="tsd-signature-type tsd-kind-interface">NetworkReplyProfile</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/9a028f5c95836001c1338dc0650e15ae54f9ae21/src/management/ops/network.ts#L169">src/management/ops/network.ts:169</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/management/ops/network.ts#L171">src/management/ops/network.ts:171</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="createsegment"><span>create<wbr/>Segment</span><a href="#createsegment" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -84,7 +85,7 @@ issued exactly once, including the ones that look idempotent.</p>
 <li><span><span class="tsd-kind-parameter">body</span>: <a href="../interfaces/index.CreateNetworkSegmentRequest.html" class="tsd-signature-type tsd-kind-interface">CreateNetworkSegmentRequest</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.NetworkSegmentResponse.html" class="tsd-signature-type tsd-kind-interface">NetworkSegmentResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/9a028f5c95836001c1338dc0650e15ae54f9ae21/src/management/ops/network.ts#L79">src/management/ops/network.ts:79</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/management/ops/network.ts#L81">src/management/ops/network.ts:81</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="deleteprofile"><span>delete<wbr/>Profile</span><a href="#deleteprofile" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -102,7 +103,7 @@ issued exactly once, including the ones that look idempotent.</p>
 <li><span><span class="tsd-kind-parameter">version</span>: <span class="tsd-signature-type">number</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/9a028f5c95836001c1338dc0650e15ae54f9ae21/src/management/ops/network.ts#L219">src/management/ops/network.ts:219</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/management/ops/network.ts#L221">src/management/ops/network.ts:221</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="deletesegment"><span>delete<wbr/>Segment</span><a href="#deletesegment" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -120,7 +121,7 @@ issued exactly once, including the ones that look idempotent.</p>
 <li><span><span class="tsd-kind-parameter">version</span>: <span class="tsd-signature-type">number</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/9a028f5c95836001c1338dc0650e15ae54f9ae21/src/management/ops/network.ts#L130">src/management/ops/network.ts:130</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/management/ops/network.ts#L132">src/management/ops/network.ts:132</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getpolicy"><span>get<wbr/>Policy</span><a href="#getpolicy" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -131,7 +132,7 @@ issued exactly once, including the ones that look idempotent.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.NetworkPolicyResponse.html" class="tsd-signature-type tsd-kind-interface">NetworkPolicyResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/9a028f5c95836001c1338dc0650e15ae54f9ae21/src/management/ops/network.ts#L230">src/management/ops/network.ts:230</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/management/ops/network.ts#L232">src/management/ops/network.ts:232</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getprofile"><span>get<wbr/>Profile</span><a href="#getprofile" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -146,7 +147,7 @@ issued exactly once, including the ones that look idempotent.</p>
 <li><span><span class="tsd-kind-parameter">segmentId</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.NetworkReplyProfile.html" class="tsd-signature-type tsd-kind-interface">NetworkReplyProfile</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/9a028f5c95836001c1338dc0650e15ae54f9ae21/src/management/ops/network.ts#L181">src/management/ops/network.ts:181</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/management/ops/network.ts#L183">src/management/ops/network.ts:183</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getsegment"><span>get<wbr/>Segment</span><a href="#getsegment" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -161,7 +162,7 @@ issued exactly once, including the ones that look idempotent.</p>
 <li><span><span class="tsd-kind-parameter">id</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.NetworkSegmentResponse.html" class="tsd-signature-type tsd-kind-interface">NetworkSegmentResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/9a028f5c95836001c1338dc0650e15ae54f9ae21/src/management/ops/network.ts#L91">src/management/ops/network.ts:91</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/management/ops/network.ts#L93">src/management/ops/network.ts:93</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="listprofiles"><span>list<wbr/>Profiles</span><a href="#listprofiles" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -176,7 +177,7 @@ issued exactly once, including the ones that look idempotent.</p>
 <li><span><span class="tsd-kind-parameter">page</span>: <a href="../interfaces/index.PageRequest.html" class="tsd-signature-type tsd-kind-interface">PageRequest</a><span class="tsd-signature-symbol"> = {}</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.Page.html" class="tsd-signature-type tsd-kind-interface">Page</a><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.NetworkReplyProfile.html" class="tsd-signature-type tsd-kind-interface">NetworkReplyProfile</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/9a028f5c95836001c1338dc0650e15ae54f9ae21/src/management/ops/network.ts#L141">src/management/ops/network.ts:141</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/management/ops/network.ts#L143">src/management/ops/network.ts:143</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="listprofilesall"><span>list<wbr/>Profiles<wbr/>All</span><a href="#listprofilesall" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -194,7 +195,7 @@ rather than an unbounded loop.</p>
 <li><span><span class="tsd-kind-parameter">start</span>: <a href="../interfaces/index.PageRequest.html" class="tsd-signature-type tsd-kind-interface">PageRequest</a><span class="tsd-signature-symbol"> = {}</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.NetworkReplyProfile.html" class="tsd-signature-type tsd-kind-interface">NetworkReplyProfile</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/9a028f5c95836001c1338dc0650e15ae54f9ae21/src/management/ops/network.ts#L159">src/management/ops/network.ts:159</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/management/ops/network.ts#L161">src/management/ops/network.ts:161</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="listsegments"><span>list<wbr/>Segments</span><a href="#listsegments" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -210,7 +211,7 @@ rather than an unbounded loop.</p>
 <li><span><span class="tsd-kind-parameter">page</span>: <a href="../interfaces/index.PageRequest.html" class="tsd-signature-type tsd-kind-interface">PageRequest</a><span class="tsd-signature-symbol"> = {}</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.Page.html" class="tsd-signature-type tsd-kind-interface">Page</a><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.NetworkSegmentResponse.html" class="tsd-signature-type tsd-kind-interface">NetworkSegmentResponse</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/9a028f5c95836001c1338dc0650e15ae54f9ae21/src/management/ops/network.ts#L51">src/management/ops/network.ts:51</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/management/ops/network.ts#L53">src/management/ops/network.ts:53</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="listsegmentsall"><span>list<wbr/>Segments<wbr/>All</span><a href="#listsegmentsall" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -229,7 +230,7 @@ rather than an unbounded loop.</p>
 <li><span><span class="tsd-kind-parameter">start</span>: <a href="../interfaces/index.PageRequest.html" class="tsd-signature-type tsd-kind-interface">PageRequest</a><span class="tsd-signature-symbol"> = {}</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.NetworkSegmentResponse.html" class="tsd-signature-type tsd-kind-interface">NetworkSegmentResponse</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/9a028f5c95836001c1338dc0650e15ae54f9ae21/src/management/ops/network.ts#L69">src/management/ops/network.ts:69</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/management/ops/network.ts#L71">src/management/ops/network.ts:71</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="replacepolicy"><span>replace<wbr/>Policy</span><a href="#replacepolicy" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -250,7 +251,7 @@ issued exactly once, including the ones that look idempotent.</p>
 <li><span><span class="tsd-kind-parameter">body</span>: <a href="../interfaces/index.ReplaceNetworkPolicyRequest.html" class="tsd-signature-type tsd-kind-interface">ReplaceNetworkPolicyRequest</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.NetworkPolicyResponse.html" class="tsd-signature-type tsd-kind-interface">NetworkPolicyResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/9a028f5c95836001c1338dc0650e15ae54f9ae21/src/management/ops/network.ts#L251">src/management/ops/network.ts:251</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/management/ops/network.ts#L253">src/management/ops/network.ts:253</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="replaceprofile"><span>replace<wbr/>Profile</span><a href="#replaceprofile" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -272,7 +273,7 @@ issued exactly once, including the ones that look idempotent.</p>
 <li><span><span class="tsd-kind-parameter">body</span>: <a href="../interfaces/index.ReplaceNetworkReplyProfileRequest.html" class="tsd-signature-type tsd-kind-interface">ReplaceNetworkReplyProfileRequest</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.NetworkReplyProfile.html" class="tsd-signature-type tsd-kind-interface">NetworkReplyProfile</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/9a028f5c95836001c1338dc0650e15ae54f9ae21/src/management/ops/network.ts#L202">src/management/ops/network.ts:202</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/management/ops/network.ts#L204">src/management/ops/network.ts:204</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="replacesegment"><span>replace<wbr/>Segment</span><a href="#replacesegment" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -295,7 +296,7 @@ issued exactly once, including the ones that look idempotent.</p>
 <li><span><span class="tsd-kind-parameter">body</span>: <a href="../interfaces/index.ReplaceNetworkSegmentRequest.html" class="tsd-signature-type tsd-kind-interface">ReplaceNetworkSegmentRequest</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.NetworkSegmentResponse.html" class="tsd-signature-type tsd-kind-interface">NetworkSegmentResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/9a028f5c95836001c1338dc0650e15ae54f9ae21/src/management/ops/network.ts#L113">src/management/ops/network.ts:113</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/management/ops/network.ts#L115">src/management/ops/network.ts:115</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -314,7 +315,7 @@ issued exactly once, including the ones that look idempotent.</p>
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Methods</summary>
 <div><a href="#createprofile"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>create<wbr/>Profile</span></a><a href="#createsegment"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>create<wbr/>Segment</span></a><a href="#deleteprofile"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>delete<wbr/>Profile</span></a><a href="#deletesegment"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>delete<wbr/>Segment</span></a><a href="#getpolicy"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Policy</span></a><a href="#getprofile"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Profile</span></a><a href="#getsegment"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Segment</span></a><a href="#listprofiles"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>list<wbr/>Profiles</span></a><a href="#listprofilesall"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>list<wbr/>Profiles<wbr/>All</span></a><a href="#listsegments"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>list<wbr/>Segments</span></a><a href="#listsegmentsall"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>list<wbr/>Segments<wbr/>All</span></a><a href="#replacepolicy"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>replace<wbr/>Policy</span></a><a href="#replaceprofile"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>replace<wbr/>Profile</span></a><a href="#replacesegment"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>replace<wbr/>Segment</span></a></div></details></div></details></div>
 <div class="site-menu">
-<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK - v1.1.0</a>
+<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK - v1.1.1</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
 <li>Loading...</li></ul></nav></div></div></div><footer>
 <p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>

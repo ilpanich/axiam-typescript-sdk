@@ -1,5 +1,5 @@
-<!DOCTYPE html><html class="default" lang="en" data-base="./"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>AXIAM TypeScript SDK - v1.1.0</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="assets/style.css"/><link rel="stylesheet" href="assets/highlight.css"/><script defer src="assets/main.js"></script><script async src="assets/icons.js" id="tsd-icons-script"></script><script async src="assets/search.js" id="tsd-search-script"></script><script async src="assets/navigation.js" id="tsd-nav-script"></script><script async src="assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
-<div class="tsd-toolbar-contents container"><a href="index.html" class="title">AXIAM TypeScript SDK - v1.1.0</a>
+<!DOCTYPE html><html class="default" lang="en" data-base="./"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>AXIAM TypeScript SDK - v1.1.1</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="assets/style.css"/><link rel="stylesheet" href="assets/highlight.css"/><script defer src="assets/main.js"></script><script async src="assets/icons.js" id="tsd-icons-script"></script><script async src="assets/search.js" id="tsd-search-script"></script><script async src="assets/navigation.js" id="tsd-nav-script"></script><script async src="assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="index.html" class="title">AXIAM TypeScript SDK - v1.1.1</a>
 <div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
 <ul role="listbox" id="tsd-search-results"></ul>
 <div id="tsd-search-status" aria-live="polite" aria-atomic="true">
@@ -7,7 +7,7 @@
 <div class="container container-main">
 <div class="col-content">
 <div class="tsd-page-title">
-<h1>AXIAM TypeScript SDK - v1.1.0</h1></div>
+<h1>AXIAM TypeScript SDK - v1.1.1</h1></div>
 <div class="tsd-panel tsd-typography"><h1 id="axiam-sdk-typescriptjavascript" class="tsd-anchor-link">axiam-sdk (TypeScript/JavaScript)<a href="#axiam-sdk-typescriptjavascript" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h1>
 <p><a href="https://github.com/ilpanich/axiam-typescript-sdk/actions/workflows/sdk-ci-typescript.yml"><img src="https://github.com/ilpanich/axiam-typescript-sdk/actions/workflows/sdk-ci-typescript.yml/badge.svg?branch=main" alt="CI"></a>
 <a href="https://coveralls.io/github/ilpanich/axiam-typescript-sdk?branch=main"><img src="https://coveralls.io/repos/github/ilpanich/axiam-typescript-sdk/badge.svg?branch=main" alt="Coverage Status"></a>
@@ -25,12 +25,44 @@
 <li><strong>Node:</strong> <code>&gt;=22</code> — see <a href="#supported-node-versions">Supported Node versions</a></li>
 </ul>
 <h2 id="contract-conformance" class="tsd-anchor-link">Contract conformance<a href="#contract-conformance" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
-<p>This SDK conforms to <strong>contract 1.62</strong>: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
+<p>This SDK conforms to <strong>contract 1.63</strong>: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
 §20, §21, §22, §23, §24, §25, §26, §27 (with §27.6.2), §28, §28.12, §29, §30, §31, §32, §33 and §36,
 with §32.7 and §33.2 signed (including §6.1 mTLS client certificates, the
 §10.1 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
 <code>verifyWebhook</code> signature verifier). Manifest pruning: not offered in any namespace (§27.10). §12 is implemented in full at its 1.38 shape: all
 <strong>thirteen</strong> operations, including the four public &quot;Sign in with X&quot; entry points.</p>
+<h3 id="contract-163-the-111-release-§347" class="tsd-anchor-link">Contract 1.63 — the 1.1.1 release (§34.7)<a href="#contract-163-the-111-release-§347" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Rule</th>
+<th>What this SDK does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>(a) no session cookie, no CSRF header on <code>/oauth2/*</code></td>
+<td>§6.1 rule 11, §12.1 rule 3, §14.6</td>
+<td>Every <code>/oauth2/*</code> request goes through the jar-free agent pair and carries no <code>X-CSRF-Token</code>, whether or not a device credential is adopted (a path-prefix match: the federation <code>oauth2/start</code>/<code>callback</code> routes are session endpoints and are unaffected).</td>
+</tr>
+<tr>
+<td>(ab) an unknown open-enum value on an unstated manifest member</td>
+<td>§27.6.2 item 4</td>
+<td><code>plan</code> raises a <code>ValidationError</code> naming the member and the value, before any write; stating the member resolves it.</td>
+</tr>
+<tr>
+<td>(ac) <code>termination_action</code> has no &quot;none&quot; in a manifest</td>
+<td>§27.6.2 item 4</td>
+<td>A stated <code>terminationAction: null</code> is refused at <code>plan</code> with zero wire calls.</td>
+</tr>
+<tr>
+<td>(c) the AMQP producer's local refusal</td>
+<td>§8 (MAY)</td>
+<td>Not applicable: this SDK ships no helper that builds or signs an <code>AuditEventMessage</code>.</td>
+</tr>
+</tbody>
+</table>
 <h3 id="contract-162-the-110-release-§346" class="tsd-anchor-link">Contract 1.62 — the 1.1.0 release (§34.6)<a href="#contract-162-the-110-release-§346" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <p>Contract 1.62 accompanies the 1.1.0 platform release; this SDK's release of it is <strong>1.1.0</strong>
 (release 1.0.1 was never tagged, so contract 1.61 below ships in the same release). Every item of
@@ -2242,6 +2274,7 @@ the TypeDoc API reference to this repo's GitHub Pages site.</p>
 <li><a href="#contract-conformance"><span>Contract conformance</span></a></li>
 <li>
 <ul>
+<li><a href="#contract-163-the-111-release-§347"><span>Contract 1.63 — the 1.1.1 release (§34.7)</span></a></li>
 <li><a href="#contract-162-the-110-release-§346"><span>Contract 1.62 — the 1.1.0 release (§34.6)</span></a></li>
 <li><a href="#contract-161-the-101-fields-§345-released-in-110"><span>Contract 1.61 — the 1.0.1 fields (§34.5), released in 1.1.0</span></a></li>
 <li><a href="#contract-160-the-answers-to-588-and-the-release-wave-§344"><span>Contract 1.60 — the answers to #588 and the release wave (§34.4)</span></a></li>
@@ -2380,7 +2413,7 @@ the TypeDoc API reference to this repo's GitHub Pages site.</p>
 <li><a href="#building-from-source"><span>Building from source</span></a></li>
 <li><a href="#license"><span>License</span></a></li></ul></div></details></div>
 <div class="site-menu">
-<nav class="tsd-navigation"><a href="modules.html">AXIAM TypeScript SDK - v1.1.0</a>
+<nav class="tsd-navigation"><a href="modules.html">AXIAM TypeScript SDK - v1.1.1</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
 <li>Loading...</li></ul></nav></div></div></div><footer>
 <p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>
