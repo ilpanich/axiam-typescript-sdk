@@ -35,7 +35,9 @@ closes #148.
   served: nothing is sent after it and the typed `expired_token` is raised at once. Before, a `503`
   with `Retry-After: 120` and `expires_in: 30` sent requests at 125 s and 245 s, and could return
   tokens 95 s after the deadline. A standalone `devicePoll` / `cibaPoll`, which has no deadline, keeps
-  the unbounded §16 behaviour.
+  the unbounded §16 behaviour. A refused wait is refused before the `retry` telemetry event is
+  announced (`withRetry` gains an internal `admit` hook), so a caller counting retries does not
+  count one that was never sent (C164-48).
 - **The `expires_in` deadline is measured on the clock** (§14.2 rule 4, C164-05): it is a point taken
   when the authorization arrives, so the time a poll or `onUserCode` takes counts against it, not only
   the sleeps. `DeviceLoginParams.clock` (optional, the clock `cibaAwait` takes) makes it testable.
@@ -62,7 +64,12 @@ closes #148.
   `Retry-After` of a `429` is not exposed (C164-20). The in-poll retry tests gain the contract's
   transport-failure case (two failures then a `200` = three requests; three = `NetworkError`; retry
   off = one request) and the two deadline cases (C164-38, C164-36); the README states what the
-  deadline bound covers (C164-41).
+  deadline bound covers (C164-41). The deadline tests for the in-poll retry pin the jitter instead of
+  `Retry-After` (a bare `500` 100 ms before the deadline with `Math.random` at its maximum sends no
+  retry; at 0.25 the retry before the deadline is sent and the next wait is refused), cover the
+  `>=` boundary (a wait landing exactly on the deadline is refused) and have a CIBA twin; the
+  `Retry-After: 120` cases fail by assertion, not by vitest's timeout, if a wait escapes the bound
+  (C164-45, C164-48).
 
 ## [1.1.1] - 2026-10-20
 
