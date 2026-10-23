@@ -12,7 +12,7 @@ import { createServer as createNetServer, type Server as NetServer } from 'node:
 import type { AddressInfo } from 'node:net';
 import { decodeProtectedHeader, jwtVerify } from 'jose';
 import { http, HttpResponse, passthrough } from 'msw';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { AuthError, NetworkError, OAuthProtocolError, Sensitive } from '../../src/core/index.js';
 import { ValidationError } from '../../src/management/errors.js';
 import {
@@ -416,13 +416,52 @@ describe('§33.8 (7) — no request after expires_in; expired_token raised local
       [() => new HttpResponse('down', { status: 503, headers: { 'Retry-After': '120' } })],
       clock,
     );
-    const err = await oidc
-      .cibaAwait(initiated(random(), 30, 5, clock.start), { configuration: discoveryDocument(), clock })
-      .catch((e: unknown) => e);
+    // Anything that really sleeps a minute or more means the wait escaped the bound: fail on it
+    // by assertion, not by vitest's timeout.
+    const realSetTimeout = globalThis.setTimeout;
+    const long: number[] = [];
+    const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number, ...args: unknown[]) => {
+      if (ms !== undefined && ms >= 60_000) {
+        long.push(ms);
+        return realSetTimeout(fn, 0);
+      }
+      return realSetTimeout(fn, ms, ...args);
+    }) as typeof setTimeout);
+    let err: unknown;
+    try {
+      err = await oidc
+        .cibaAwait(initiated(random(), 30, 5, clock.start), { configuration: discoveryDocument(), clock })
+        .catch((e: unknown) => e);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(long).toEqual([]);
     expect(isExpiredToken(err)).toBe(true);
     // One request at 5 s; the 120 s wait is not served and nothing follows it.
     expect(seen.map((s) => s.at)).toEqual([5]);
     expect(clock.offset).toBeLessThanOrEqual(30_000);
+  });
+
+  // The jitter, not Retry-After, decides these waits (C164-45): Math.random is pinned and the 500 is bare.
+  it.each([
+    ['jitter at its maximum (200 ms) with 100 ms left: no retry is sent', 1, [5]],
+    ['jitter at 50 ms with 100 ms left: that retry precedes the deadline and is sent, the next wait is refused', 0.25, [5, 5.05]],
+    ['a wait landing exactly on the deadline (expires_in 5.2, 200 ms backoff) is refused', 1, [5], 5.2],
+  ])('a bare 500 near the deadline: %s', async (_label, jitter, requestsAt, expiresIn = 5.1) => {
+    const { oidc } = confidentialClient();
+    const clock = new TestClock();
+    const seen = tokenScript([() => new HttpResponse(null, { status: 500 })], clock);
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(jitter);
+    let err: unknown;
+    try {
+      err = await oidc
+        .cibaAwait(initiated(random(), expiresIn, 5, clock.start), { configuration: discoveryDocument(), clock })
+        .catch((e: unknown) => e);
+    } finally {
+      randomSpy.mockRestore();
+    }
+    expect(isExpiredToken(err)).toBe(true);
+    expect(seen.map((s) => s.at)).toEqual(requestsAt);
   });
 });
 

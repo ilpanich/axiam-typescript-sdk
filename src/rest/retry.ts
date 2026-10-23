@@ -48,6 +48,12 @@ export interface RetryOptions {
   sleepFn?: (ms: number) => Promise<void>;
   /** Injected for tests: returns the jitter fraction in [0, 1]. */
   randomFn?: () => number;
+  /**
+   * Called with the wait before a retry is announced or served; throwing refuses the retry, so
+   * nothing is emitted for it and nothing more is sent. A poll inside a deadline uses it to refuse
+   * a wait that would reach the deadline (CONTRACT.md §14.2 rule 4, §34.2 P10).
+   */
+  admit?: (delayMs: number) => void;
 }
 
 interface RetryAfterCarrier {
@@ -126,6 +132,7 @@ export async function withRetry<T>(
       }
       const retryAfterMs = isRetryAfterCarrier(err) ? err.retryAfterMs : undefined;
       const delay = delayMs(attempt, retryAfterMs, random());
+      options.admit?.(delay);
       // §16.5 — without this event a retried-then-succeeded call is invisible:
       // a slow success with no signal that the server is failing.
       options.telemetry?.emit({

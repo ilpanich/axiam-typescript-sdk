@@ -791,6 +791,24 @@ describe('a 5xx or transport failure on a poll is §16-retried inside the attemp
 // §14.2 rule 4: a §16 retry inside the poll never passes the deadline (C164-36)
 // ---------------------------------------------------------------------------
 
+/**
+ * Fail fast, by assertion, if anything really sleeps a minute or more: the loop's waits run on the
+ * injected clock, so a long real timer means a retry wait escaped the deadline bound (and would
+ * otherwise show only as vitest's timeout).
+ */
+function recordLongTimers(): { long: number[]; restore: () => void } {
+  const realSetTimeout = globalThis.setTimeout;
+  const long: number[] = [];
+  const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number, ...args: unknown[]) => {
+    if (ms !== undefined && ms >= 60_000) {
+      long.push(ms);
+      return realSetTimeout(fn, 0);
+    }
+    return realSetTimeout(fn, ms, ...args);
+  }) as typeof setTimeout);
+  return { long, restore: () => spy.mockRestore() };
+}
+
 describe('a §16 retry inside the poll is bounded by the deadline (§14.2 rule 4, §34.2 P10)', () => {
   /** A clock that never sleeps: `sleep` advances it and records the wait. */
   function fakeClock(): { now: () => number; sleep: (ms: number) => Promise<void>; at: () => number } {
@@ -823,31 +841,69 @@ describe('a §16 retry inside the poll is bounded by the deadline (§14.2 rule 4
       }),
     );
 
-    const { oidc } = createClient();
-    const err = await oidc.deviceLogin({ onUserCode: () => {}, clock }).catch((e: unknown) => e);
+    const timers = recordLongTimers();
+    try {
+      const { oidc } = createClient();
+      const err = await oidc.deviceLogin({ onUserCode: () => {}, clock }).catch((e: unknown) => e);
 
-    expect((err as OAuthProtocolError).error).toBe('expired_token');
-    expect(times).toEqual([5000]);
-    expect(clock.at()).toBeLessThanOrEqual(30_000);
+      expect((err as OAuthProtocolError).error).toBe('expired_token');
+      expect(timers.long).toEqual([]);
+      expect(times).toEqual([5000]);
+      expect(clock.at()).toBeLessThanOrEqual(30_000);
+    } finally {
+      timers.restore();
+    }
   }, 5000);
 
-  it('a poll sent 0.1 s before the deadline and answered 500 sends no retry', async () => {
+  /**
+   * A poll sent `leftMs` before the deadline and answered with a bare 500 (no Retry-After, so the
+   * wait is the jittered backoff alone): `Math.random` is pinned, so the first backoff is
+   * `random * 200` ms and decides the outcome (C164-45).
+   */
+  async function bareFiveHundredNearDeadline(
+    expiresIn: number,
+    random: number,
+  ): Promise<{ times: number[]; err: unknown }> {
     const state = createMockState();
     const clock = fakeClock();
     const times: number[] = [];
     server.use(
       discoveryHandler(state),
       http.post(DEVICE_AUTHORIZATION_ENDPOINT, () =>
-        HttpResponse.json(deviceAuthorizationResponse({ expires_in: 5.1, interval: 5 })),
+        HttpResponse.json(deviceAuthorizationResponse({ expires_in: expiresIn, interval: 5 })),
       ),
       http.post(TOKEN_ENDPOINT, () => {
         times.push(clock.at());
-        return HttpResponse.json({ error: 'server_error' }, { status: 500, headers: { 'Retry-After': '1' } });
+        return HttpResponse.json({ error: 'server_error' }, { status: 500 });
       }),
     );
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(random);
+    try {
+      const { oidc } = createClient();
+      const err = await oidc.deviceLogin({ onUserCode: () => {}, clock }).catch((e: unknown) => e);
+      return { times, err };
+    } finally {
+      randomSpy.mockRestore();
+    }
+  }
 
-    const { oidc } = createClient();
-    const err = await oidc.deviceLogin({ onUserCode: () => {}, clock }).catch((e: unknown) => e);
+  it('a bare 500 100 ms before the deadline, jitter at its maximum (200 ms): no retry is sent', async () => {
+    const { times, err } = await bareFiveHundredNearDeadline(5.1, 1);
+
+    expect((err as OAuthProtocolError).error).toBe('expired_token');
+    expect(times).toEqual([5000]);
+  }, 5000);
+
+  it('a bare 500 100 ms before the deadline, jitter at 50 ms: that retry is before the deadline and is sent, the next wait is refused', async () => {
+    const { times, err } = await bareFiveHundredNearDeadline(5.1, 0.25);
+
+    expect((err as OAuthProtocolError).error).toBe('expired_token');
+    expect(times).toEqual([5000, 5050]);
+  }, 5000);
+
+  it('a wait that lands exactly on the deadline is refused (>= , not >)', async () => {
+    // expires_in 5.2: the deadline is 5200 ms; the poll at 5000 ms, a 200 ms backoff reaches it.
+    const { times, err } = await bareFiveHundredNearDeadline(5.2, 1);
 
     expect((err as OAuthProtocolError).error).toBe('expired_token');
     expect(times).toEqual([5000]);

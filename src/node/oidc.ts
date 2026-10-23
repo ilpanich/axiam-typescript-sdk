@@ -690,20 +690,25 @@ interface PollDeadline {
 }
 
 /**
- * The wait of a §16 retry inside a poll, bounded by the loop's deadline (§14.2 rule 4,
- * §34.2 P10; C164-36): a wait that would reach the deadline is not served and nothing is sent
- * after it — the typed `expired_token` is raised at once, as the loop raises it. Sleeps on the
- * loop's clock.
+ * The §16 retry of a poll inside a loop's deadline (§14.2 rule 4, §34.2 P10; C164-36): `admit`
+ * refuses a wait — the jittered backoff floored at `Retry-After`, as `withRetry` computed it —
+ * that would reach the deadline, before the retry is announced to telemetry or sent, by raising
+ * the typed `expired_token`; `sleepFn` serves an admitted wait on the loop's clock.
  */
-function deadlineBoundedSleep(bound: PollDeadline, what: string): (ms: number) => Promise<void> {
-  return async (ms) => {
-    if (bound.clock.now() + ms >= bound.deadline) {
-      throw new OAuthProtocolError(
-        'expired_token',
-        `the ${what} expired before it was decided (client-side deadline from expires_in; CONTRACT.md §14.2 rule 4, §34.2 P10)`,
-      );
-    }
-    await bound.clock.sleep(ms);
+function deadlineBoundedRetry(
+  bound: PollDeadline,
+  what: string,
+): { admit: (ms: number) => void; sleepFn: (ms: number) => Promise<void> } {
+  return {
+    admit: (ms) => {
+      if (bound.clock.now() + ms >= bound.deadline) {
+        throw new OAuthProtocolError(
+          'expired_token',
+          `the ${what} expired before it was decided (client-side deadline from expires_in; CONTRACT.md §14.2 rule 4, §34.2 P10)`,
+        );
+      }
+    },
+    sleepFn: (ms) => bound.clock.sleep(ms),
   };
 }
 
@@ -2459,7 +2464,7 @@ export class OidcClient {
         operation,
         enabled: this.#session.retryEnabled,
         telemetry: this.#session.telemetry.dispatcher,
-        ...(bound !== undefined ? { sleepFn: deadlineBoundedSleep(bound, 'CIBA request') } : {}),
+        ...(bound !== undefined ? deadlineBoundedRetry(bound, 'CIBA request') : {}),
       },
     );
     if (outcome.error) throw outcome.error;
@@ -2670,7 +2675,7 @@ export class OidcClient {
         operation,
         enabled: this.#session.retryEnabled,
         telemetry: this.#session.telemetry.dispatcher,
-        ...(bound !== undefined ? { sleepFn: deadlineBoundedSleep(bound, 'device authorization') } : {}),
+        ...(bound !== undefined ? deadlineBoundedRetry(bound, 'device authorization') : {}),
       },
     );
     if (outcome.error) throw outcome.error;
