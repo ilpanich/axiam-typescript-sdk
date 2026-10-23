@@ -17,11 +17,22 @@ removed or retyped, so this is a patch release. It closes #148.
 
 ### Fixed
 
-- **A `429 rate_limit_exceeded` on a device-code poll is waited out** (§14.2 rule 9, contract 1.64
-  (b)). `devicePoll` raises it as an `OAuthProtocolError` with `error == "rate_limit_exceeded"`;
-  `deviceLogin` waits `Retry-After` as a minimum (capped at the `expires_in` deadline), counts the wait
-  as one interval, does not raise the interval, and polls again. A `Retry-After` past the deadline ends
-  in the typed `expired_token` without a request after it.
+- **A `429` on a device-code poll is waited out** (§14.2 rule 9, contract 1.64 (b), as amended). The
+  status decides, not the body: `devicePoll` raises any `429` (the server's `{"error":"rate_limit_exceeded"}`,
+  a bodiless proxy `429`, one saying `slow_down`) as an `OAuthProtocolError` with
+  `error == "rate_limit_exceeded"`; `deviceLogin` waits `Retry-After` as a minimum, counts the wait as one
+  interval, does not raise the interval (only the `400 slow_down` does), and polls again. A wait past
+  the deadline ends in the typed `expired_token` without a request after it. A `500
+  {"error":"server_error"}` mid-poll is retried, as every `5xx` is (§14.2 rule 6).
+- **The `expires_in` deadline is measured on the clock** (§14.2 rule 4, C164-05): it is a point taken
+  when the authorization arrives, so the time a poll or `onUserCode` takes counts against it, not only
+  the sleeps. `DeviceLoginParams.clock` (optional, the clock `cibaAwait` takes) makes it testable.
+- **RFC 7592 registration calls no longer send same-origin cookies in the browser** (§12.1 rule 3,
+  C164-06): the bare transport uses the same fetch-adapter config as an `/oauth2/*` request.
+- **A `429 {"error":…}` from `/oauth2/*` is an `OAuthProtocolError` on the other token requests too**
+  (`oidcRefresh`, `loginClientCredentials`, the `deviceAuthorize` and the rest), where it was a
+  `NetworkError` (§2, C164-23). The thrown class changes for that status only; no signature does. A `5xx`
+  stays a `NetworkError` whatever its body.
 - **Browser persona: `/oauth2/*` no longer sends same-origin cookies** (§12.1 rule 3, C163-12). The
   request goes through the fetch adapter with `credentials: 'omit'`; the XHR adapter sent a same-origin
   cookie whatever `withCredentials` said. The Node persona is unchanged.
@@ -31,8 +42,11 @@ removed or retyped, so this is a patch release. It closes #148.
 - The contract 1.63 §14.6 test now signs in through `login()` against a mock that sets `axiam_access`
   and `axiam_csrf`, and its control, a management `POST`, comes after the `/oauth2/*` calls
   (C163-08). The C162-07 "states the member" test asserts the stated values in the `PUT` body
-  (C163-09). The README's manifest rows are labelled by their §27.6.2 item 4 / C162-07, C162-08 and
-  not by §34.6 letters (C163-18).
+  (C163-09). The README's two manifest rows of the §34.7 table lead with C162-07 and C162-08 and give
+  the §34.6 letter as the parenthetical (C163-18, C164-22). The wall-clock `deviceLogin` tests record
+  their sleeps instead of sleeping (C164-23); the browser `/oauth2/*` test also asserts the `Request`
+  that reaches `fetch` carries `credentials: 'omit'` (C164-19). `devicePoll`'s documentation says the
+  `Retry-After` of a `429` is not exposed (C164-20).
 
 ## [1.1.1] - 2026-10-20
 
