@@ -36,8 +36,9 @@ closes #148.
   with `Retry-After: 120` and `expires_in: 30` sent requests at 125 s and 245 s, and could return
   tokens 95 s after the deadline. A standalone `devicePoll` / `cibaPoll`, which has no deadline, keeps
   the unbounded §16 behaviour. A refused wait is refused before the `retry` telemetry event is
-  announced (`withRetry` gains an internal `admit` hook), so a caller counting retries does not
-  count one that was never sent (C164-48).
+  announced: `RetryOptions` (exported, next to its `sleepFn` and `randomFn` test seams) gains an
+  optional `admit(delayMs)` hook, called before a retry is announced or served, and throwing refuses
+  the retry. A caller counting retries does not count one that was never sent (C164-48, C164-54).
 - **The `expires_in` deadline is measured on the clock** (§14.2 rule 4, C164-05): it is a point taken
   when the authorization arrives, so the time a poll or `onUserCode` takes counts against it, not only
   the sleeps. `DeviceLoginParams.clock` (optional, the clock `cibaAwait` takes) makes it testable.
