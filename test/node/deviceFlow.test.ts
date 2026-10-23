@@ -724,6 +724,51 @@ describe('a 5xx or transport failure on a poll is §16-retried inside the attemp
     expect(flow.calls()).toBe(1);
   });
 
+  it.each([
+    ['a transport failure twice, then a 200: three requests and the tokens', 2, 3, true],
+    ['three transport failures in a row: three requests, then the NetworkError', 3, 3, false],
+  ])('%s', async (_label, failures, requests, succeeds) => {
+    // §14.6 (W7.1c): "The same holds for a transport failure" (C164-38).
+    const state = createMockState();
+    let calls = 0;
+    server.use(
+      discoveryHandler(state),
+      http.post(TOKEN_ENDPOINT, () => {
+        calls += 1;
+        return calls <= failures ? HttpResponse.error() : success();
+      }),
+    );
+
+    const { oidc } = createClient();
+    const outcome = await oidc.devicePoll({ deviceCode: new Sensitive(DEVICE_CODE) }).catch((e: unknown) => e);
+
+    expect(calls).toBe(requests);
+    if (succeeds) {
+      expect((outcome as { accessToken: Sensitive<string> }).accessToken.expose()).toBe('device-access-token');
+    } else {
+      expect(outcome).toBeInstanceOf(NetworkError);
+    }
+  });
+
+  it('with retry disabled a transport failure makes one request', async () => {
+    const state = createMockState();
+    let calls = 0;
+    server.use(
+      discoveryHandler(state),
+      http.post(TOKEN_ENDPOINT, () => {
+        calls += 1;
+        return HttpResponse.error();
+      }),
+    );
+
+    const session = createNodeSession({ baseUrl: BASE_URL, tenantId: TENANT_ID, orgId: ORG_ID, retryEnabled: false });
+    const oidc = createOidcClient(session, { clientId: CLIENT_ID });
+    const err = await oidc.devicePoll({ deviceCode: new Sensitive(DEVICE_CODE) }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NetworkError);
+    expect(calls).toBe(1);
+  });
+
   it('with retry disabled a 5xx makes one request per poll', async () => {
     const state = createMockState();
     const flow = mountFlow(state, [() => serverError(), () => success()]);
@@ -739,6 +784,91 @@ describe('a 5xx or transport failure on a poll is §16-retried inside the attemp
 
     expect(err).toBeInstanceOf(NetworkError);
     expect(flow.calls()).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §14.2 rule 4: a §16 retry inside the poll never passes the deadline (C164-36)
+// ---------------------------------------------------------------------------
+
+describe('a §16 retry inside the poll is bounded by the deadline (§14.2 rule 4, §34.2 P10)', () => {
+  /** A clock that never sleeps: `sleep` advances it and records the wait. */
+  function fakeClock(): { now: () => number; sleep: (ms: number) => Promise<void>; at: () => number } {
+    let t = 0;
+    return {
+      now: () => t,
+      sleep: (ms: number) => {
+        t += ms;
+        return Promise.resolve();
+      },
+      at: () => t,
+    };
+  }
+
+  it('503 + Retry-After 120 on every poll, expires_in 30, interval 5: one request at 5 s, none at or after 30 s, expired_token', async () => {
+    const state = createMockState();
+    const clock = fakeClock();
+    const times: number[] = [];
+    server.use(
+      discoveryHandler(state),
+      http.post(DEVICE_AUTHORIZATION_ENDPOINT, () =>
+        HttpResponse.json(deviceAuthorizationResponse({ expires_in: 30, interval: 5 })),
+      ),
+      http.post(TOKEN_ENDPOINT, () => {
+        times.push(clock.at());
+        return HttpResponse.json(
+          { error: 'temporarily_unavailable' },
+          { status: 503, headers: { 'Retry-After': '120' } },
+        );
+      }),
+    );
+
+    const { oidc } = createClient();
+    const err = await oidc.deviceLogin({ onUserCode: () => {}, clock }).catch((e: unknown) => e);
+
+    expect((err as OAuthProtocolError).error).toBe('expired_token');
+    expect(times).toEqual([5000]);
+    expect(clock.at()).toBeLessThanOrEqual(30_000);
+  }, 5000);
+
+  it('a poll sent 0.1 s before the deadline and answered 500 sends no retry', async () => {
+    const state = createMockState();
+    const clock = fakeClock();
+    const times: number[] = [];
+    server.use(
+      discoveryHandler(state),
+      http.post(DEVICE_AUTHORIZATION_ENDPOINT, () =>
+        HttpResponse.json(deviceAuthorizationResponse({ expires_in: 5.1, interval: 5 })),
+      ),
+      http.post(TOKEN_ENDPOINT, () => {
+        times.push(clock.at());
+        return HttpResponse.json({ error: 'server_error' }, { status: 500, headers: { 'Retry-After': '1' } });
+      }),
+    );
+
+    const { oidc } = createClient();
+    const err = await oidc.deviceLogin({ onUserCode: () => {}, clock }).catch((e: unknown) => e);
+
+    expect((err as OAuthProtocolError).error).toBe('expired_token');
+    expect(times).toEqual([5000]);
+  }, 5000);
+
+  it('a standalone devicePoll keeps the unbounded §16 behaviour: it has no deadline', async () => {
+    const state = createMockState();
+    const flow = mountFlow(state, [
+      () => new HttpResponse(null, { status: 503, headers: { 'Retry-After': '1' } }),
+      () => success(),
+    ]);
+    const sleeps = recordSleeps();
+    try {
+      const { oidc } = createClient();
+      await oidc.devicePoll({ deviceCode: new Sensitive(DEVICE_CODE) });
+
+      expect(flow.calls()).toBe(2);
+      expect(sleeps.delays.some((ms) => ms >= 1000)).toBe(true);
+    } finally {
+      sleeps.restore();
+    }
   });
 });
 

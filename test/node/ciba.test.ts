@@ -408,6 +408,22 @@ describe('§33.8 (7) — no request after expires_in; expired_token raised local
     expect(isExpiredToken(err)).toBe(true);
     expect(seen.map((s) => s.at)).toEqual([5, 10]);
   });
+
+  it('a §16 retry inside the poll never waits past the deadline: 503 + Retry-After 120, expires_in 30 (§34.2 P10, C164-36)', async () => {
+    const { oidc } = confidentialClient();
+    const clock = new TestClock();
+    const seen = tokenScript(
+      [() => new HttpResponse('down', { status: 503, headers: { 'Retry-After': '120' } })],
+      clock,
+    );
+    const err = await oidc
+      .cibaAwait(initiated(random(), 30, 5, clock.start), { configuration: discoveryDocument(), clock })
+      .catch((e: unknown) => e);
+    expect(isExpiredToken(err)).toBe(true);
+    // One request at 5 s; the 120 s wait is not served and nothing follows it.
+    expect(seen.map((s) => s.at)).toEqual([5]);
+    expect(clock.offset).toBeLessThanOrEqual(30_000);
+  });
 });
 
 // ── 8. Transient failure is not terminal ────────────────────────────────────
@@ -732,7 +748,10 @@ describe('CIBA misc', () => {
       clock,
     });
     expect(set.accessToken).toBeInstanceOf(Sensitive);
-    expect(clock.sleeps).toEqual([5, 5]);
+    // The loop's two interval waits; the two §16 backoffs inside the first poll (under a second)
+    // are served on the same clock now that they are bounded by its deadline (C164-36).
+    expect(clock.sleeps.filter((s) => s >= 1)).toEqual([5, 5]);
+    expect(clock.sleeps).toHaveLength(4);
     void randomUUID;
   });
 });
