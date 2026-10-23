@@ -12,9 +12,9 @@
 //     which terminate, how many requests actually go out, and the §14.3 rule 2
 //     ordering guarantee. Intervals in these fixtures are 1 s.
 
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
-import { AuthError, OAuthProtocolError, Sensitive } from '../../src/core/index.js';
+import { AuthError, NetworkError, OAuthProtocolError, Sensitive } from '../../src/core/index.js';
 import {
   DEFAULT_POLL_INTERVAL_SECS,
   PollSchedule,
@@ -216,7 +216,37 @@ describe('deviceAuthorize (§14.1)', () => {
 // §14.2 wire behaviour
 // ---------------------------------------------------------------------------
 
+/**
+ * Record every sleep the polling loop takes and run it at once: the loop's
+ * waits are asserted as the delays it asked for, not slept on a wall clock.
+ */
+function recordSleeps(): { delays: number[]; restore: () => void } {
+  const realSetTimeout = globalThis.setTimeout;
+  const delays: number[] = [];
+  const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+    fn: () => void,
+    ms?: number,
+    ...args: unknown[]
+  ) => {
+    // Only the loop's own sleep: other libraries keep timers of their own.
+    if (ms !== undefined && new Error().stack?.includes('src/node/oidc')) {
+      delays.push(ms);
+      return realSetTimeout(fn, 0);
+    }
+    return realSetTimeout(fn, ms, ...args);
+  }) as typeof setTimeout);
+  return { delays, restore: () => spy.mockRestore() };
+}
+
 describe('deviceLogin polling (§14.2)', () => {
+  let sleeps: ReturnType<typeof recordSleeps>;
+  beforeEach(() => {
+    sleeps = recordSleeps();
+  });
+  afterEach(() => {
+    sleeps.restore();
+  });
+
   it('loops on authorization_pending rather than raising', async () => {
     const state = createMockState();
     const flow = mountFlow(state, [
@@ -231,21 +261,23 @@ describe('deviceLogin polling (§14.2)', () => {
 
     expect(flow.calls()).toBe(4);
     expect(tokens.accessToken.expose()).toBe('device-access-token');
+    expect(sleeps.delays).toEqual([1000, 1000, 1000, 1000]);
   });
 
-  it('treats slow_down as non-terminal', async () => {
-    // The back-off arithmetic is asserted against PollSchedule; what matters
-    // here is that `slow_down` is not mistaken for a terminal answer. An SDK
-    // that let it fall through would abort a grant the user is still approving.
+  it('treats slow_down as non-terminal and raises the interval for the polls after it', async () => {
+    // A `400 slow_down` adds 5 s, permanently (the arithmetic is also asserted against
+    // PollSchedule); an SDK that let it fall through would abort a grant the user is
+    // still approving.
     const state = createMockState();
-    const flow = mountFlow(state, [() => slowDown(), () => success()]);
+    const flow = mountFlow(state, [() => slowDown(), () => pending(), () => success()]);
 
     const { oidc } = createClient();
     const tokens = await oidc.deviceLogin({ onUserCode: () => {} });
 
-    expect(flow.calls()).toBe(2);
+    expect(flow.calls()).toBe(3);
     expect(tokens.accessToken.expose()).toBe('device-access-token');
-  }, 20_000);
+    expect(sleeps.delays).toEqual([1000, 6000, 6000]);
+  });
 
   it.each([
     ['access_denied', 'expired_token'],
@@ -278,6 +310,37 @@ describe('deviceLogin polling (§14.2)', () => {
     expect(flow.calls()).toBe(1);
   });
 
+  it('measures the deadline on the clock, so the time a poll takes counts against it (C164-05)', async () => {
+    const state = createMockState();
+    let nowMs = 0;
+    const clock = {
+      now: () => nowMs,
+      sleep: (ms: number): Promise<void> => {
+        nowMs += ms;
+        return Promise.resolve();
+      },
+    };
+    // Every poll takes 2 s of the clock; the grant lasts 5 s, the interval is 1 s.
+    const flow = mountFlow(
+      state,
+      [
+        () => {
+          nowMs += 2000;
+          return pending();
+        },
+      ],
+      { expires_in: 5, interval: 1 },
+    );
+
+    const { oidc } = createClient();
+    const err = await oidc.deviceLogin({ onUserCode: () => {}, clock }).catch((e: unknown) => e);
+
+    // t=1 poll (ends 3), t=4 poll (ends 6): the next wait would end at 7 > 5.
+    // Counting the sleeps alone would have allowed two more polls.
+    expect((err as OAuthProtocolError).error).toBe('expired_token');
+    expect(flow.calls()).toBe(2);
+  });
+
   it('retries a 5xx mid-poll rather than treating it as terminal', async () => {
     const state = createMockState();
     const flow = mountFlow(state, [
@@ -294,64 +357,94 @@ describe('deviceLogin polling (§14.2)', () => {
     expect(tokens.accessToken.expose()).toBe('device-access-token');
   });
 
-  describe('a 429 rate_limit_exceeded on a poll is waited out (§14.2 rule 9, contract 1.64)', () => {
-    /**
-     * Record every sleep the polling loop takes and run it at once: the loop's
-     * waits are asserted as the delays it asked for, not slept on a wall clock.
-     */
-    function recordSleeps(): { delays: number[]; restore: () => void } {
-      const realSetTimeout = globalThis.setTimeout;
-      const delays: number[] = [];
-      const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
-        fn: () => void,
-        ms?: number,
-        ...args: unknown[]
-      ) => {
-        // Only the loop's own sleep: other libraries keep timers of their own.
-        if (ms !== undefined && new Error().stack?.includes('src/node/oidc')) {
-          delays.push(ms);
-          return realSetTimeout(fn, 0);
-        }
-        return realSetTimeout(fn, ms, ...args);
-      }) as typeof setTimeout);
-      return { delays, restore: () => spy.mockRestore() };
-    }
+  it('retries a 500 {"error":"server_error"} mid-poll: a 5xx is a transport failure whatever its body (§14.2 rule 6)', async () => {
+    // The body AXIAM's own token endpoint sends on an internal failure.
+    const state = createMockState();
+    const flow = mountFlow(state, [
+      () => pending(),
+      () =>
+        HttpResponse.json(
+          { error: 'server_error', error_description: 'internal error' },
+          { status: 500 },
+        ),
+      () => success(),
+    ]);
 
+    const { oidc } = createClient();
+    const tokens = await oidc.deviceLogin({ onUserCode: () => {} });
+
+    expect(flow.calls()).toBe(3);
+    expect(tokens.accessToken.expose()).toBe('device-access-token');
+  });
+
+  describe('a 429 on a poll is waited out (§14.2 rule 9, contract 1.64)', () => {
     it('waits at least Retry-After, polls again and completes, with the interval unchanged', async () => {
       const state = createMockState();
+      // The server's own body: `{"error":"rate_limit_exceeded"}`, no error_description.
       // 429, then pending, then success: the sleep before the poll that follows
       // the waited-out round is the original interval, not five seconds longer.
       const flow = mountFlow(state, [() => rateLimited('3'), () => pending(), () => success()], {
         interval: 1,
         expires_in: 600,
       });
-      const sleeps = recordSleeps();
-      try {
-        const { oidc } = createClient();
-        const tokens = await oidc.deviceLogin({ onUserCode: () => {} });
 
-        expect(tokens.accessToken.expose()).toBe('device-access-token');
-        expect(flow.calls()).toBe(3);
-        // interval, then Retry-After (>= 3 s), then the interval again.
-        expect(sleeps.delays).toEqual([1000, 3000, 1000]);
-      } finally {
-        sleeps.restore();
-      }
+      const { oidc } = createClient();
+      const tokens = await oidc.deviceLogin({ onUserCode: () => {} });
+
+      expect(tokens.accessToken.expose()).toBe('device-access-token');
+      expect(flow.calls()).toBe(3);
+      // interval, then Retry-After (>= 3 s), then the interval again.
+      expect(sleeps.delays).toEqual([1000, 3000, 1000]);
     });
 
     it('serves a 429 without a Retry-After as one ordinary interval', async () => {
       const state = createMockState();
       const flow = mountFlow(state, [() => rateLimited(), () => success()], { interval: 1 });
-      const sleeps = recordSleeps();
-      try {
-        const { oidc } = createClient();
-        await oidc.deviceLogin({ onUserCode: () => {} });
 
-        expect(flow.calls()).toBe(2);
-        expect(sleeps.delays).toEqual([1000, 1000]);
-      } finally {
-        sleeps.restore();
-      }
+      const { oidc } = createClient();
+      await oidc.deviceLogin({ onUserCode: () => {} });
+
+      expect(flow.calls()).toBe(2);
+      expect(sleeps.delays).toEqual([1000, 1000]);
+    });
+
+    it('honours the Retry-After of a bodiless 429 (a proxy\'s) as the floor', async () => {
+      const state = createMockState();
+      const flow = mountFlow(
+        state,
+        [() => new HttpResponse(null, { status: 429, headers: { 'Retry-After': '7' } }), () => success()],
+        { interval: 1 },
+      );
+
+      const { oidc } = createClient();
+      await oidc.deviceLogin({ onUserCode: () => {} });
+
+      expect(flow.calls()).toBe(2);
+      expect(sleeps.delays).toEqual([1000, 7000]);
+    });
+
+    it('does not raise the interval for a 429 whose body says slow_down: the status decides', async () => {
+      const state = createMockState();
+      const flow = mountFlow(
+        state,
+        [
+          () =>
+            HttpResponse.json(
+              { error: 'slow_down' },
+              { status: 429, headers: { 'Retry-After': '2' } },
+            ),
+          () => pending(),
+          () => success(),
+        ],
+        { interval: 1 },
+      );
+
+      const { oidc } = createClient();
+      await oidc.deviceLogin({ onUserCode: () => {} });
+
+      expect(flow.calls()).toBe(3);
+      // interval, Retry-After (2 s), then the interval again: not 6 s.
+      expect(sleeps.delays).toEqual([1000, 2000, 1000]);
     });
 
     it('caps a Retry-After past expires_in at the deadline: expired_token, nothing sent after it', async () => {
@@ -360,18 +453,14 @@ describe('deviceLogin polling (§14.2)', () => {
         interval: 1,
         expires_in: 5,
       });
-      const sleeps = recordSleeps();
-      try {
-        const { oidc } = createClient();
-        const err = await oidc.deviceLogin({ onUserCode: () => {} }).catch((e: unknown) => e);
 
-        expect(err).toBeInstanceOf(OAuthProtocolError);
-        expect((err as OAuthProtocolError).error).toBe('expired_token');
-        expect(flow.calls()).toBe(1);
-        expect(sleeps.delays).toEqual([1000]);
-      } finally {
-        sleeps.restore();
-      }
+      const { oidc } = createClient();
+      const err = await oidc.deviceLogin({ onUserCode: () => {} }).catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(OAuthProtocolError);
+      expect((err as OAuthProtocolError).error).toBe('expired_token');
+      expect(flow.calls()).toBe(1);
+      expect(sleeps.delays).toEqual([1000]);
     });
 
     it('surfaces the 429 from a single devicePoll as rate_limit_exceeded, never slow_down', async () => {
@@ -387,6 +476,21 @@ describe('deviceLogin polling (§14.2)', () => {
         .catch((e: unknown) => e);
 
       expect(err).toBeInstanceOf(OAuthProtocolError);
+      expect((err as OAuthProtocolError).error).toBe('rate_limit_exceeded');
+    });
+
+    it('surfaces a 429 whose body says slow_down from a single devicePoll as rate_limit_exceeded', async () => {
+      const state = createMockState();
+      server.use(
+        discoveryHandler(state),
+        http.post(TOKEN_ENDPOINT, () => HttpResponse.json({ error: 'slow_down' }, { status: 429 })),
+      );
+
+      const { oidc } = createClient();
+      const err = await oidc
+        .devicePoll({ deviceCode: new Sensitive(DEVICE_CODE) })
+        .catch((e: unknown) => e);
+
       expect((err as OAuthProtocolError).error).toBe('rate_limit_exceeded');
     });
   });
@@ -520,5 +624,38 @@ describe('devicePoll (§14.1)', () => {
 
     expect(forms[0]!.get('grant_type')).toBe('urn:ietf:params:oauth:grant-type:device_code');
     expect(forms[0]!.get('device_code')).toBe(DEVICE_CODE);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §2: a 429 on the other token requests (C164-23)
+// ---------------------------------------------------------------------------
+
+describe('a 429 on /oauth2/token outside the device poll (§2, §14.2 rule 9)', () => {
+  it('loginClientCredentials raises the server\'s 429 {"error":"rate_limit_exceeded"} as OAuthProtocolError', async () => {
+    const state = createMockState();
+    server.use(
+      discoveryHandler(state),
+      http.post(TOKEN_ENDPOINT, () => rateLimited('2')),
+    );
+
+    const { oidc } = createClient({ clientSecret: 'secret' });
+    const err = await oidc.loginClientCredentials({}).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(OAuthProtocolError);
+    expect((err as OAuthProtocolError).error).toBe('rate_limit_exceeded');
+  });
+
+  it('a 500 {"error":"server_error"} stays a NetworkError: a 5xx is a transport failure whatever its body', async () => {
+    const state = createMockState();
+    server.use(
+      discoveryHandler(state),
+      http.post(TOKEN_ENDPOINT, () => HttpResponse.json({ error: 'server_error' }, { status: 500 })),
+    );
+
+    const { oidc } = createClient({ clientSecret: 'secret' });
+    const err = await oidc.loginClientCredentials({}).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NetworkError);
   });
 });

@@ -353,19 +353,25 @@ export class PollSchedule {
 const POLL_RETRY_AFTER_MS = new WeakMap<OAuthProtocolError, number>();
 
 /**
- * The §14.2 rule 9 reading of a device poll's `429`: an `OAuthProtocolError`
- * with `error == "rate_limit_exceeded"` (the body's own member, dispatched on
- * before the status), its `Retry-After` recorded in {@link POLL_RETRY_AFTER_MS}.
- * `undefined` for anything else, which keeps §2's mapping.
+ * The §14.2 rule 9 reading of a device poll's `429` (contract 1.64, amended:
+ * the status decides, not the body): an `OAuthProtocolError` with
+ * `error == "rate_limit_exceeded"` whatever the body names — a bodiless `429`
+ * from a proxy, or one saying `slow_down` as a server before 1.1.2 sent it,
+ * included — with its `Retry-After` recorded in {@link POLL_RETRY_AFTER_MS}.
+ * `undefined` for any other status, which keeps §2's mapping.
  */
 function pollRateLimit(err: unknown): OAuthProtocolError | undefined {
   if (axiosStatus(err) !== 429) return undefined;
-  const protocol = oauth2ErrorFromBody(axiosBody(err));
-  if (protocol?.error !== 'rate_limit_exceeded') return undefined;
+  const body = axiosBody(err);
+  const description =
+    body !== null && typeof body === 'object' && typeof (body as { error_description?: unknown }).error_description === 'string'
+      ? (body as { error_description: string }).error_description
+      : '';
+  const limited = new OAuthProtocolError('rate_limit_exceeded', description);
   const response = (err as { response?: AxiosResponse }).response;
   const retryAfter = response ? retryAfterMs(response) : undefined;
-  if (retryAfter !== undefined) POLL_RETRY_AFTER_MS.set(protocol, retryAfter);
-  return protocol;
+  if (retryAfter !== undefined) POLL_RETRY_AFTER_MS.set(limited, retryAfter);
+  return limited;
 }
 
 /** Await `ms` milliseconds. Extracted so tests can stub the timer. */
@@ -555,6 +561,13 @@ function mapOidcError(err: unknown, url: string, fallbackMessage: string): Axiam
   const status = axiosStatus(err);
   if (status !== undefined) {
     const body = axiosBody(err);
+    // §2 / §14.2 rule 9 (C164-23): a `429` carrying an `error` member is that OAuth2 error
+    // (AXIAM's own is `{"error":"rate_limit_exceeded"}`, with no description), not a bare
+    // `NetworkError`. A 5xx stays one whatever its body (§14.2 rule 6).
+    if (status === 429) {
+      const protocol = oauth2ErrorFromBody(body);
+      if (protocol) return protocol;
+    }
     return mapHttpStatusToError(status, bodyMessage(body, fallbackMessage), { url, body, cause: err });
   }
   return new NetworkError(fallbackMessage, sanitizeAxiosError(err));
@@ -1656,17 +1669,20 @@ export class OidcClient {
    * The raw single call, so an application driving its own loop (a UI
    * rendering a countdown, say) can. The five RFC 8628 §3.5 answers surface as
    * {@link OAuthProtocolError} — `authorization_pending` and `slow_down`
-   * included — so a hand-rolled loop sees exactly what {@link deviceLogin}
-   * sees. Most callers want {@link deviceLogin}.
+   * included — so a hand-rolled loop dispatches on the same answers
+   * {@link deviceLogin} does. Most callers want {@link deviceLogin}.
    *
    * Client authentication is the one {@link deviceAuthorize} describes
    * (contract 1.62, §14.1 rule 2): a configured `clientSecret` is sent as
    * `client_secret` in the form body, never as `Authorization: Basic`; a public
    * client sends none; `client_id` is sent on **every** poll (§14.1 rule 3). A
    * `401 invalid_client` surfaces as {@link OAuthProtocolError}, is not retried
-   * and does not enter the §9 refresh guard (§14.2 rule 5). A `429`
-   * whose body names `rate_limit_exceeded` is an {@link OAuthProtocolError} too
-   * (rule 9) — never `slow_down`; {@link deviceLogin} waits it out. This SDK ships no
+   * and does not enter the §9 refresh guard (§14.2 rule 5). Any `429`
+   * is an {@link OAuthProtocolError} with `error == 'rate_limit_exceeded'` too
+   * (rule 9, whatever its body names) — never `slow_down`; {@link deviceLogin}
+   * waits it out. Its `Retry-After` is not exposed, so a hand-rolled loop
+   * should wait at least one interval on it without raising the interval, or
+   * use {@link deviceLogin}. This SDK ships no
    * DPoP proof generator, so it cannot drive a client registered for DPoP; it
    * surfaces that client's refusal as the same `invalid_client`.
    */
@@ -1712,11 +1728,16 @@ export class OidcClient {
    */
   async deviceLogin(params: DeviceLoginParams): Promise<OidcTokenSet> {
     const configuration = params.configuration ?? (await this.oidcDiscover());
+    const clock = params.clock ?? SYSTEM_CIBA_CLOCK;
     const authorization = await this.deviceAuthorize({
       ...(params.scope !== undefined ? { scope: params.scope } : {}),
       ...(params.tenantId !== undefined ? { tenantId: params.tenantId } : {}),
       configuration,
     });
+    // §14.2 rule 4 (C164-05): the deadline is a point on the clock, taken when the
+    // authorization arrives, so the time `onUserCode` and every poll take count
+    // against it and not only the sleeps do.
+    const deadline = clock.now() + authorization.expiresIn * 1000;
 
     // §14.3 rule 2 — before any polling.
     await params.onUserCode(authorization);
@@ -1730,7 +1751,7 @@ export class OidcClient {
       // keeps the SDK from issuing a request that can only be refused, and
       // reports it under the same `expired_token` code the server would have
       // used — so a caller's branch does not care which side noticed first.
-      if (!schedule.tick()) {
+      if (!schedule.tick() || clock.now() + waitSecs * 1000 >= deadline) {
         throw new OAuthProtocolError(
           'expired_token',
           'the device authorization expired before the user completed it ' +
@@ -1738,7 +1759,7 @@ export class OidcClient {
         );
       }
 
-      await sleep(waitSecs * 1000);
+      await clock.sleep(waitSecs * 1000);
 
       try {
         return await this.devicePoll({
@@ -1752,6 +1773,8 @@ export class OidcClient {
             continue;
           }
           if (err.error === 'slow_down') {
+            // Only the `400` gets here: a `429` is `rate_limit_exceeded` below,
+            // whatever its body names (§14.2 rule 9, amended).
             schedule.slowDown(); // §14.2 rule 1: cumulative, never reset.
             continue;
           }
@@ -1765,7 +1788,9 @@ export class OidcClient {
           throw err; // expired_token / access_denied / invalid_grant
         }
         // §14.2 rule 6: transport and 5xx failures are not among the five
-        // protocol answers and are not terminal.
+        // protocol answers and are not terminal — a 5xx whatever its body
+        // (contract 1.64, amended): `500 {"error":"server_error"}` maps to
+        // `NetworkError` by status, before the body is read.
         if (err instanceof NetworkError) {
           continue;
         }
