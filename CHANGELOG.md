@@ -9,11 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.2] - 2026-10-23
 
-`axiam-sdk` 1.1.2 conforms to **contract 1.64** (axiam `fb92ec4`, the release 1.1.2 plan branch).
-`CONTRACT.md`, `openapi.json`, `management-registry.json` and `proto/` are vendored byte for byte from
-that commit (`proto/` is unchanged; the registry differs from 1.1.1 only in its spec digest and
-`spec_version` 1.1.2, so no generated source changes). Nothing here is source-breaking: no export is
-removed or retyped, so this is a patch release. It closes #148.
+`axiam-sdk` 1.1.2 conforms to **contract 1.64**. `CONTRACT.md` is vendored byte for byte from axiam
+`b3f8687` (contract 1.64 as amended twice, W7.1b and W7.1c); `openapi.json`, `management-registry.json`
+and `proto/` from `fb92ec4`, which those amendments do not change (`proto/` is unchanged; the registry
+differs from 1.1.1 only in its spec digest and `spec_version` 1.1.2, so no generated source changes).
+Nothing here is source-breaking: no export is removed or retyped, so this is a patch release. It
+closes #148.
 
 ### Fixed
 
@@ -24,15 +25,20 @@ removed or retyped, so this is a patch release. It closes #148.
   interval, does not raise the interval (only the `400 slow_down` does), and polls again. A wait past
   the deadline ends in the typed `expired_token` without a request after it. A `500
   {"error":"server_error"}` mid-poll is retried, as every `5xx` is (§14.2 rule 6).
+- **A `5xx` or transport failure on a device poll is §16-retried inside the poll** (§14.2 rule 6,
+  §16.2, C164-25): three requests in all, `Retry-After` a floor, before the failure surfaces and the
+  loop takes its next interval; a `429` is never retried there, and with `retryEnabled: false` a `5xx`
+  makes one request. Until now a single `devicePoll` made one attempt.
 - **The `expires_in` deadline is measured on the clock** (§14.2 rule 4, C164-05): it is a point taken
   when the authorization arrives, so the time a poll or `onUserCode` takes counts against it, not only
   the sleeps. `DeviceLoginParams.clock` (optional, the clock `cibaAwait` takes) makes it testable.
 - **RFC 7592 registration calls no longer send same-origin cookies in the browser** (§12.1 rule 3,
   C164-06): the bare transport uses the same fetch-adapter config as an `/oauth2/*` request.
-- **A `429 {"error":…}` from `/oauth2/*` is an `OAuthProtocolError` on the other token requests too**
-  (`oidcRefresh`, `loginClientCredentials`, the `deviceAuthorize` and the rest), where it was a
-  `NetworkError` (§2, C164-23). The thrown class changes for that status only; no signature does. A `5xx`
-  stays a `NetworkError` whatever its body.
+- **A `429 {"error":…}` from an OAuth2 form endpoint is an `OAuthProtocolError` on the other token
+  requests too** (`oidcRefresh`, `loginClientCredentials`, `deviceAuthorize`, introspection, revocation,
+  PAR, token exchange), where it was a `NetworkError` (§2, C164-23). The thrown class changes for that
+  status only; no signature does. A `5xx` stays a `NetworkError` whatever its body, and a `429` from
+  discovery, the federation routes (`ssoProviders`, ...) or UMA stays a `NetworkError` (C164-31).
 - **Browser persona: `/oauth2/*` no longer sends same-origin cookies** (§12.1 rule 3, C163-12). The
   request goes through the fetch adapter with `credentials: 'omit'`; the XHR adapter sent a same-origin
   cookie whatever `withCredentials` said. The Node persona is unchanged.
