@@ -1664,8 +1664,8 @@ export class OidcClient {
    * `client_secret` in the form body, never as `Authorization: Basic`; a public
    * client sends none; `client_id` is sent on **every** poll (§14.1 rule 3). A
    * `401 invalid_client` surfaces as {@link OAuthProtocolError}, is not retried
-   * and does not enter the §9 refresh guard (§14.2 rule 5). A `429
-   * {"error":"rate_limit_exceeded"}` is an {@link OAuthProtocolError} too
+   * and does not enter the §9 refresh guard (§14.2 rule 5). A `429`
+   * whose body names `rate_limit_exceeded` is an {@link OAuthProtocolError} too
    * (rule 9) — never `slow_down`; {@link deviceLogin} waits it out. This SDK ships no
    * DPoP proof generator, so it cannot drive a client registered for DPoP; it
    * surfaces that client's refusal as the same `invalid_client`.
