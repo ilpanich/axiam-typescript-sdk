@@ -309,10 +309,12 @@ export class SharedSession {
    * rule 3, §14.6; C163-12): {@link noCredentialsConfig} and, in the browser
    * persona, the fetch adapter with `credentials: 'omit'`.
    *
-   * `withCredentials: false` alone is not enough: axios's XHR adapter sends a
-   * same-origin cookie regardless, so an app served from the AXIAM origin
-   * would still present `axiam_*` on a token or device request. Fetch's
-   * `credentials: 'omit'` is the setting that withholds it.
+   * `withCredentials: false` on axios's default XHR adapter is not enough: that
+   * adapter sends a same-origin cookie regardless, so an app served from the
+   * AXIAM origin would still present `axiam_*` on a token or device request.
+   * The fetch adapter derives its `credentials` from `withCredentials: false`
+   * (`'omit'`); `fetchOptions.credentials` is set as well for adapters that
+   * read it.
    * `NodeSession` overrides this to {@link noCredentialsConfig}: its jar-free
    * agent pair is what keeps the cookies off there, and the fetch adapter
    * would bypass that pair.

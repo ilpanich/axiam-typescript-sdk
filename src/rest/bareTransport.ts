@@ -51,7 +51,10 @@ export async function bareRequest<T>(
     // jar). Under the Node persona this is the jar-wrapped cookie agent, which
     // `noCredentialsConfig()` below replaces with a plain one.
     ...(defaults.httpsAgent !== undefined ? { httpsAgent: defaults.httpsAgent } : {}),
-    ...session.noCredentialsConfig(),
+    // The bare transport carries the RFC 7592 registration calls on `/oauth2/register/*`,
+    // so it gets an `/oauth2/*` request's config: in the browser persona the fetch adapter
+    // that omits credentials (C164-06; identical to `noCredentialsConfig()` under Node).
+    ...session.oauth2RequestConfig(),
     withCredentials: false,
     maxRedirects: 0,
     validateStatus: () => true,
