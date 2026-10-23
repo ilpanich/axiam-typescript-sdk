@@ -561,13 +561,6 @@ function mapOidcError(err: unknown, url: string, fallbackMessage: string): Axiam
   const status = axiosStatus(err);
   if (status !== undefined) {
     const body = axiosBody(err);
-    // §2 / §14.2 rule 9 (C164-23): a `429` carrying an `error` member is that OAuth2 error
-    // (AXIAM's own is `{"error":"rate_limit_exceeded"}`, with no description), not a bare
-    // `NetworkError`. A 5xx stays one whatever its body (§14.2 rule 6).
-    if (status === 429) {
-      const protocol = oauth2ErrorFromBody(body);
-      if (protocol) return protocol;
-    }
     return mapHttpStatusToError(status, bodyMessage(body, fallbackMessage), { url, body, cause: err });
   }
   return new NetworkError(fallbackMessage, sanitizeAxiosError(err));
@@ -1696,7 +1689,7 @@ export class OidcClient {
     this.#appendClientSecret(form);
 
     const url = this.#endpointUrl(this.#requiredEndpoint(configuration, 'token_endpoint'), params.tenantId);
-    const wire = (await this.#postForm<TokenResponseWire>(url, form, 'token request failed', true)).data;
+    const wire = await this.#postDevicePoll(url, form);
     // No nonce: the device grant has no authorization request to carry one,
     // and §12.4 rule 6 applies to the authorization-code flow.
     return this.#toTokenSet(wire, configuration, undefined);
@@ -2592,6 +2585,47 @@ export class OidcClient {
     }
   }
 
+  /**
+   * One device-poll attempt under §16 (CONTRACT.md §14.2 rule 6, §16.2; C164-25): a `5xx` or
+   * a transport failure is retried **inside** the poll (three requests in all, the `Retry-After`
+   * a floor) before it surfaces as a `NetworkError`; the loop then takes its next interval. A
+   * `429` is never retried here — it is rule 9's wait, the loop's — nor is any answer the
+   * server decided (`400`, `401`).
+   */
+  async #postDevicePoll(url: string, form: URLSearchParams): Promise<TokenResponseWire> {
+    const operation = 'device_poll';
+    const outcome = await withRetry<{ wire?: TokenResponseWire; error?: AxiamError }>(
+      async () => {
+        try {
+          const response = await this.#session.axios.post<TokenResponseWire>(url, form.toString(), {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          });
+          return { wire: response.data };
+        } catch (err) {
+          // Already an SDK error (the response interceptor mapped it): a decided answer.
+          if (err instanceof AxiamError) return { error: err };
+          const status = axiosStatus(err);
+          const response = (err as { response?: AxiosResponse }).response;
+          if (status === undefined) {
+            throw new NetworkError(`${operation}: the request failed before any response arrived`, sanitizeAxiosError(err));
+          }
+          if (status >= 500) {
+            throw retryableNetworkError(`${operation}: HTTP ${status}`, response);
+          }
+          return { error: pollRateLimit(err) ?? mapOidcError(err, url, 'token request failed') };
+        }
+      },
+      {
+        idempotent: true,
+        operation,
+        enabled: this.#session.retryEnabled,
+        telemetry: this.#session.telemetry.dispatcher,
+      },
+    );
+    if (outcome.error) throw outcome.error;
+    return outcome.wire!;
+  }
+
   /** POST a form body to the token endpoint from the discovery document. */
   async #postToken(
     configuration: OidcConfiguration,
@@ -2831,7 +2865,6 @@ export class OidcClient {
     url: string,
     form: URLSearchParams,
     fallbackMessage: string,
-    devicePoll = false,
   ): Promise<AxiosResponse<T>> {
     const config: AxiosRequestConfig = {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -2839,9 +2872,15 @@ export class OidcClient {
     try {
       return await this.#session.axios.post<T>(url, form.toString(), config);
     } catch (err) {
-      if (devicePoll) {
-        const limited = pollRateLimit(err);
-        if (limited) throw limited;
+      // §2 / §14.2 rule 9 (C164-23): a `429` carrying an `error` member from one of the OAuth2
+      // form endpoints (token, device authorization, introspection, revocation, PAR, exchange)
+      // is that OAuth2 error (AXIAM's own is `{"error":"rate_limit_exceeded"}`, with no
+      // description), not a bare `NetworkError`. Gated by the call site, not `mapOidcError`, which
+      // also maps discovery, the federation routes and UMA, where a `429` stays a `NetworkError`
+      // (C164-31). A 5xx stays one whatever its body (§14.2 rule 6).
+      if (axiosStatus(err) === 429) {
+        const protocol = oauth2ErrorFromBody(axiosBody(err));
+        if (protocol) throw protocol;
       }
       throw mapOidcError(err, url, fallbackMessage);
     }

@@ -16,12 +16,16 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { http, HttpResponse } from 'msw';
 import { AuthError, NetworkError, OAuthProtocolError, Sensitive } from '../../src/core/index.js';
 import {
+  createOidcClient,
   DEFAULT_POLL_INTERVAL_SECS,
+  DISCOVERY_PATH,
   PollSchedule,
   SLOW_DOWN_INCREMENT_SECS,
 } from '../../src/node/oidc.js';
+import { createNodeSession } from '../../src/node/session.js';
 import {
   BASE_URL,
+  CLIENT_ID,
   createClient,
   createMockState,
   createServer,
@@ -29,6 +33,8 @@ import {
   deviceAuthorizationResponse,
   discoveryDocumentWithoutOptionalEndpoints,
   discoveryHandler,
+  ORG_ID,
+  TENANT_ID,
   TOKEN_ENDPOINT,
   type OidcMockState,
 } from './oidcTestKit.js';
@@ -655,6 +661,108 @@ describe('a 429 on /oauth2/token outside the device poll (§2, §14.2 rule 9)', 
 
     const { oidc } = createClient({ clientSecret: 'secret' });
     const err = await oidc.loginClientCredentials({}).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NetworkError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §14.2 rule 6, §16: the poll is retried inside the attempt on a 5xx (C164-25)
+// ---------------------------------------------------------------------------
+
+describe('a 5xx or transport failure on a poll is §16-retried inside the attempt (§14.2 rule 6, §16.2)', () => {
+  const serverError = (): Response =>
+    HttpResponse.json({ error: 'server_error', error_description: 'internal error' }, { status: 500 });
+
+  it('a single devicePoll makes three requests for two 500 server_error answers and a 200, and returns the tokens', async () => {
+    const state = createMockState();
+    const flow = mountFlow(state, [() => serverError(), () => serverError(), () => success()]);
+
+    const { oidc } = createClient();
+    const tokens = await oidc.devicePoll({ deviceCode: new Sensitive(DEVICE_CODE) });
+
+    expect(tokens.accessToken.expose()).toBe('device-access-token');
+    expect(flow.calls()).toBe(3);
+  });
+
+  it('a third 500 in a row exhausts the cap: three requests, then the NetworkError', async () => {
+    const state = createMockState();
+    const flow = mountFlow(state, [() => serverError()]);
+
+    const { oidc } = createClient();
+    const err = await oidc.devicePoll({ deviceCode: new Sensitive(DEVICE_CODE) }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NetworkError);
+    expect(flow.calls()).toBe(3);
+  });
+
+  it('deviceLogin completes within one interval on those three requests', async () => {
+    const state = createMockState();
+    const flow = mountFlow(state, [() => serverError(), () => serverError(), () => success()]);
+    const sleeps = recordSleeps();
+    try {
+      const { oidc } = createClient();
+      await oidc.deviceLogin({ onUserCode: () => {} });
+
+      expect(flow.calls()).toBe(3);
+      // One interval before the poll; the two §16 backoffs inside it are under a second.
+      expect(sleeps.delays.filter((ms) => ms >= 1000)).toEqual([1000]);
+      expect(sleeps.delays).toHaveLength(3);
+    } finally {
+      sleeps.restore();
+    }
+  });
+
+  it('a 429 is not retried inside the poll: one request, the wait is the loop\'s', async () => {
+    const state = createMockState();
+    const flow = mountFlow(state, [() => rateLimited('1'), () => success()]);
+
+    const { oidc } = createClient();
+    const err = await oidc.devicePoll({ deviceCode: new Sensitive(DEVICE_CODE) }).catch((e: unknown) => e);
+
+    expect((err as OAuthProtocolError).error).toBe('rate_limit_exceeded');
+    expect(flow.calls()).toBe(1);
+  });
+
+  it('with retry disabled a 5xx makes one request per poll', async () => {
+    const state = createMockState();
+    const flow = mountFlow(state, [() => serverError(), () => success()]);
+
+    const session = createNodeSession({
+      baseUrl: BASE_URL,
+      tenantId: TENANT_ID,
+      orgId: ORG_ID,
+      retryEnabled: false,
+    });
+    const oidc = createOidcClient(session, { clientId: CLIENT_ID });
+    const err = await oidc.devicePoll({ deviceCode: new Sensitive(DEVICE_CODE) }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NetworkError);
+    expect(flow.calls()).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §2: the 429 mapping is the OAuth2 form endpoints' only (C164-31)
+// ---------------------------------------------------------------------------
+
+describe('a 429 {"error":"rate_limit_exceeded"} outside the OAuth2 form endpoints stays a NetworkError (§2, C164-31)', () => {
+  it('discovery', async () => {
+    server.use(
+      http.get(`${BASE_URL}${DISCOVERY_PATH}`, () => rateLimited('1')),
+    );
+
+    const { oidc } = createClient();
+    const err = await oidc.oidcDiscover().catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(NetworkError);
+  });
+
+  it('ssoProviders', async () => {
+    server.use(http.get(`${BASE_URL}/api/v1/auth/federation/providers`, () => rateLimited('1')));
+
+    const { oidc } = createClient();
+    const err = await oidc.ssoProviders().catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(NetworkError);
   });
