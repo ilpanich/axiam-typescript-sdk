@@ -29,6 +29,13 @@ closes #148.
   §16.2, C164-25): three requests in all, `Retry-After` a floor, before the failure surfaces and the
   loop takes its next interval; a `429` is never retried there, and with `retryEnabled: false` a `5xx`
   makes one request. Until now a single `devicePoll` made one attempt.
+- **A §16 retry inside a poll never passes the deadline** (§14.2 rule 4, §34.2 P10, C164-36): the
+  waits of the retry inside `deviceLogin`'s poll and inside `cibaAwait`'s `cibaPoll` are served on the
+  loop's clock, and a wait that would reach the deadline (a 5xx's `Retry-After` included) is not
+  served: nothing is sent after it and the typed `expired_token` is raised at once. Before, a `503`
+  with `Retry-After: 120` and `expires_in: 30` sent requests at 125 s and 245 s, and could return
+  tokens 95 s after the deadline. A standalone `devicePoll` / `cibaPoll`, which has no deadline, keeps
+  the unbounded §16 behaviour.
 - **The `expires_in` deadline is measured on the clock** (§14.2 rule 4, C164-05): it is a point taken
   when the authorization arrives, so the time a poll or `onUserCode` takes counts against it, not only
   the sleeps. `DeviceLoginParams.clock` (optional, the clock `cibaAwait` takes) makes it testable.
@@ -52,7 +59,10 @@ closes #148.
   the §34.6 letter as the parenthetical (C163-18, C164-22). The wall-clock `deviceLogin` tests record
   their sleeps instead of sleeping (C164-23); the browser `/oauth2/*` test also asserts the `Request`
   that reaches `fetch` carries `credentials: 'omit'` (C164-19). `devicePoll`'s documentation says the
-  `Retry-After` of a `429` is not exposed (C164-20).
+  `Retry-After` of a `429` is not exposed (C164-20). The in-poll retry tests gain the contract's
+  transport-failure case (two failures then a `200` = three requests; three = `NetworkError`; retry
+  off = one request) and the two deadline cases (C164-38, C164-36); the README states what the
+  deadline bound covers (C164-41).
 
 ## [1.1.1] - 2026-10-20
 
