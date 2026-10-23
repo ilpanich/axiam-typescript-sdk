@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-10-23
+
+`axiam-sdk` 1.1.2 conforms to **contract 1.64** (axiam `fb92ec4`, the release 1.1.2 plan branch).
+`CONTRACT.md`, `openapi.json`, `management-registry.json` and `proto/` are vendored byte for byte from
+that commit (`proto/` is unchanged; the registry differs from 1.1.1 only in its spec digest and
+`spec_version` 1.1.2, so no generated source changes). Nothing here is source-breaking: no export is
+removed or retyped, so this is a patch release. It closes #148.
+
+### Fixed
+
+- **A `429 rate_limit_exceeded` on a device-code poll is waited out** (§14.2 rule 9, contract 1.64
+  (b)). `devicePoll` raises it as an `OAuthProtocolError` with `error == "rate_limit_exceeded"`;
+  `deviceLogin` waits `Retry-After` as a minimum (capped at the `expires_in` deadline), counts the wait
+  as one interval, does not raise the interval, and polls again. A `Retry-After` past the deadline ends
+  in the typed `expired_token` without a request after it.
+- **Browser persona: `/oauth2/*` no longer sends same-origin cookies** (§12.1 rule 3, C163-12). The
+  request goes through the fetch adapter with `credentials: 'omit'`; the XHR adapter sent a same-origin
+  cookie whatever `withCredentials` said. The Node persona is unchanged.
+
+### Tests and documentation
+
+- The contract 1.63 §14.6 test now signs in through `login()` against a mock that sets `axiam_access`
+  and `axiam_csrf`, and its control, a management `POST`, comes after the `/oauth2/*` calls
+  (C163-08). The C162-07 "states the member" test asserts the stated values in the `PUT` body
+  (C163-09). The README's manifest rows are labelled by their §27.6.2 item 4 / C162-07, C162-08 and
+  not by §34.6 letters (C163-18).
+
 ## [1.1.1] - 2026-10-20
 
 `axiam-sdk` 1.1.1 conforms to **contract 1.63** (axiam `d919ba0cc`, the release 1.1.1 plan branch).
