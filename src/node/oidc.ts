@@ -40,7 +40,7 @@ import {
   Sensitive,
 } from '../core/index.js';
 import { ValidationError } from '../management/errors.js';
-import { retryableNetworkError, statusIsRetryable } from '../rest/bareTransport.js';
+import { retryAfterMs, retryableNetworkError, statusIsRetryable } from '../rest/bareTransport.js';
 import { isOAuth2Endpoint } from '../rest/interceptors.js';
 import { withRetry } from '../rest/retry.js';
 import type { SharedSession } from '../rest/session.js';
@@ -290,6 +290,8 @@ interface LogoutTokenClaims {
 export class PollSchedule {
   #intervalSecs: number;
   #remainingSecs: number;
+  /** A `Retry-After` still to be served by the next wait (§14.2 rule 9, contract 1.64). */
+  #retryAfterSecs = 0;
 
   constructor(intervalSecs: number, expiresInSecs: number) {
     this.#intervalSecs = intervalSecs > 0 ? intervalSecs : DEFAULT_POLL_INTERVAL_SECS;
@@ -299,6 +301,23 @@ export class PollSchedule {
   /** The current inter-poll delay, in seconds. */
   get intervalSecs(): number {
     return this.#intervalSecs;
+  }
+
+  /**
+   * The delay before the next poll, in seconds: the interval, or the pending
+   * `Retry-After` when that is longer (a minimum, §14.2 rule 9).
+   */
+  get waitSecs(): number {
+    return Math.max(this.#intervalSecs, this.#retryAfterSecs);
+  }
+
+  /**
+   * Record a `429 rate_limit_exceeded` (§14.2 rule 9, contract 1.64): the next
+   * wait lasts at least `retryAfterSecs` and stands in for one interval. The
+   * interval itself is **not** raised — only the `400 slow_down` does that.
+   */
+  rateLimited(retryAfterSecs: number | undefined): void {
+    this.#retryAfterSecs = retryAfterSecs !== undefined && retryAfterSecs > 0 ? retryAfterSecs : 0;
   }
 
   /** Apply one `slow_down` (§14.2 rule 1): **cumulative, never reset.** */
@@ -314,13 +333,39 @@ export class PollSchedule {
    * the server is still answering `authorization_pending`.
    */
   tick(): boolean {
-    if (this.#intervalSecs >= this.#remainingSecs) {
+    // A pending `Retry-After` is served once, in place of the interval; past
+    // the deadline it is capped there (§14.2 rule 9), which ends the loop.
+    const waitSecs = this.waitSecs;
+    this.#retryAfterSecs = 0;
+    if (waitSecs >= this.#remainingSecs) {
       this.#remainingSecs = 0;
       return false;
     }
-    this.#remainingSecs -= this.#intervalSecs;
+    this.#remainingSecs -= waitSecs;
     return true;
   }
+}
+
+/**
+ * The `Retry-After` of a `429 rate_limit_exceeded` poll, in milliseconds, kept
+ * beside the error rather than on it so the public error type is unchanged.
+ */
+const POLL_RETRY_AFTER_MS = new WeakMap<OAuthProtocolError, number>();
+
+/**
+ * The §14.2 rule 9 reading of a device poll's `429`: an `OAuthProtocolError`
+ * with `error == "rate_limit_exceeded"` (the body's own member, dispatched on
+ * before the status), its `Retry-After` recorded in {@link POLL_RETRY_AFTER_MS}.
+ * `undefined` for anything else, which keeps §2's mapping.
+ */
+function pollRateLimit(err: unknown): OAuthProtocolError | undefined {
+  if (axiosStatus(err) !== 429) return undefined;
+  const protocol = oauth2ErrorFromBody(axiosBody(err));
+  if (protocol?.error !== 'rate_limit_exceeded') return undefined;
+  const response = (err as { response?: AxiosResponse }).response;
+  const retryAfter = response ? retryAfterMs(response) : undefined;
+  if (retryAfter !== undefined) POLL_RETRY_AFTER_MS.set(protocol, retryAfter);
+  return protocol;
 }
 
 /** Await `ms` milliseconds. Extracted so tests can stub the timer. */
@@ -1619,7 +1664,9 @@ export class OidcClient {
    * `client_secret` in the form body, never as `Authorization: Basic`; a public
    * client sends none; `client_id` is sent on **every** poll (§14.1 rule 3). A
    * `401 invalid_client` surfaces as {@link OAuthProtocolError}, is not retried
-   * and does not enter the §9 refresh guard (§14.2 rule 5). This SDK ships no
+   * and does not enter the §9 refresh guard (§14.2 rule 5). A `429
+   * {"error":"rate_limit_exceeded"}` is an {@link OAuthProtocolError} too
+   * (rule 9) — never `slow_down`; {@link deviceLogin} waits it out. This SDK ships no
    * DPoP proof generator, so it cannot drive a client registered for DPoP; it
    * surfaces that client's refusal as the same `invalid_client`.
    */
@@ -1632,7 +1679,8 @@ export class OidcClient {
     // §14.1 rule 2, as at deviceAuthorize and every other token request.
     this.#appendClientSecret(form);
 
-    const wire = await this.#postToken(configuration, form, params.tenantId);
+    const url = this.#endpointUrl(this.#requiredEndpoint(configuration, 'token_endpoint'), params.tenantId);
+    const wire = (await this.#postForm<TokenResponseWire>(url, form, 'token request failed', true)).data;
     // No nonce: the device grant has no authorization request to carry one,
     // and §12.4 rule 6 applies to the authorization-code flow.
     return this.#toTokenSet(wire, configuration, undefined);
@@ -1656,7 +1704,11 @@ export class OidcClient {
    * even if the server has not yet said `expired_token`. A 5xx or transport
    * failure mid-poll is **not** terminal (rule 6) — the loop absorbs it and
    * tries again, bounded by the same deadline, because a server restart must
-   * not lose a grant the user has already approved.
+   * not lose a grant the user has already approved. A `429
+   * rate_limit_exceeded` (rule 9, contract 1.64) is not terminal either: the
+   * loop waits `Retry-After` as a minimum (capped at the `expires_in`
+   * deadline), counts the wait as one interval, does **not** raise the
+   * interval, and polls again.
    */
   async deviceLogin(params: DeviceLoginParams): Promise<OidcTokenSet> {
     const configuration = params.configuration ?? (await this.oidcDiscover());
@@ -1672,6 +1724,8 @@ export class OidcClient {
     const schedule = new PollSchedule(authorization.interval, authorization.expiresIn);
 
     for (;;) {
+      // Read before `tick()`, which serves a pending `Retry-After`.
+      const waitSecs = schedule.waitSecs;
       // §14.2 rule 4: the deadline is authoritative. Checking before sleeping
       // keeps the SDK from issuing a request that can only be refused, and
       // reports it under the same `expired_token` code the server would have
@@ -1684,7 +1738,7 @@ export class OidcClient {
         );
       }
 
-      await sleep(schedule.intervalSecs * 1000);
+      await sleep(waitSecs * 1000);
 
       try {
         return await this.devicePoll({
@@ -1699,6 +1753,13 @@ export class OidcClient {
           }
           if (err.error === 'slow_down') {
             schedule.slowDown(); // §14.2 rule 1: cumulative, never reset.
+            continue;
+          }
+          if (err.error === 'rate_limit_exceeded') {
+            // §14.2 rule 9 (contract 1.64): wait `Retry-After` as a minimum,
+            // count it as one interval, leave the interval alone, poll again.
+            const pollWaitMs = POLL_RETRY_AFTER_MS.get(err);
+            schedule.rateLimited(pollWaitMs === undefined ? undefined : pollWaitMs / 1000);
             continue;
           }
           throw err; // expired_token / access_denied / invalid_grant
@@ -2745,6 +2806,7 @@ export class OidcClient {
     url: string,
     form: URLSearchParams,
     fallbackMessage: string,
+    devicePoll = false,
   ): Promise<AxiosResponse<T>> {
     const config: AxiosRequestConfig = {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -2752,6 +2814,10 @@ export class OidcClient {
     try {
       return await this.#session.axios.post<T>(url, form.toString(), config);
     } catch (err) {
+      if (devicePoll) {
+        const limited = pollRateLimit(err);
+        if (limited) throw limited;
+      }
       throw mapOidcError(err, url, fallbackMessage);
     }
   }

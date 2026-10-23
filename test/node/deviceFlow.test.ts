@@ -12,7 +12,7 @@
 //     which terminate, how many requests actually go out, and the §14.3 rule 2
 //     ordering guarantee. Intervals in these fixtures are 1 s.
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { AuthError, OAuthProtocolError, Sensitive } from '../../src/core/index.js';
 import {
@@ -56,6 +56,11 @@ function oauthError(code: string): Response {
 
 const pending = (): Response => oauthError('authorization_pending');
 const slowDown = (): Response => oauthError('slow_down');
+const rateLimited = (retryAfter?: string): Response =>
+  HttpResponse.json(
+    { error: 'rate_limit_exceeded' },
+    { status: 429, ...(retryAfter !== undefined ? { headers: { 'Retry-After': retryAfter } } : {}) },
+  );
 const success = (): Response =>
   HttpResponse.json({
     access_token: 'device-access-token',
@@ -133,6 +138,33 @@ describe('PollSchedule (§14.2 rules 1, 2, 4)', () => {
 
   it('never polls when the interval covers the whole grant', () => {
     expect(new PollSchedule(30, 30).tick()).toBe(false);
+  });
+});
+
+describe('PollSchedule: a 429 rate_limit_exceeded (§14.2 rule 9, contract 1.64)', () => {
+  it('waits Retry-After as a minimum, in place of one interval, and leaves the interval alone', () => {
+    const schedule = new PollSchedule(5, 600);
+    schedule.rateLimited(30);
+    expect(schedule.waitSecs).toBe(30);
+    expect(schedule.tick()).toBe(true);
+    // Served once: the next wait is the unchanged interval.
+    expect(schedule.intervalSecs).toBe(5);
+    expect(schedule.waitSecs).toBe(5);
+  });
+
+  it('never waits less than the interval', () => {
+    const schedule = new PollSchedule(5, 600);
+    schedule.rateLimited(1);
+    expect(schedule.waitSecs).toBe(5);
+    schedule.rateLimited(undefined);
+    expect(schedule.waitSecs).toBe(5);
+  });
+
+  it('caps a Retry-After past the deadline at the deadline', () => {
+    const schedule = new PollSchedule(5, 20);
+    expect(schedule.tick()).toBe(true); // 15 s left
+    schedule.rateLimited(60);
+    expect(schedule.tick()).toBe(false);
   });
 });
 
@@ -260,6 +292,103 @@ describe('deviceLogin polling (§14.2)', () => {
 
     expect(flow.calls()).toBe(4);
     expect(tokens.accessToken.expose()).toBe('device-access-token');
+  });
+
+  describe('a 429 rate_limit_exceeded on a poll is waited out (§14.2 rule 9, contract 1.64)', () => {
+    /**
+     * Record every sleep the polling loop takes and run it at once: the loop's
+     * waits are asserted as the delays it asked for, not slept on a wall clock.
+     */
+    function recordSleeps(): { delays: number[]; restore: () => void } {
+      const realSetTimeout = globalThis.setTimeout;
+      const delays: number[] = [];
+      const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+        fn: () => void,
+        ms?: number,
+        ...args: unknown[]
+      ) => {
+        // Only the loop's own sleep: other libraries keep timers of their own.
+        if (ms !== undefined && new Error().stack?.includes('src/node/oidc')) {
+          delays.push(ms);
+          return realSetTimeout(fn, 0);
+        }
+        return realSetTimeout(fn, ms, ...args);
+      }) as typeof setTimeout);
+      return { delays, restore: () => spy.mockRestore() };
+    }
+
+    it('waits at least Retry-After, polls again and completes, with the interval unchanged', async () => {
+      const state = createMockState();
+      // 429, then pending, then success: the sleep before the poll that follows
+      // the waited-out round is the original interval, not five seconds longer.
+      const flow = mountFlow(state, [() => rateLimited('3'), () => pending(), () => success()], {
+        interval: 1,
+        expires_in: 600,
+      });
+      const sleeps = recordSleeps();
+      try {
+        const { oidc } = createClient();
+        const tokens = await oidc.deviceLogin({ onUserCode: () => {} });
+
+        expect(tokens.accessToken.expose()).toBe('device-access-token');
+        expect(flow.calls()).toBe(3);
+        // interval, then Retry-After (>= 3 s), then the interval again.
+        expect(sleeps.delays).toEqual([1000, 3000, 1000]);
+      } finally {
+        sleeps.restore();
+      }
+    });
+
+    it('serves a 429 without a Retry-After as one ordinary interval', async () => {
+      const state = createMockState();
+      const flow = mountFlow(state, [() => rateLimited(), () => success()], { interval: 1 });
+      const sleeps = recordSleeps();
+      try {
+        const { oidc } = createClient();
+        await oidc.deviceLogin({ onUserCode: () => {} });
+
+        expect(flow.calls()).toBe(2);
+        expect(sleeps.delays).toEqual([1000, 1000]);
+      } finally {
+        sleeps.restore();
+      }
+    });
+
+    it('caps a Retry-After past expires_in at the deadline: expired_token, nothing sent after it', async () => {
+      const state = createMockState();
+      const flow = mountFlow(state, [() => rateLimited('3600'), () => success()], {
+        interval: 1,
+        expires_in: 5,
+      });
+      const sleeps = recordSleeps();
+      try {
+        const { oidc } = createClient();
+        const err = await oidc.deviceLogin({ onUserCode: () => {} }).catch((e: unknown) => e);
+
+        expect(err).toBeInstanceOf(OAuthProtocolError);
+        expect((err as OAuthProtocolError).error).toBe('expired_token');
+        expect(flow.calls()).toBe(1);
+        expect(sleeps.delays).toEqual([1000]);
+      } finally {
+        sleeps.restore();
+      }
+    });
+
+    it('surfaces the 429 from a single devicePoll as rate_limit_exceeded, never slow_down', async () => {
+      const state = createMockState();
+      server.use(
+        discoveryHandler(state),
+        http.post(TOKEN_ENDPOINT, () => rateLimited('2')),
+      );
+
+      const { oidc } = createClient();
+      const err = await oidc
+        .devicePoll({ deviceCode: new Sensitive(DEVICE_CODE) })
+        .catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(OAuthProtocolError);
+      expect((err as OAuthProtocolError).error).toBe('rate_limit_exceeded');
+    });
   });
 });
 
