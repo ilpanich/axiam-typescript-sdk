@@ -660,6 +660,13 @@ describe('§27.6.2 item 4 — an unknown open-enum value on an unstated member (
       });
       const put = net.writes().find((w) => w.method === 'PUT' && w.path.startsWith('/profiles/'))!;
       expect(JSON.stringify(put.body)).not.toContain('future');
+      // The stated value is what the PUT carries (C163-09).
+      const profile = (put.body as { profile: Record<string, unknown> }).profile;
+      if (member === 'termination_action') {
+        expect(profile.termination_action).toBe('radius_request');
+      } else {
+        expect(profile.service_type).toBe('framed_user');
+      }
     });
   }
 
