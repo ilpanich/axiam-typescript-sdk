@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 `axiam-sdk` 1.1.2 conforms to **contract 1.64**. `CONTRACT.md` is vendored byte for byte from axiam
 `b3f8687` (contract 1.64 as amended twice, W7.1b and W7.1c); `openapi.json`, `management-registry.json`
-and `proto/` from `fb92ec4`, which those amendments do not change (`proto/` is unchanged; the registry
+and `proto/` from `356a6da` (the platform PR #793 merge; `proto/` is unchanged; the registry
 differs from 1.1.1 only in its spec digest and `spec_version` 1.1.2, so no generated source changes).
 Nothing here is source-breaking: no export is removed or retyped, so this is a patch release. It
 closes #148.
