@@ -1,5 +1,5 @@
-<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>OidcClient | AXIAM TypeScript SDK - v1.1.1</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
-<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK - v1.1.1</a>
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>OidcClient | AXIAM TypeScript SDK - v1.1.2</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK - v1.1.2</a>
 <div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
 <ul role="listbox" id="tsd-search-results"></ul>
 <div id="tsd-search-status" aria-live="polite" aria-atomic="true">
@@ -32,7 +32,7 @@ bookkeeping for you.</p>
 
 </div></div></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L855">src/node/oidc.ts:855</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L935">src/node/oidc.ts:935</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -92,7 +92,7 @@ bookkeeping for you.</p>
 <li><span><span class="tsd-kind-parameter">options</span>: <a href="../interfaces/middleware.OidcClientOptions.html" class="tsd-signature-type tsd-kind-interface">OidcClientOptions</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">OidcClient</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L867">src/node/oidc.ts:867</a></li></ul></aside></div></li></ul></section></section></details>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L947">src/node/oidc.ts:947</a></li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -123,7 +123,9 @@ earlier only earns <code>slow_down</code> and a longer wait.</li>
 the interval and polls again.</li>
 <li>Polling stops at <code>receivedAt + expiresIn</code>, even if the server has not
 said <code>expired_token</code>: when the next wait would reach the deadline, the
-same <code>expired_token</code> is raised locally, without a request.</li>
+same <code>expired_token</code> is raised locally, without a request. A §16 retry
+inside <a href="#cibapoll" class="tsd-kind-method">cibaPoll</a> is bounded the same way (§34.2 P10): a wait that
+would reach the deadline is not served and nothing is sent after it.</li>
 <li><code>access_denied</code>, <code>expired_token</code>, <code>invalid_grant</code> and any other answer
 end the loop.</li>
 </ul>
@@ -136,7 +138,7 @@ once half of <code>expiresIn</code> has passed without a ping: a ping is deliver
 least once, never exactly once, and may not arrive at all (§33.7 rule 6).</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L2376">src/node/oidc.ts:2376</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L2503">src/node/oidc.ts:2503</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="cibahandleping"><span>ciba<wbr/>Handle<wbr/>Ping</span><a href="#cibahandleping" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -177,7 +179,7 @@ is one you issued: the token endpoint answers <code>invalid_grant</code> for any
 other.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L2434">src/node/oidc.ts:2434</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L2564">src/node/oidc.ts:2564</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="cibainitiate"><span>ciba<wbr/>Initiate</span><a href="#cibainitiate" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -221,7 +223,7 @@ request without a non-empty <code>clientNotificationToken</code>.</p>
 <code>rate_limit_exceeded</code>; otherwise §2 (<code>503</code> is <code>NetworkError</code>).</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L2219">src/node/oidc.ts:2219</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L2338">src/node/oidc.ts:2338</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="cibapoll"><span>ciba<wbr/>Poll</span><a href="#cibapoll" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -252,7 +254,7 @@ request is redeemed once, and a second <code>cibaPoll</code> for it is
 this client's credential.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L2301">src/node/oidc.ts:2301</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L2420">src/node/oidc.ts:2420</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="deviceauthorize"><span>device<wbr/>Authorize</span><a href="#deviceauthorize" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -284,7 +286,7 @@ authentication is not implemented by this SDK.</p>
 (§14.2 rule 5), is made once, and does not enter the §9 refresh guard.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1451">src/node/oidc.ts:1451</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1531">src/node/oidc.ts:1531</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="devicelogin"><span>device<wbr/>Login</span><a href="#devicelogin" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -312,10 +314,16 @@ and <code>expired_token</code> raise distinct errors; polling stops at <code>exp
 even if the server has not yet said <code>expired_token</code>. A 5xx or transport
 failure mid-poll is <strong>not</strong> terminal (rule 6) — the loop absorbs it and
 tries again, bounded by the same deadline, because a server restart must
-not lose a grant the user has already approved.</p>
+not lose a grant the user has already approved: that bound holds for the
+§16 retry inside a poll too, whose waits are served on the loop's clock and
+never reach the deadline (<code>Retry-After</code> included; the typed <code>expired_token</code>
+is raised at once, C164-36). A <code>429 rate_limit_exceeded</code> (rule 9, contract 1.64) is not terminal either: the
+loop waits <code>Retry-After</code> as a minimum (capped at the <code>expires_in</code>
+deadline), counts the wait as one interval, does <strong>not</strong> raise the
+interval, and polls again.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1661">src/node/oidc.ts:1661</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1759">src/node/oidc.ts:1759</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="devicepoll"><span>device<wbr/>Poll</span><a href="#devicepoll" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -335,19 +343,24 @@ not lose a grant the user has already approved.</p>
 <h4 class="tsd-anchor-link" id="remarks-7">Remarks<a href="#remarks-7" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>The raw single call, so an application driving its own loop (a UI
 rendering a countdown, say) can. The five RFC 8628 §3.5 answers surface as
 <a href="index.OAuthProtocolError.html" class="tsd-kind-class">OAuthProtocolError</a> — <code>authorization_pending</code> and <code>slow_down</code>
-included — so a hand-rolled loop sees exactly what <a href="#devicelogin" class="tsd-kind-method">deviceLogin</a>
-sees. Most callers want <a href="#devicelogin" class="tsd-kind-method">deviceLogin</a>.</p>
+included — so a hand-rolled loop dispatches on the same answers
+<a href="#devicelogin" class="tsd-kind-method">deviceLogin</a> does. Most callers want <a href="#devicelogin" class="tsd-kind-method">deviceLogin</a>.</p>
 <p>Client authentication is the one <a href="#deviceauthorize" class="tsd-kind-method">deviceAuthorize</a> describes
 (contract 1.62, §14.1 rule 2): a configured <code>clientSecret</code> is sent as
 <code>client_secret</code> in the form body, never as <code>Authorization: Basic</code>; a public
 client sends none; <code>client_id</code> is sent on <strong>every</strong> poll (§14.1 rule 3). A
 <code>401 invalid_client</code> surfaces as <a href="index.OAuthProtocolError.html" class="tsd-kind-class">OAuthProtocolError</a>, is not retried
-and does not enter the §9 refresh guard (§14.2 rule 5). This SDK ships no
+and does not enter the §9 refresh guard (§14.2 rule 5). Any <code>429</code>
+is an <a href="index.OAuthProtocolError.html" class="tsd-kind-class">OAuthProtocolError</a> with <code>error == 'rate_limit_exceeded'</code> too
+(rule 9, whatever its body names) — never <code>slow_down</code>; <a href="#devicelogin" class="tsd-kind-method">deviceLogin</a>
+waits it out. Its <code>Retry-After</code> is not exposed, so a hand-rolled loop
+should wait at least one interval on it without raising the interval, or
+use <a href="#devicelogin" class="tsd-kind-method">deviceLogin</a>. This SDK ships no
 DPoP proof generator, so it cannot drive a client registered for DPoP; it
 surfaces that client's refusal as the same <code>invalid_client</code>.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1626">src/node/oidc.ts:1626</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1711">src/node/oidc.ts:1711</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="introspect"><span>introspect</span><a href="#introspect" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -371,7 +384,7 @@ fix a bad <code>client_secret</code> (§12.3 rule 3).</p>
 <h4 class="tsd-anchor-link" id="throws-3">Throws<a href="#throws-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>AuthError when no <code>clientSecret</code> is configured.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1068">src/node/oidc.ts:1068</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1148">src/node/oidc.ts:1148</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="loginclientcredentials"><span>login<wbr/>Client<wbr/>Credentials</span><a href="#loginclientcredentials" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -395,7 +408,7 @@ this session's bearer credential for subsequent REST calls (§12.1, a MAY).</p>
 be performed by a public client.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1033">src/node/oidc.ts:1033</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1113">src/node/oidc.ts:1113</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="logouturl"><span>logout<wbr/>Url</span><a href="#logouturl" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -425,7 +438,7 @@ registration, and a client-side copy would drift and reject a URI an
 operator had just registered.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L2015">src/node/oidc.ts:2015</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L2134">src/node/oidc.ts:2134</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="oidcbegin"><span>oidc<wbr/>Begin</span><a href="#oidcbegin" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -453,7 +466,7 @@ document's <code>authorization_endpoint</code> with exactly the eight parameters
 SDK-owned parameters — a programming error, caught at call time.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L914">src/node/oidc.ts:914</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L994">src/node/oidc.ts:994</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="oidcdiscover"><span>oidc<wbr/>Discover</span><a href="#oidcdiscover" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -469,7 +482,7 @@ never treated as an error.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/middleware.OidcConfiguration.html" class="tsd-signature-type tsd-kind-interface">OidcConfiguration</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L886">src/node/oidc.ts:886</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L966">src/node/oidc.ts:966</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="oidcexchange"><span>oidc<wbr/>Exchange</span><a href="#oidcexchange" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -491,7 +504,7 @@ never returned (§12.4 rule 7).</p>
 <li><span><span class="tsd-kind-parameter">params</span>: <a href="../interfaces/middleware.OidcExchangeParams.html" class="tsd-signature-type tsd-kind-interface">OidcExchangeParams</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/middleware.OidcTokenSet.html" class="tsd-signature-type tsd-kind-interface">OidcTokenSet</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L966">src/node/oidc.ts:966</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1046">src/node/oidc.ts:1046</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="oidcpar"><span>oidc<wbr/>Par</span><a href="#oidcpar" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -528,7 +541,7 @@ produced — §26.2 rule 6).</p>
 
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1531">src/node/oidc.ts:1531</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1611">src/node/oidc.ts:1611</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="oidcrefresh"><span>oidc<wbr/>Refresh</span><a href="#oidcrefresh" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -557,7 +570,7 @@ rule 6 (nonce) is skipped, since OIDC Core §12.2 does not require a nonce
 in a refresh-issued ID token.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1002">src/node/oidc.ts:1002</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1082">src/node/oidc.ts:1082</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="revoke"><span>revoke</span><a href="#revoke" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -582,7 +595,7 @@ Only a <code>401</code> (client authentication failed) is an error, surfaced as
 <h4 class="tsd-anchor-link" id="throws-6">Throws<a href="#throws-6" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>AuthError when no <code>clientSecret</code> is configured.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1108">src/node/oidc.ts:1108</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1188">src/node/oidc.ts:1188</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="ssocomplete"><span>sso<wbr/>Complete</span><a href="#ssocomplete" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -610,7 +623,7 @@ token out of the jar exactly as <code>login()</code> does.</p>
 federation path.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1205">src/node/oidc.ts:1205</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1285">src/node/oidc.ts:1285</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="ssocompletehandoff"><span>sso<wbr/>Complete<wbr/>Handoff</span><a href="#ssocompletehandoff" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -642,7 +655,7 @@ all answer the same <code>401</code>, deliberately — telling them apart is not
 something a caller gets to do.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1418">src/node/oidc.ts:1418</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1498">src/node/oidc.ts:1498</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="ssocompleteoauth2"><span>sso<wbr/>Complete<wbr/>Oauth2</span><a href="#ssocompleteoauth2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -668,7 +681,7 @@ configuration and transport trust rather than cryptographic trust (§12.1
 note 11).</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1386">src/node/oidc.ts:1386</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1466">src/node/oidc.ts:1466</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="ssoproviders"><span>sso<wbr/>Providers</span><a href="#ssoproviders" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -703,7 +716,7 @@ organization resolves, unlike <a href="#ssostart" class="tsd-kind-method">ssoSta
 <a href="#ssostartoauth2" class="tsd-kind-method">ssoStartOauth2</a>, which do.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1255">src/node/oidc.ts:1255</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1335">src/node/oidc.ts:1335</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="ssostart"><span>sso<wbr/>Start</span><a href="#ssostart" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -729,7 +742,7 @@ unmodified — the server keeps the nonce to itself (§12.1 note 7).</p>
 context cannot be resolved.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1139">src/node/oidc.ts:1139</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1219">src/node/oidc.ts:1219</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="ssostartoauth2"><span>sso<wbr/>Start<wbr/>Oauth2</span><a href="#ssostartoauth2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -765,7 +778,7 @@ configuration/programming-error member, as distinct from the
 refused again.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1324">src/node/oidc.ts:1324</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1404">src/node/oidc.ts:1404</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="tokenexchange"><span>token<wbr/>Exchange</span><a href="#tokenexchange" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -812,7 +825,7 @@ collapses them because distinguishing them is a tenant-enumeration signal.</p>
 no wire call.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1754">src/node/oidc.ts:1754</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1873">src/node/oidc.ts:1873</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="umadeleteresource"><span>uma<wbr/>Delete<wbr/>Resource</span><a href="#umadeleteresource" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -828,7 +841,7 @@ no wire call.</p>
 <li><span><span class="tsd-kind-parameter">id</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1858">src/node/oidc.ts:1858</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1977">src/node/oidc.ts:1977</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="umaexchangeticket"><span>uma<wbr/>Exchange<wbr/>Ticket</span><a href="#umaexchangeticket" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -874,7 +887,7 @@ live ticket handles.</p>
 no wire call.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1936">src/node/oidc.ts:1936</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L2055">src/node/oidc.ts:2055</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="umalistresources"><span>uma<wbr/>List<wbr/>Resources</span><a href="#umalistresources" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -895,7 +908,7 @@ no wire call.</p>
 caller to enumerate it.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1874">src/node/oidc.ts:1874</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1993">src/node/oidc.ts:1993</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="umareadresource"><span>uma<wbr/>Read<wbr/>Resource</span><a href="#umareadresource" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -911,7 +924,7 @@ caller to enumerate it.</p>
 <li><span><span class="tsd-kind-parameter">id</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/middleware.ResourceSet.html" class="tsd-signature-type tsd-kind-interface">ResourceSet</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1825">src/node/oidc.ts:1825</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1944">src/node/oidc.ts:1944</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="umaregisterresource"><span>uma<wbr/>Register<wbr/>Resource</span><a href="#umaregisterresource" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -934,7 +947,7 @@ the <code>client_id</code> that minted it — and this client's session is usual
 <em>user</em> session, which names no client to bind to (§20.2 rule 1).</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1811">src/node/oidc.ts:1811</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1930">src/node/oidc.ts:1930</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="umarequestticket"><span>uma<wbr/>Request<wbr/>Ticket</span><a href="#umarequestticket" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -957,7 +970,7 @@ different failures, and this SDK surfaces the distinction the server draws
 rather than flattening it.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1887">src/node/oidc.ts:1887</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L2006">src/node/oidc.ts:2006</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="umaupdateresource"><span>uma<wbr/>Update<wbr/>Resource</span><a href="#umaupdateresource" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -981,7 +994,7 @@ a scope removes it, which is how a resource server drops an authority. This
 method performs no read-before-write.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L1843">src/node/oidc.ts:1843</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L1962">src/node/oidc.ts:1962</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="verifylogouttoken"><span>verify<wbr/>Logout<wbr/>Token</span><a href="#verifylogouttoken" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -1019,7 +1032,7 @@ nothing.</li>
 </ol>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/11da44456f5ad4a0b88065be38b767090c833be8/src/node/oidc.ts#L2061">src/node/oidc.ts:2061</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/076ba53de08b9182dfcf6572b8157a5a624a0079/src/node/oidc.ts#L2180">src/node/oidc.ts:2180</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -1040,7 +1053,7 @@ nothing.</li>
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Methods</summary>
 <div><a href="#cibaawait"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>ciba<wbr/>Await</span></a><a href="#cibahandleping"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>ciba<wbr/>Handle<wbr/>Ping</span></a><a href="#cibainitiate"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>ciba<wbr/>Initiate</span></a><a href="#cibapoll"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>ciba<wbr/>Poll</span></a><a href="#deviceauthorize"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>device<wbr/>Authorize</span></a><a href="#devicelogin"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>device<wbr/>Login</span></a><a href="#devicepoll"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>device<wbr/>Poll</span></a><a href="#introspect"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>introspect</span></a><a href="#loginclientcredentials"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>login<wbr/>Client<wbr/>Credentials</span></a><a href="#logouturl"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>logout<wbr/>Url</span></a><a href="#oidcbegin"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>oidc<wbr/>Begin</span></a><a href="#oidcdiscover"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>oidc<wbr/>Discover</span></a><a href="#oidcexchange"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>oidc<wbr/>Exchange</span></a><a href="#oidcpar"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>oidc<wbr/>Par</span></a><a href="#oidcrefresh"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>oidc<wbr/>Refresh</span></a><a href="#revoke"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>revoke</span></a><a href="#ssocomplete"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>sso<wbr/>Complete</span></a><a href="#ssocompletehandoff"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>sso<wbr/>Complete<wbr/>Handoff</span></a><a href="#ssocompleteoauth2"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>sso<wbr/>Complete<wbr/>Oauth2</span></a><a href="#ssoproviders"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>sso<wbr/>Providers</span></a><a href="#ssostart"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>sso<wbr/>Start</span></a><a href="#ssostartoauth2"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>sso<wbr/>Start<wbr/>Oauth2</span></a><a href="#tokenexchange"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>token<wbr/>Exchange</span></a><a href="#umadeleteresource"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>uma<wbr/>Delete<wbr/>Resource</span></a><a href="#umaexchangeticket"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>uma<wbr/>Exchange<wbr/>Ticket</span></a><a href="#umalistresources"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>uma<wbr/>List<wbr/>Resources</span></a><a href="#umareadresource"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>uma<wbr/>Read<wbr/>Resource</span></a><a href="#umaregisterresource"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>uma<wbr/>Register<wbr/>Resource</span></a><a href="#umarequestticket"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>uma<wbr/>Request<wbr/>Ticket</span></a><a href="#umaupdateresource"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>uma<wbr/>Update<wbr/>Resource</span></a><a href="#verifylogouttoken"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>verify<wbr/>Logout<wbr/>Token</span></a></div></details></div></details></div>
 <div class="site-menu">
-<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK - v1.1.1</a>
+<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK - v1.1.2</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
 <li>Loading...</li></ul></nav></div></div></div><footer>
 <p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>
