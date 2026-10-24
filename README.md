@@ -20,20 +20,36 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to **contract 1.63**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
+This SDK conforms to **contract 1.64**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
 §20, §21, §22, §23, §24, §25, §26, §27 (with §27.6.2), §28, §28.12, §29, §30, §31, §32, §33 and §36,
 with §32.7 and §33.2 signed (including §6.1 mTLS client certificates, the
 §10.1 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
 `verifyWebhook` signature verifier). Manifest pruning: not offered in any namespace (§27.10). §12 is implemented in full at its 1.38 shape: all
 **thirteen** operations, including the four public "Sign in with X" entry points.
 
+### Contract 1.64 — the 1.1.2 release (§34.8)
+
+Contract 1.64 adds no operation (202 in 29 namespaces). Every item of §34.8 that asks anything of
+this SDK, and what it does:
+
+| Item | Rule | What this SDK does |
+|---|---|---|
+| (b) a `429 rate_limit_exceeded` on a poll is waited out | §14.2 rule 9, §14.6 | `devicePoll` raises any `429` as an `OAuthProtocolError` with `error == "rate_limit_exceeded"` (the status decides, not the body: a bodiless `429`, or one saying `slow_down`, included; never `slow_down`). `deviceLogin` treats it as non-terminal: it waits `Retry-After` as a minimum (delta-seconds form), counts the wait as one interval, does **not** raise the interval (only the `400` does), and polls again. A wait that would pass the `expires_in` deadline, measured on the clock from the authorization, ends in `expired_token` and sends nothing after it. A `5xx` mid-poll is a transport failure whatever its body (`500 {"error":"server_error"}` included): retried under §16 inside the poll (three requests in all, a transport failure likewise; never a `429`), then the loop takes its next interval. A §16 retry inside the poll never passes the deadline either: a wait that would reach it (a `Retry-After` included) is not served and the typed `expired_token` is raised (the CIBA loop is bounded the same way, §34.2 P10). |
+| (c) the refusal at `plan` names the member, and the value where the SDK keeps it | §27.6.2 item 4 | Already held: `plan` names the member and the value (this SDK keeps the text). |
+| (a), (d)–(j) | | Informative or no SDK work. |
+
+Follow-ups of the contract 1.63 conformance review (#148): in the browser persona an `/oauth2/*`
+request uses the fetch adapter with `credentials: 'omit'`, so a same-origin `axiam_*` cookie is not
+sent either (§12.1 rule 3, C163-12), and so does an RFC 7592 registration call (C164-06); the Node
+persona keeps its jar-free agent pair.
+
 ### Contract 1.63 — the 1.1.1 release (§34.7)
 
 | Item | Rule | What this SDK does |
 |---|---|---|
 | (a) no session cookie, no CSRF header on `/oauth2/*` | §6.1 rule 11, §12.1 rule 3, §14.6 | Every `/oauth2/*` request goes through the jar-free agent pair and carries no `X-CSRF-Token`, whether or not a device credential is adopted (a path-prefix match: the federation `oauth2/start`/`callback` routes are session endpoints and are unaffected). |
-| (ab) an unknown open-enum value on an unstated manifest member | §27.6.2 item 4 | `plan` raises a `ValidationError` naming the member and the value, before any write; stating the member resolves it. |
-| (ac) `termination_action` has no "none" in a manifest | §27.6.2 item 4 | A stated `terminationAction: null` is refused at `plan` with zero wire calls. |
+| C162-07 (§34.6 (ab)): an unknown open-enum value on an unstated manifest member | §27.6.2 item 4 | `plan` raises a `ValidationError` naming the member and the value, before any write; stating the member resolves it. |
+| C162-08 (§34.6 (ac)): `termination_action` has no "none" in a manifest | §27.6.2 item 4 | A stated `terminationAction: null` is refused at `plan` with zero wire calls. |
 | (c) the AMQP producer's local refusal | §8 (MAY) | Not applicable: this SDK ships no helper that builds or signs an `AuditEventMessage`. |
 
 ### Contract 1.62 — the 1.1.0 release (§34.6)
@@ -224,7 +240,7 @@ See [`CONTRACT.md`](./CONTRACT.md) for the full cross-language behavioral contra
 ## Install
 
 ```bash
-npm install axiam-sdk@^1.1.0
+npm install axiam-sdk@^1.1.2
 ```
 
 From 1.0.0 the SDK is stable and follows semantic versioning: a breaking change to its

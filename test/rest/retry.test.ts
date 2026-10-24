@@ -72,3 +72,42 @@ describe('withRetry (CF-01)', () => {
     expect(fn).toHaveBeenCalledTimes(3);
   });
 });
+
+describe('withRetry admit (C164-48)', () => {
+  it('a refused wait announces no retry event, sleeps nothing and sends nothing more', async () => {
+    const emit = vi.fn();
+    const sleepFn = vi.fn().mockResolvedValue(undefined);
+    const fn = vi.fn().mockRejectedValue(new NetworkError('down'));
+    const refusal = new AuthError('past the deadline');
+
+    const err = await withRetry(fn, {
+      idempotent: true,
+      telemetry: { emit } as never,
+      sleepFn,
+      randomFn: () => 1,
+      admit: () => {
+        throw refusal;
+      },
+    }).catch((e: unknown) => e);
+
+    expect(err).toBe(refusal);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(emit).not.toHaveBeenCalled();
+    expect(sleepFn).not.toHaveBeenCalled();
+  });
+
+  it('an admitted wait is announced once and served', async () => {
+    const emit = vi.fn();
+    const sleepFn = vi.fn().mockResolvedValue(undefined);
+    const admit = vi.fn();
+    const fn = vi.fn().mockRejectedValueOnce(new NetworkError('down')).mockResolvedValueOnce('ok');
+
+    await expect(
+      withRetry(fn, { idempotent: true, telemetry: { emit } as never, sleepFn, randomFn: () => 1, admit }),
+    ).resolves.toBe('ok');
+
+    expect(admit).toHaveBeenCalledWith(200);
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(sleepFn).toHaveBeenCalledWith(200);
+  });
+});

@@ -72,6 +72,15 @@ export class NodeSession extends SharedSession {
   }
 
   /**
+   * Overrides {@link SharedSession.oauth2RequestConfig}: under Node the
+   * jar-free agent pair of {@link noCredentialsConfig} is what withholds the
+   * cookies; the browser's fetch adapter (`credentials: 'omit'`) is not used.
+   */
+  oauth2RequestConfig(): AxiosRequestConfig {
+    return this.noCredentialsConfig();
+  }
+
+  /**
    * Drives the actual `POST /api/v1/auth/refresh` HTTP call. Passed to this
    * session's per-instance `refreshGuard` (inherited from SharedSession) by
    * both REST's reactive interceptor (rest/interceptors.ts) and gRPC's

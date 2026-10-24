@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-10-23
+
+`axiam-sdk` 1.1.2 conforms to **contract 1.64**. `CONTRACT.md` is vendored byte for byte from axiam
+`b3f8687` (contract 1.64 as amended twice, W7.1b and W7.1c); `openapi.json`, `management-registry.json`
+and `proto/` from `356a6da` (the platform PR #793 merge; `proto/` is unchanged; the registry
+differs from 1.1.1 only in its spec digest and `spec_version` 1.1.2, so no generated source changes).
+Nothing here is source-breaking: no export is removed or retyped, so this is a patch release. It
+closes #148.
+
+### Fixed
+
+- **A `429` on a device-code poll is waited out** (§14.2 rule 9, contract 1.64 (b), as amended). The
+  status decides, not the body: `devicePoll` raises any `429` (the server's `{"error":"rate_limit_exceeded"}`,
+  a bodiless proxy `429`, one saying `slow_down`) as an `OAuthProtocolError` with
+  `error == "rate_limit_exceeded"`; `deviceLogin` waits `Retry-After` as a minimum, counts the wait as one
+  interval, does not raise the interval (only the `400 slow_down` does), and polls again. A wait past
+  the deadline ends in the typed `expired_token` without a request after it. A `500
+  {"error":"server_error"}` mid-poll is retried, as every `5xx` is (§14.2 rule 6).
+- **A `5xx` or transport failure on a device poll is §16-retried inside the poll** (§14.2 rule 6,
+  §16.2, C164-25): three requests in all, `Retry-After` a floor, before the failure surfaces and the
+  loop takes its next interval; a `429` is never retried there, and with `retryEnabled: false` a `5xx`
+  makes one request. Until now a single `devicePoll` made one attempt.
+- **A §16 retry inside a poll never passes the deadline** (§14.2 rule 4, §34.2 P10, C164-36): the
+  waits of the retry inside `deviceLogin`'s poll and inside `cibaAwait`'s `cibaPoll` are served on the
+  loop's clock, and a wait that would reach the deadline (a 5xx's `Retry-After` included) is not
+  served: nothing is sent after it and the typed `expired_token` is raised at once. Before, a `503`
+  with `Retry-After: 120` and `expires_in: 30` sent requests at 125 s and 245 s, and could return
+  tokens 95 s after the deadline. A standalone `devicePoll` / `cibaPoll`, which has no deadline, keeps
+  the unbounded §16 behaviour. A refused wait is refused before the `retry` telemetry event is
+  announced: `RetryOptions` (exported, next to its `sleepFn` and `randomFn` test seams) gains an
+  optional `admit(delayMs)` hook, called before a retry is announced or served, and throwing refuses
+  the retry. A caller counting retries does not count one that was never sent (C164-48, C164-54).
+- **The `expires_in` deadline is measured on the clock** (§14.2 rule 4, C164-05): it is a point taken
+  when the authorization arrives, so the time a poll or `onUserCode` takes counts against it, not only
+  the sleeps. `DeviceLoginParams.clock` (optional, the clock `cibaAwait` takes) makes it testable.
+- **RFC 7592 registration calls no longer send same-origin cookies in the browser** (§12.1 rule 3,
+  C164-06): the bare transport uses the same fetch-adapter config as an `/oauth2/*` request.
+- **A `429 {"error":…}` from an OAuth2 form endpoint is an `OAuthProtocolError` on the other token
+  requests too** (`oidcRefresh`, `loginClientCredentials`, `deviceAuthorize`, introspection, revocation,
+  PAR, token exchange), where it was a `NetworkError` (§2, C164-23). The thrown class changes for that
+  status only; no signature does. A `5xx` stays a `NetworkError` whatever its body, and a `429` from
+  discovery, the federation routes (`ssoProviders`, ...) or UMA stays a `NetworkError` (C164-31).
+- **Browser persona: `/oauth2/*` no longer sends same-origin cookies** (§12.1 rule 3, C163-12). The
+  request goes through the fetch adapter with `credentials: 'omit'`; the XHR adapter sent a same-origin
+  cookie whatever `withCredentials` said. The Node persona is unchanged.
+
+### Tests and documentation
+
+- The contract 1.63 §14.6 test now signs in through `login()` against a mock that sets `axiam_access`
+  and `axiam_csrf`, and its control, a management `POST`, comes after the `/oauth2/*` calls
+  (C163-08). The C162-07 "states the member" test asserts the stated values in the `PUT` body
+  (C163-09). The README's two manifest rows of the §34.7 table lead with C162-07 and C162-08 and give
+  the §34.6 letter as the parenthetical (C163-18, C164-22). The wall-clock `deviceLogin` tests record
+  their sleeps instead of sleeping (C164-23); the browser `/oauth2/*` test also asserts the `Request`
+  that reaches `fetch` carries `credentials: 'omit'` (C164-19). `devicePoll`'s documentation says the
+  `Retry-After` of a `429` is not exposed (C164-20). The in-poll retry tests gain the contract's
+  transport-failure case (two failures then a `200` = three requests; three = `NetworkError`; retry
+  off = one request) and the two deadline cases (C164-38, C164-36); the README states what the
+  deadline bound covers (C164-41). The deadline tests for the in-poll retry pin the jitter instead of
+  `Retry-After` (a bare `500` 100 ms before the deadline with `Math.random` at its maximum sends no
+  retry; at 0.25 the retry before the deadline is sent and the next wait is refused), cover the
+  `>=` boundary (a wait landing exactly on the deadline is refused) and have a CIBA twin; the
+  `Retry-After: 120` cases fail by assertion, not by vitest's timeout, if a wait escapes the bound
+  (C164-45, C164-48).
+
 ## [1.1.1] - 2026-10-20
 
 `axiam-sdk` 1.1.1 conforms to **contract 1.63** (axiam `d919ba0cc`, the release 1.1.1 plan branch).

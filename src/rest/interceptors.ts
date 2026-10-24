@@ -209,7 +209,9 @@ export function installDeviceTokenInterceptor(axiosInstance: AxiosInstance, sess
     if (session.isForeignHost(config.url) || (deviceToken === undefined && !oauth2)) {
       return config;
     }
-    const noCred = session.noCredentialsConfig();
+    // An `/oauth2/*` request also gets the browser persona's fetch adapter with
+    // `credentials: 'omit'` (C163-12); the other credential-free calls do not.
+    const noCred = oauth2 ? session.oauth2RequestConfig() : session.noCredentialsConfig();
     Object.assign(config, noCred);
     config.headers = config.headers ?? {};
     if (oauth2) {

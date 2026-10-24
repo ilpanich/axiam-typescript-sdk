@@ -884,6 +884,12 @@ export interface DeviceLoginParams {
    * it: what the device does with it is the application's decision.
    */
   onUserCode: (authorization: DeviceAuthorization) => void | Promise<void>;
+  /**
+   * The clock the polling loop waits on and measures the `expires_in` deadline
+   * against (§14.2 rule 4); defaults to `Date.now` and `setTimeout`. Injectable
+   * so the schedule is testable without sleeping.
+   */
+  clock?: CibaClock;
 }
 
 /** 200 body of `POST /oauth2/device_authorization`. */
