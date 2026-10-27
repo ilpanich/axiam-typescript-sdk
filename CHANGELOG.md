@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Runtime dependency floors raised** to the current releases: `axios` ^1.21.0, `jose` ^6.2.13,
+  `@grpc/grpc-js` ^1.14.6, `amqplib` ^2.2.0. All are semver-compatible; no export changes.
+- **Built and typechecked with TypeScript 6.0** (was 5.9). TypeScript 7 stays held back until
+  typedoc supports it (its peer range ends at 6.0.x).
+- Dev tooling refreshed within its major lines (vitest 5.0.5, msw 3.0.3, ts-proto 2.18.3,
+  `@types/node` 26.6.5, esbuild 0.28.2, NestJS 12.3.2, fastify 5.12.7, express 5.3.0, jsdom 30.1.3).
+- Node support is unchanged: the floor stays 22 (end of life 2027-04-30) and the newest CI leg stays
+  26, the current line, which enters LTS in October 2026. Node 27 is still in alpha under the new
+  one-major-a-year schedule.
+
 ## [1.1.2] - 2026-10-23
 
 `axiam-sdk` 1.1.2 conforms to **contract 1.64**. `CONTRACT.md` is vendored byte for byte from axiam
