@@ -22,6 +22,8 @@ updates:
       # Coverage and SDK-CI workflows before any test runs. Hold TypeScript on the
       # major line typedoc supports; drop this ignore once typedoc ships TS 7.x
       # support. Minor/patch TypeScript updates still flow via the minor-patch group.
+      # TypeScript itself is on 6.0.x (the newest line typedoc accepts); the 6.0
+      # move was made by hand, so this ignore now only blocks the 7.x major.
       - dependency-name: "typescript"
         update-types:
           - version-update:semver-major
