@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-10-29
+
 ### Changed
 
 - **Runtime dependency floors raised** to the current releases: `axios` ^1.21.0, `jose` ^6.2.13,
@@ -18,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Node support is unchanged: the floor stays 22 (end of life 2027-04-30) and the newest CI leg stays
   26, the current line, which enters LTS in October 2026. Node 27 is still in alpha under the new
   one-major-a-year schedule.
+
+- Move TypeScript from 5.9 to 6.0
+
+- Update dependencies within their semver ranges
+
+- Update CodeQL action to a newer version
+
+- Update CodeQL analysis action version
+
+- Bump github/codeql-action/analyze from 4.39.0 to 4.39.1
+
+- Bump github/codeql-action/init from 4.39.0 to 4.39.1
+
+- Bump the minor-patch group with 4 updates
+
+- Bump fast-uri
 
 ## [1.1.2] - 2026-10-23
 
