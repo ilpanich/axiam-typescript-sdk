@@ -129,6 +129,38 @@ describe('oidcPar idp_hint (§26.2 rule 8)', () => {
     expect(params(without.pushed.authorizationUrl).map(([k]) => k).sort()).toEqual(['client_id', 'request_uri']);
   });
 
+  async function pushFromBegin(beginHint: string, parHint?: string) {
+    let form = new URLSearchParams();
+    server.use(
+      http.post(PAR_ENDPOINT, async ({ request }) => {
+        form = new URLSearchParams(await request.text());
+        return HttpResponse.json({ request_uri: 'urn:ietf:params:oauth:request_uri:abc', expires_in: 90 }, { status: 201 });
+      }),
+    );
+    const { oidc } = createClient({ clientSecret: 's' });
+    const configuration = discoveryDocument();
+    const request = oidc.oidcBegin({ configuration, redirectUri: REDIRECT_URI, idpHint: beginHint });
+    const pushed = await oidc.oidcPar({
+      request,
+      redirectUri: REDIRECT_URI,
+      configuration,
+      ...(parHint !== undefined ? { idpHint: parHint } : {}),
+    });
+    return { form, pushed };
+  }
+
+  it('par_idp_hint_from_begin_url_pushed', async () => {
+    const { form, pushed } = await pushFromBegin('corp-okta');
+    expect([...form.entries()].filter(([k]) => k === 'axiam_idp_hint')).toEqual([['axiam_idp_hint', 'corp-okta']]);
+    expect(params(pushed.authorizationUrl).map(([k]) => k).sort()).toEqual(['client_id', 'request_uri']);
+  });
+
+  it('par_idp_hint_argument_wins', async () => {
+    const { form } = await pushFromBegin('corp-okta', 'other');
+    expect([...form.entries()].filter(([k]) => k === 'axiam_idp_hint')).toEqual([['axiam_idp_hint', 'other']]);
+    expect(form.toString()).not.toContain('corp-okta');
+  });
+
   it('refuses an empty or over-long hint before any request', async () => {
     const { oidc } = createClient();
     const configuration = discoveryDocument();

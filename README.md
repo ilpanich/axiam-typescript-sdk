@@ -38,6 +38,7 @@ See [Native sign-in](#native-sign-in-with-a-provider-id-token-contract-165-37) a
 |---|---|
 | (a) §37 native sign-in | `OidcClient.loginWithProviderIdToken(provider, idToken, nonce, options?)` and the SHOULD helper `nativeNonce()` returning `ProviderNonce`, with all thirteen §37.9 tests. |
 | (b) `idp_hint` | `idpHint` on `oidcBegin` (emitted once as `axiam_idp_hint`) and on `oidcPar` (pushed body only). |
+| (h) server floor (D-N33) | Federation-config admin calls need an AXIAM server **1.2.0 or later**: `FederationConfigResponse.native_login` is required from 1.2.0, and (no runtime response validation here) a response from an older server decodes with `native_login` `undefined`. |
 | (c) a replayed refresh token ends the session | No code change. `oidcRefresh` is single-flight (§9), so a burst is one wire call; `invalid_grant` is an `OAuthProtocolError`, never retried. Confirmed by a test. |
 | (d), (e), (f), (g) | No code change. The SDK parses no handoff callback URL; `ssoCompleteHandoff` takes the `code` the caller already extracted. |
 | (g), (i), (j) regenerated members | The §27 layer is regenerated: `default_idp`, `refresh_reuse_response` (preserved by the read-modify-write `update` forms), `native_login`. |
@@ -1054,6 +1055,9 @@ const request = oidc.oidcBegin({ configuration, redirectUri, idpHint: 'corp-okta
 // under PAR the hint rides the pushed body, never the redirect:
 const pushed = await oidc.oidcPar({ request, redirectUri, configuration, idpHint: 'corp-okta' });
 ```
+
+When `oidcPar` is given no `idpHint`, it pushes the hint the begin URL carries; an `idpHint` given to
+`oidcPar` wins.
 
 It is validated for emptiness and 256 UTF-8 bytes only (a `ValidationError`, no URL built) and is
 never trimmed, folded or looked up; an unresolvable hint is ignored by the server.

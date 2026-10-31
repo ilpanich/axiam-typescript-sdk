@@ -10,7 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Contract 1.65 (§34.9)**: `CONTRACT.md`, `openapi.json` (1.2.0) and `management-registry.json`
-  re-vendored byte for byte from AXIAM `76d35d9`.
+  re-vendored byte for byte from AXIAM `76d35d9`; `CONTRACT.md` re-vendored again from `d93976b`
+  (the 2026-10-31 amendments: §12.1 rule 3 redirects, §26.2 rule 8 / D-N36, §37.2 rules 9 and 12,
+  §34.9 server floor).
 - **Native sign-in with a provider ID token (§37)**: `OidcClient.loginWithProviderIdToken(provider,
   idToken, nonce, options?)` (`POST /oauth2/token`, grant
   `urn:axiam:params:oauth:grant-type:provider-id-token`; never retried; no `openid` added; the
@@ -26,6 +28,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   call with one shared error (§9).
 
 ### Changed
+
+- **Server floor (D-N33):** federation-config admin calls (`federation.createConfig`, `getConfig`,
+  `listConfigs`, `updateConfig`) of this 1.2-line SDK need an AXIAM server **1.2.0 or later**:
+  `FederationConfigResponse.native_login` is required from 1.2.0. This SDK does not validate
+  responses at runtime, so a response from an older server decodes with `native_login` `undefined`
+  despite the type.
+- **No redirect is followed on an `/oauth2/*` POST (§12.1 rule 3, C165-14).** Every `OidcClient`
+  form POST (token, refresh, introspect, revoke, PAR, device authorization and poll, token
+  exchange, UMA ticket, CIBA, and `loginWithProviderIdToken`) now sets `maxRedirects: 0`; a `3xx`
+  is a `NetworkError` that names the status only. Previously Node followed a 307/308 and re-sent the
+  form (client secret, provider ID token, raw nonce) to the `Location` target, cross-host included.
+- **`oidcPar` pushes the begin URL's `axiam_idp_hint` (D-N36, C165-11)** when its own `idpHint` is
+  unset; the argument wins when both are set. Before, `oidcBegin({ idpHint })` followed by
+  `oidcPar({ request })` pushed no hint.
+
+### Added (additive, C165-17)
+
+- `OAuthProtocolError.retryAfterMs?: number`: the `Retry-After` (delta-seconds) of a `429`
+  (native sign-in, CIBA, the other `/oauth2/*` form calls, device poll). Absent otherwise.
+
+### Source compatibility
+
+- `FederationConfigResponse` gained the required `native_login: NativeLoginTrustResponse`; code that
+  builds one (test fixtures, mocks) must supply it (D-N32, C165-08).
+
+### Changed (continued)
 
 - **A replayed refresh token now ends the session server-side by default** (platform setting
   `oauth2.refresh_reuse_response = revoke_session`): presenting an already-rotated refresh token is

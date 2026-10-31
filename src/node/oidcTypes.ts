@@ -314,9 +314,9 @@ export interface OidcParParams {
    * built from the `request_uri` stays exactly `client_id` and `request_uri`.
    *
    * @remarks
-   * `oidcPar` takes its parameters as arguments rather than from the
-   * `oidcBegin` URL, so pass the hint here as well as to `oidcBegin` (or to
-   * `oidcPar` alone — the hint on a begun URL is not read).
+   * When this is unset, the `axiam_idp_hint` that the `oidcBegin` URL
+   * ({@link OidcParParams.request}) carries is pushed instead (D-N36); when
+   * both are set, this argument wins and the URL's hint is not pushed.
    */
   idpHint?: string;
 }

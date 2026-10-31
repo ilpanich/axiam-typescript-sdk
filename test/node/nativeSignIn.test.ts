@@ -260,8 +260,31 @@ describe('loginWithProviderIdToken (§37)', () => {
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(OAuthProtocolError);
     expect((err as OAuthProtocolError).error).toBe('rate_limit_exceeded');
-    // This SDK does not expose Retry-After on OAuthProtocolError (device_poll: same).
+    // C165-17: the 429's Retry-After (delta-seconds) is exposed, additively.
+    expect((err as OAuthProtocolError).retryAfterMs).toBe(7000);
     expect(state.tokenCalls).toBe(1);
+  });
+
+  it('redirect_not_followed_is_network_error', async () => {
+    // C165-14, §12.1 rule 3: a 307 would re-send the form (id token, raw nonce) to the Location target.
+    let otherHostCalls = 0;
+    server.use(
+      http.post('http://other.invalid/*', () => {
+        otherHostCalls += 1;
+        return HttpResponse.json(tokenResponse());
+      }),
+    );
+    const { state } = mount(
+      () => new HttpResponse(null, { status: 307, headers: { Location: 'http://other.invalid/oauth2/token' } }),
+    );
+    const { oidc } = createClient();
+    const err = await oidc
+      .loginWithProviderIdToken('prov', 'the-id-token', 'the-nonce', { configuration: discoveryDocument() })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NetworkError);
+    expect(String((err as Error).message)).not.toContain('the-id-token');
+    expect(state.tokenCalls).toBe(1);
+    expect(otherHostCalls).toBe(0);
   });
 
   it('server_error_not_retried', async () => {

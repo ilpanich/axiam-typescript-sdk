@@ -368,9 +368,9 @@ function pollRateLimit(err: unknown): OAuthProtocolError | undefined {
     body !== null && typeof body === 'object' && typeof (body as { error_description?: unknown }).error_description === 'string'
       ? (body as { error_description: string }).error_description
       : '';
-  const limited = new OAuthProtocolError('rate_limit_exceeded', description);
   const response = (err as { response?: AxiosResponse }).response;
   const retryAfter = response ? retryAfterMs(response) : undefined;
+  const limited = new OAuthProtocolError('rate_limit_exceeded', description, retryAfter);
   if (retryAfter !== undefined) POLL_RETRY_AFTER_MS.set(limited, retryAfter);
   return limited;
 }
@@ -585,11 +585,33 @@ function bodyMessage(body: unknown, fallback: string): string {
  * exactly that for a 401 on an `/oauth2/*` path), and re-mapping would discard
  * the richer error it built.
  */
+/** The non-empty `axiam_idp_hint` an `oidcBegin` URL carries, or `undefined` (D-N36). */
+function beginUrlIdpHint(url: string): string | undefined {
+  try {
+    const value = new URL(url).searchParams.get(IDP_HINT_PARAM);
+    return value === null || value === '' ? undefined : value;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * §12.1 rule 3 / §37.2 rule 12 (C165-14): an `/oauth2/*` POST never follows a redirect — a 307/308
+ * would re-send the form, and its credentials, to the `Location` target. The `3xx` is a
+ * `NetworkError` that names the status only (no `Location`, no axios cause: its config holds the form).
+ */
+function redirectRefused(operation: string, status: number): NetworkError {
+  return new NetworkError(`${operation}: the server answered HTTP ${status}; a redirect is never followed (CONTRACT.md §12.1 rule 3)`);
+}
+
 function mapOidcError(err: unknown, url: string, fallbackMessage: string): AxiamError {
   if (err instanceof AxiamError) {
     return err;
   }
   const status = axiosStatus(err);
+  if (status !== undefined && status >= 300 && status < 400) {
+    return redirectRefused(fallbackMessage, status);
+  }
   if (status !== undefined) {
     const body = axiosBody(err);
     return mapHttpStatusToError(status, bodyMessage(body, fallbackMessage), { url, body, cause: err });
@@ -900,8 +922,9 @@ function jsonBody(data: unknown): unknown {
 
 /** Map a non-2xx `/oauth2/*` answer: `error` at any status is an `OAuthProtocolError` (§33.4); otherwise §2. */
 function cibaError(operation: string, response: AxiosResponse): AxiamError {
+  if (response.status >= 300 && response.status < 400) return redirectRefused(operation, response.status);
   return (
-    oauth2ErrorFromBody(jsonBody(response.data)) ??
+    oauth2ErrorFromBody(jsonBody(response.data), response.status === 429 ? retryAfterMs(response) : undefined) ??
     mapHttpStatusToError(response.status, `${operation}: HTTP ${response.status}`)
   );
 }
@@ -1786,8 +1809,12 @@ export class OidcClient {
     }
     // §26.2 rule 8 (contract 1.65): the provider hint rides the pushed body, once,
     // and only when set. It is never added to the redirect URL built below.
-    if (params.idpHint !== undefined) {
-      form.set(IDP_HINT_PARAM, params.idpHint);
+    // D-N36 (C165-11): when the argument is unset, the hint the begin URL carries is pushed;
+    // the argument wins when both are set. Never twice, never a second source.
+    const pushedHint = params.idpHint ?? beginUrlIdpHint(request.url);
+    if (pushedHint !== undefined) {
+      checkIdpHint('oidcPar', pushedHint);
+      form.set(IDP_HINT_PARAM, pushedHint);
     }
     // NOT pushed, and never to be added: `request_uri`. RFC 9126 §2.1 makes it
     // the one authorization parameter a client MUST NOT push, and openapi.json
@@ -2217,6 +2244,7 @@ export class OidcClient {
     try {
       const config: AxiosRequestConfig = {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        maxRedirects: 0,
       };
       const response = await this.#session.axios.post<RptResponseWire>(
         url,
@@ -2600,7 +2628,13 @@ export class OidcClient {
         if (response.status >= 500) {
           throw transient(retryableNetworkError(`${operation}: HTTP ${response.status}`, response));
         }
-        const protocol = oauth2ErrorFromBody(jsonBody(response.data));
+        if (response.status >= 300 && response.status < 400) {
+          return { error: redirectRefused(operation, response.status) };
+        }
+        const protocol = oauth2ErrorFromBody(
+          jsonBody(response.data),
+          response.status === 429 ? retryAfterMs(response) : undefined,
+        );
         if (protocol) return { error: protocol }; // decisive, never retried
         if (statusIsRetryable(response.status)) {
           throw transient(retryableNetworkError(`${operation}: HTTP ${response.status}`, response));
@@ -2774,6 +2808,7 @@ export class OidcClient {
       return await this.#session.axios.post<unknown>(url, form.toString(), {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         validateStatus: () => true,
+        maxRedirects: 0,
       });
     } catch (err) {
       const code =
@@ -2802,6 +2837,7 @@ export class OidcClient {
         try {
           const response = await this.#session.axios.post<TokenResponseWire>(url, form.toString(), {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            maxRedirects: 0,
           });
           return { wire: response.data };
         } catch (err) {
@@ -3072,6 +3108,8 @@ export class OidcClient {
   ): Promise<AxiosResponse<T>> {
     const config: AxiosRequestConfig = {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      // §12.1 rule 3 (C165-14): never follow a redirect from an `/oauth2/*` POST.
+      maxRedirects: 0,
     };
     try {
       return await this.#session.axios.post<T>(url, form.toString(), config);
@@ -3083,7 +3121,8 @@ export class OidcClient {
       // also maps discovery, the federation routes and UMA, where a `429` stays a `NetworkError`
       // (C164-31). A 5xx stays one whatever its body (§14.2 rule 6).
       if (axiosStatus(err) === 429) {
-        const protocol = oauth2ErrorFromBody(axiosBody(err));
+        const raw = (err as { response?: AxiosResponse }).response;
+        const protocol = oauth2ErrorFromBody(axiosBody(err), raw ? retryAfterMs(raw) : undefined);
         if (protocol) throw protocol;
       }
       throw mapOidcError(err, url, fallbackMessage);

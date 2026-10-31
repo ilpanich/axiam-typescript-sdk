@@ -234,8 +234,10 @@ function recordSleeps(): { delays: number[]; restore: () => void } {
     ms?: number,
     ...args: unknown[]
   ) => {
-    // Only the loop's own sleep: other libraries keep timers of their own.
-    if (ms !== undefined && new Error().stack?.includes('src/node/oidc')) {
+    // Only the loop's own sleep: other libraries keep timers of their own — including axios's
+    // request timeout, which a `maxRedirects: 0` request arms from inside the POST call (C165-14).
+    const stack = new Error().stack ?? '';
+    if (ms !== undefined && stack.includes('src/node/oidc') && !stack.includes('/node_modules/axios/')) {
       delays.push(ms);
       return realSetTimeout(fn, 0);
     }
