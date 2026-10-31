@@ -20,12 +20,27 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to **contract 1.64**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
-§20, §21, §22, §23, §24, §25, §26, §27 (with §27.6.2), §28, §28.12, §29, §30, §31, §32, §33 and §36,
+This SDK conforms to **contract 1.65**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
+§20, §21, §22, §23, §24, §25, §26, §27 (with §27.6.2), §28, §28.12, §29, §30, §31, §32, §33, §36 and §37,
 with §32.7 and §33.2 signed (including §6.1 mTLS client certificates, the
 §10.1 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
 `verifyWebhook` signature verifier). Manifest pruning: not offered in any namespace (§27.10). §12 is implemented in full at its 1.38 shape: all
 **thirteen** operations, including the four public "Sign in with X" entry points.
+
+### Contract 1.65 — the 1.2.0 release (§34.9)
+
+Contract 1.65 adds no management operation (202 in 29 namespaces). It adds native sign-in with a
+provider ID token (§37) and the `idpHint` input of `oidcBegin` and `oidcPar` (§12.1, §26.2 rule 8).
+See [Native sign-in](#native-sign-in-with-a-provider-id-token-contract-165-37) and
+[Choosing the provider](#choosing-the-provider-idphint-contract-165).
+
+| Item | What this SDK does |
+|---|---|
+| (a) §37 native sign-in | `OidcClient.loginWithProviderIdToken(provider, idToken, nonce, options?)` and the SHOULD helper `nativeNonce()` returning `ProviderNonce`, with all thirteen §37.9 tests. |
+| (b) `idp_hint` | `idpHint` on `oidcBegin` (emitted once as `axiam_idp_hint`) and on `oidcPar` (pushed body only). |
+| (c) a replayed refresh token ends the session | No code change. `oidcRefresh` is single-flight (§9), so a burst is one wire call; `invalid_grant` is an `OAuthProtocolError`, never retried. Confirmed by a test. |
+| (d), (e), (f), (g) | No code change. The SDK parses no handoff callback URL; `ssoCompleteHandoff` takes the `code` the caller already extracted. |
+| (g), (i), (j) regenerated members | The §27 layer is regenerated: `default_idp`, `refresh_reuse_response` (preserved by the read-modify-write `update` forms), `native_login`. |
 
 ### Contract 1.64 — the 1.1.2 release (§34.8)
 
@@ -1015,7 +1030,7 @@ const oidc = createOidcClient(session, {
 | Operation | Wire call | Notes |
 |-----------|-----------|-------|
 | `oidcDiscover()` | `GET /.well-known/openid-configuration` | Cached per origin, TTL ≥ 5 min, concurrent calls share one fetch |
-| `oidcBegin({ configuration, redirectUri, scope?, extraParams? })` | *none — pure local computation* | CSPRNG `state`/`nonce` (256-bit) + PKCE **S256** challenge; returns `{ url, state, nonce, codeVerifier }` |
+| `oidcBegin({ configuration, redirectUri, scope?, extraParams?, idpHint? })` | *none — pure local computation* | CSPRNG `state`/`nonce` (256-bit) + PKCE **S256** challenge; returns `{ url, state, nonce, codeVerifier }` |
 | `oidcExchange({ code, codeVerifier, nonce, redirectUri, tenantId?, configuration? })` | `POST /oauth2/token?tenant_id=…` | `grant_type=authorization_code`; validates the ID token in full before returning |
 | `oidcRefresh({ refreshToken, scope?, tenantId?, configuration? })` | `POST /oauth2/token?tenant_id=…` | `grant_type=refresh_token`, under the §9 single-flight guard. **Distinct from `AxiamClient.refresh()`**, which drives the cookie-session path |
 | `loginClientCredentials({ scope?, tenantId?, adoptAsCredential?, configuration? })` | `POST /oauth2/token?tenant_id=…` | Service-account M2M login; no `openid` scope, no ID token. `adoptAsCredential: true` uses the token as the session's bearer credential |
@@ -1027,6 +1042,47 @@ const oidc = createOidcClient(session, {
 | `ssoStartOauth2({ federationConfigId, redirectUri, tenantId?/tenantSlug?, orgId?/orgSlug? })` | `POST /api/v1/auth/federation/oauth2/start` | Step 1 through a **plain-OAuth2** upstream (GitHub, Facebook, `generic_oauth2`). PKCE is mandatory here and is generated and held **server-side**, so the SDK computes no verifier and sends no challenge |
 | `ssoCompleteOauth2({ state, code })` | `POST /api/v1/auth/federation/oauth2/callback` | Step 2 of the OAuth2 variant; same `Set-Cookie` session and same post-login sync as `ssoComplete` |
 | `ssoCompleteHandoff({ code })` | `POST /api/v1/auth/federation/handoff` | Redeems the single-use `axiam_handoff` code the SAML and Apple flows deliver on the SPA's callback URL. Valid 60 s, redeemable **once**; a `401` is terminal and is **never retried** |
+
+#### Choosing the provider, `idpHint` (contract 1.65)
+
+A relying party that already knows which provider its user should use can send the browser
+straight there. `idpHint` takes a provider's UUID, its `provider_slug` or a branded kind name
+(`google`, `apple`, …) and is emitted once as `axiam_idp_hint`; there is no `kc_idp_hint`.
+
+```ts
+const request = oidc.oidcBegin({ configuration, redirectUri, idpHint: 'corp-okta' });
+// under PAR the hint rides the pushed body, never the redirect:
+const pushed = await oidc.oidcPar({ request, redirectUri, configuration, idpHint: 'corp-okta' });
+```
+
+It is validated for emptiness and 256 UTF-8 bytes only (a `ValidationError`, no URL built) and is
+never trimmed, folded or looked up; an unresolvable hint is ignored by the server.
+
+#### Native sign-in with a provider ID token (contract 1.65, §37)
+
+A mobile or desktop app that holds the ID token Google, Apple or Facebook's native SDK produced
+presents it to AXIAM's token endpoint (`grant_type=urn:axiam:params:oauth:grant-type:provider-id-token`).
+This is not token exchange. `nativeNonce()` is the pair the two parties need.
+
+```ts
+import { createNodeSession, createOidcClient, nativeNonce } from 'axiam-sdk/node';
+
+const { raw, hashed } = nativeNonce();                  // raw: Sensitive<string>, hashed: hex SHA-256
+const providerToken = await providerSdk.signIn({ nonce: hashed });   // give the provider the HASH
+const tokens = await oidc.loginWithProviderIdToken(
+  'corp-google',          // the provider's UUID or provider_slug, sent verbatim (not a kind name)
+  providerToken,
+  raw,                    // the RAW nonce, sent byte for byte
+  { scopes: ['openid'] }, // none are added for you: omit them and there is no ID token
+);
+```
+
+`loginWithProviderIdToken` is **never retried**: the provider's token is single-use across the
+deployment, and `invalid_grant` is the server's one generic answer to every refusal of it. Recover
+with a fresh provider token and a fresh `nativeNonce()`. An empty `provider`, `idToken` or `nonce`
+and a slug-only client are refused locally with no request. Neither the ID token nor the raw nonce
+is logged, kept or put in an error; hold the raw nonce only for the length of the attempt. The
+result is the ordinary `OidcTokenSet`, returned and not adopted as the client's credential.
 
 #### The four public login-provider operations, and their rules
 

@@ -306,6 +306,19 @@ export interface OidcParParams {
    * request over the back channel in the first place.
    */
   dpopJkt?: string;
+  /**
+   * The provider hint to push (contract 1.65, §26.2 rule 8): the same optional
+   * `idpHint` {@link OidcBeginParams.idpHint} takes, validated the same way.
+   * When set, the pushed form carries `axiam_idp_hint` exactly once; it is
+   * absent otherwise. It rides the pushed body only — the authorization URL
+   * built from the `request_uri` stays exactly `client_id` and `request_uri`.
+   *
+   * @remarks
+   * `oidcPar` takes its parameters as arguments rather than from the
+   * `oidcBegin` URL, so pass the hint here as well as to `oidcBegin` (or to
+   * `oidcPar` alone — the hint on a begun URL is not read).
+   */
+  idpHint?: string;
 }
 
 /**
@@ -352,6 +365,21 @@ export interface OidcBeginParams {
    * attempting to override one of those eight throws.
    */
   extraParams?: Record<string, string>;
+  /**
+   * Which sign-in provider to send the browser to (contract 1.65, §12.1
+   * "`idp_hint`"): a provider's UUID, its `provider_slug` or a branded kind
+   * name (`google`, `apple`, …). Emitted as the single query parameter
+   * `axiam_idp_hint` — the ninth parameter of §12.1 rule 5 — and only when set.
+   *
+   * @remarks
+   * Validated for emptiness and length only: an empty string or one longer
+   * than 256 UTF-8 bytes throws a `ValidationError` and no URL is built. It is
+   * never trimmed, case-folded, parsed as a UUID or looked up. An unresolvable
+   * hint is ignored by the server, so there is nothing to handle on that
+   * outcome. When set it replaces any `axiam_idp_hint` in `extraParams`
+   * (emitted exactly once). There is no `kc_idp_hint` alias.
+   */
+  idpHint?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -1334,3 +1362,40 @@ export type CibaPingHeaders =
   | readonly string[]
   | Iterable<readonly [string, string]>
   | Record<string, string | readonly string[] | undefined>;
+
+// ---------------------------------------------------------------------------
+// Native sign-in with a provider ID token (CONTRACT.md §37, contract 1.65)
+// ---------------------------------------------------------------------------
+
+/** Options of `OidcClient.loginWithProviderIdToken` beyond its three positional inputs (§37.1). */
+export interface LoginWithProviderIdTokenOptions {
+  /**
+   * Scopes to request, sent space-joined as `scope`. Sent **only when named**:
+   * an omitted or empty list sends no `scope` field, which the server reads as
+   * the empty set — no `openid`, hence no `id_token` in the response. The SDK
+   * adds no scope of its own (§37.2 rule 7); pass `openid` to receive
+   * `idClaims`.
+   */
+  scopes?: readonly string[];
+  /** An RFC 8707 `resource` indicator. Sent only when set. */
+  resource?: string;
+  /** Tenant UUID for the `tenant_id` query parameter (§12.3 rule 4). A slug-only client must pass it. */
+  tenantId?: string;
+  /** A pre-fetched discovery document. Fetched via `oidcDiscover` when omitted. */
+  configuration?: OidcConfiguration;
+}
+
+/**
+ * The pair {@link nativeNonce} returns (CONTRACT.md §37.4): give `hashed` to
+ * the provider's SDK and `raw` to `loginWithProviderIdToken`.
+ */
+export interface ProviderNonce {
+  /**
+   * The raw nonce: at least 32 CSPRNG bytes, base64url without padding. A
+   * credential (§37.6) — held behind {@link Sensitive}, and to be kept only for
+   * the length of the sign-in attempt.
+   */
+  raw: Sensitive<string>;
+  /** `SHA-256(raw)` as 64 lower-case hexadecimal characters; not a secret. */
+  hashed: string;
+}

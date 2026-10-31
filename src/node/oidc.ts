@@ -58,6 +58,7 @@ import type {
   IntrospectionResponseWire,
   IntrospectionResult,
   LoginClientCredentialsParams,
+  LoginWithProviderIdTokenOptions,
   OidcBeginParams,
   OidcConfiguration,
   OidcExchangeParams,
@@ -398,6 +399,36 @@ const RESERVED_AUTHORIZE_PARAMS = new Set([
   'code_challenge',
   'code_challenge_method',
 ]);
+
+/** The query parameter / pushed field that names the sign-in provider (§12.1 "`idp_hint`", contract 1.65). */
+const IDP_HINT_PARAM = 'axiam_idp_hint';
+
+/** The longest `idp_hint`, in UTF-8 bytes (§12.1 "`idp_hint`" rule 2). */
+const IDP_HINT_MAX_BYTES = 256;
+
+/** The grant type of native sign-in with a provider ID token (CONTRACT.md §37). */
+export const PROVIDER_ID_TOKEN_GRANT_TYPE = 'urn:axiam:params:oauth:grant-type:provider-id-token';
+
+/**
+ * Refuse an `idp_hint` that is empty or over {@link IDP_HINT_MAX_BYTES} bytes
+ * (§12.1 "`idp_hint`" rule 2) — and nothing else: no trimming, case-folding,
+ * UUID parsing or lookup.
+ */
+function checkIdpHint(operation: string, hint: string): void {
+  if (hint === '') {
+    throw new ValidationError(operation, 400, `${operation}: idpHint must not be empty (CONTRACT.md §12.1)`, [
+      { field: 'idpHint', message: 'must not be empty' },
+    ]);
+  }
+  if (Buffer.byteLength(hint, 'utf8') > IDP_HINT_MAX_BYTES) {
+    throw new ValidationError(
+      operation,
+      400,
+      `${operation}: idpHint must be at most ${IDP_HINT_MAX_BYTES} bytes (CONTRACT.md §12.1)`,
+      [{ field: 'idpHint', message: `must be at most ${IDP_HINT_MAX_BYTES} bytes` }],
+    );
+  }
+}
 
 /** Shape of a UUID, used to reject a slug where §12.3 rule 4 requires a UUID. */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -983,15 +1014,19 @@ export class OidcClient {
    * fresh PKCE verifier/challenge pair using **S256 only** — `plain` is not
    * implemented anywhere in this SDK. The URL is built from the discovery
    * document's `authorization_endpoint` with exactly the eight parameters
-   * §12.1 rule 5 mandates, plus any `extraParams` the caller adds.
+   * §12.1 rule 5 mandates, plus any `extraParams` the caller adds and, when
+   * `idpHint` is set, the one `axiam_idp_hint` (contract 1.65).
    *
    * Nothing is stored: persist the returned `state`, `nonce` and
    * `codeVerifier` yourself (§12.3 rule 1).
    *
    * @throws Error when `extraParams` tries to override one of the eight
    *   SDK-owned parameters — a programming error, caught at call time.
+   * @throws ValidationError when `idpHint` is empty or over 256 UTF-8 bytes;
+   *   no URL is built.
    */
   oidcBegin(params: OidcBeginParams): AuthorizationRequest {
+    if (params.idpHint !== undefined) checkIdpHint('oidcBegin', params.idpHint);
     const state = randomUrlSafeToken();
     const nonce = randomUrlSafeToken();
     const codeVerifier = generateCodeVerifier();
@@ -1007,6 +1042,9 @@ export class OidcClient {
           `oidcBegin: extraParams may not override the SDK-owned authorization parameter "${key}" (CONTRACT.md §12.1 rule 5).`,
         );
       }
+      // §12.1 "`idp_hint`" rule 3: the input is the single source. A same-named
+      // extra is dropped when it is set, and passes through (once) when it is not.
+      if (key === IDP_HINT_PARAM && params.idpHint !== undefined) continue;
       query.set(key, value);
     }
 
@@ -1018,6 +1056,7 @@ export class OidcClient {
     query.set('nonce', nonce);
     query.set('code_challenge', codeChallenge);
     query.set('code_challenge_method', CODE_CHALLENGE_METHOD_S256);
+    if (params.idpHint !== undefined) query.set(IDP_HINT_PARAM, params.idpHint);
 
     // URLSearchParams serializes a space as '+', which is legal in a query
     // string but not RFC 3986 percent-encoding; §12.1 rule 5 asks for the
@@ -1128,6 +1167,109 @@ export class OidcClient {
       this.#adoptCredential(tokenSet.accessToken);
     }
     return tokenSet;
+  }
+
+  // -------------------------------------------------------------------------
+  // §37 loginWithProviderIdToken
+  // -------------------------------------------------------------------------
+
+  /**
+   * `POST /oauth2/token` with
+   * `grant_type=urn:axiam:params:oauth:grant-type:provider-id-token`
+   * (CONTRACT.md §37, contract 1.65) — sign a native-app user in with the ID
+   * token a Google, Apple or Facebook Limited Login SDK produced.
+   *
+   * @param provider - The provider's UUID or its `provider_slug`, sent verbatim:
+   *   never trimmed, case-folded, resolved or looked up. A provider *kind* name
+   *   (`google`) is not accepted here unless the operator also chose it as the
+   *   slug (§37.2 rule 2).
+   * @param idToken - The provider's ID token (a credential; wrapped or bare).
+   * @param nonce - The **raw** nonce, byte for byte: the provider's SDK was
+   *   given `SHA-256(raw)` as hexadecimal (`nativeNonce()` produces the
+   *   pair). Never hashed, replaced or generated here (§37.2 rule 3).
+   * @param options - `scopes`, `resource`, `tenantId`, `configuration`.
+   *
+   * @remarks
+   * **Never retried** — not on a status, a `429` or a transport failure: the
+   * provider's token is single-use across the deployment (§37.2 rule 10). An
+   * `invalid_grant` is the server's one generic answer to every refusal of the
+   * token and is neither retried nor refined; the recovery is a **fresh**
+   * provider token with a **fresh** nonce. A transport failure after the
+   * request left is indeterminate and surfaces as `NetworkError`.
+   *
+   * No `openid` or other scope is added: omit `scopes` and the response carries
+   * no `id_token`. This is not token exchange (§15) and never falls back to it
+   * or to a browser flow. A public client sends `client_id` alone; a client
+   * configured with a `clientSecret` sends it in the body.
+   *
+   * The result is the ordinary {@link OidcTokenSet}; an `id_token`, when
+   * present, is validated under §12.4 with the raw `nonce` as the expected
+   * nonce. As with `deviceLogin`, the token set is **returned and not
+   * adopted** as this client's credential (§37.2 rule 9).
+   *
+   * Neither the ID token nor the raw nonce is logged, put in an error, or kept
+   * after the call returns; hold the raw nonce only for the length of the
+   * attempt.
+   *
+   * @throws ValidationError (local, no request) for an empty `provider`,
+   *   `idToken` or `nonce`.
+   * @throws AuthError (local, no request) for a slug-only client (§12.3 rule 4).
+   * @throws OAuthProtocolError for a body carrying `error`, at any status.
+   * @throws NetworkError for a transport failure or a body-less `5xx`.
+   *
+   * @example
+   * ```ts
+   * const { raw, hashed } = nativeNonce();
+   * const idToken = await providerSdk.signIn({ nonce: hashed });
+   * const tokens = await oidc.loginWithProviderIdToken('corp-google', idToken, raw, {
+   *   scopes: ['openid', 'profile'],
+   * });
+   * ```
+   */
+  async loginWithProviderIdToken(
+    provider: string,
+    idToken: Sensitive<string> | string,
+    nonce: Sensitive<string> | string,
+    options: LoginWithProviderIdTokenOptions = {},
+  ): Promise<OidcTokenSet> {
+    const operation = 'loginWithProviderIdToken';
+    const refuse = (field: string): ValidationError =>
+      new ValidationError(operation, 400, `${operation}: ${field} must not be empty (CONTRACT.md §37.2 rule 4)`, [
+        { field, message: 'must not be empty' },
+      ]);
+    const idTokenValue = typeof idToken === 'string' ? idToken : idToken.expose();
+    const nonceValue = typeof nonce === 'string' ? nonce : nonce.expose();
+    if (provider === '') throw refuse('provider');
+    if (idTokenValue === '') throw refuse('idToken');
+    if (nonceValue === '') throw refuse('nonce');
+    // §37.1: a slug-only client is refused before any wire call — discovery included.
+    this.#resolveTenantId(options.tenantId);
+
+    const configuration = options.configuration ?? (await this.oidcDiscover());
+    const form = new URLSearchParams();
+    form.set('grant_type', PROVIDER_ID_TOKEN_GRANT_TYPE);
+    form.set('client_id', this.#options.clientId);
+    form.set('provider', provider);
+    form.set('id_token', idTokenValue);
+    form.set('nonce', nonceValue);
+    // §37.2 rule 7: only what the caller named — no `openid`, never an empty `scope=`.
+    if (options.scopes !== undefined && options.scopes.length > 0) {
+      form.set('scope', options.scopes.join(' '));
+    }
+    if (options.resource !== undefined) {
+      form.set('resource', options.resource);
+    }
+    this.#appendClientSecret(form);
+
+    const url = this.#endpointUrl(this.#requiredEndpoint(configuration, 'token_endpoint'), options.tenantId);
+    // One request, every status resolved so the `error` member decides (§37.3), and a
+    // transport failure carrying no axios cause (its `config` holds this form).
+    const response = await this.#postCibaForm(url, form, operation);
+    if (response.status < 200 || response.status >= 300) {
+      throw cibaError(operation, response);
+    }
+    // §12.4 with the RAW nonce (§37.2 rule 8): AXIAM's ID token carries it as sent.
+    return this.#toTokenSet(response.data as TokenResponseWire, configuration, nonceValue);
   }
 
   // -------------------------------------------------------------------------
@@ -1609,6 +1751,7 @@ export class OidcClient {
    * ```
    */
   async oidcPar(params: OidcParParams): Promise<PushedAuthorizationRequest> {
+    if (params.idpHint !== undefined) checkIdpHint('oidcPar', params.idpHint);
     const configuration = params.configuration ?? (await this.oidcDiscover());
     const endpoint = this.#optionalEndpoint(configuration, 'pushed_authorization_request_endpoint');
     if (!endpoint) {
@@ -1640,6 +1783,11 @@ export class OidcClient {
     // sending an empty value for an absent optional field.
     if (params.dpopJkt !== undefined) {
       form.set('dpop_jkt', params.dpopJkt);
+    }
+    // §26.2 rule 8 (contract 1.65): the provider hint rides the pushed body, once,
+    // and only when set. It is never added to the redirect URL built below.
+    if (params.idpHint !== undefined) {
+      form.set(IDP_HINT_PARAM, params.idpHint);
     }
     // NOT pushed, and never to be added: `request_uri`. RFC 9126 §2.1 makes it
     // the one authorization parameter a client MUST NOT push, and openapi.json

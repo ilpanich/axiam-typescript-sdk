@@ -12,6 +12,7 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 import { Sensitive } from '../core/index.js';
+import type { ProviderNonce } from './oidcTypes.js';
 
 /**
  * The only PKCE code-challenge method this SDK emits (RFC 7636 §4.2,
@@ -70,4 +71,18 @@ export function generateCodeVerifier(): Sensitive<string> {
  */
 export function computeCodeChallenge(codeVerifier: string): string {
   return createHash('sha256').update(codeVerifier, 'ascii').digest('base64url');
+}
+
+/**
+ * A fresh nonce pair for native sign-in with a provider ID token
+ * (CONTRACT.md §37.4) — **pure local computation, no network I/O**.
+ *
+ * `raw` is 32 CSPRNG bytes, base64url without padding, wrapped in
+ * {@link Sensitive}; `hashed` is the lower-case hexadecimal SHA-256 of the
+ * bytes of `raw` as sent. Give `hashed` to the provider's SDK as *its* nonce
+ * and `raw` to `loginWithProviderIdToken`. Nothing is stored.
+ */
+export function nativeNonce(): ProviderNonce {
+  const raw = randomUrlSafeToken(CSPRNG_BYTES);
+  return { raw: new Sensitive(raw), hashed: createHash('sha256').update(raw, 'utf8').digest('hex') };
 }

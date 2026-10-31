@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Contract 1.65 (§34.9)**: `CONTRACT.md`, `openapi.json` (1.2.0) and `management-registry.json`
+  re-vendored byte for byte from AXIAM `76d35d9`.
+- **Native sign-in with a provider ID token (§37)**: `OidcClient.loginWithProviderIdToken(provider,
+  idToken, nonce, options?)` (`POST /oauth2/token`, grant
+  `urn:axiam:params:oauth:grant-type:provider-id-token`; never retried; no `openid` added; the
+  token and the raw nonce are never logged or kept) and the helper `nativeNonce()` returning
+  `ProviderNonce { raw: Sensitive<string>, hashed }`, all from `axiam-sdk/node`. The thirteen §37.9
+  tests are ported.
+- **`idpHint`** on `oidcBegin` (emitted once as `axiam_idp_hint`) and `oidcPar` (pushed body only)
+  (§12.1, §26.2 rule 8).
+- **Regenerated §27 members**: `default_idp` on the OAuth2 client types, `refresh_reuse_response` on
+  the settings bodies (preserved by the read-modify-write `update` forms) and `native_login`
+  (`NativeLoginTrustRequest`/`NativeLoginTrustResponse`) on the federation config types.
+- A test confirming that a burst of `oidcRefresh` calls answered `400 invalid_grant` is one wire
+  call with one shared error (§9).
+
+### Changed
+
+- **A replayed refresh token now ends the session server-side by default** (platform setting
+  `oauth2.refresh_reuse_response = revoke_session`): presenting an already-rotated refresh token is
+  still `400 invalid_grant`, and now also invalidates the session and every refresh token under it.
+  `oidcRefresh` is single-flight and never retries, so this SDK does not cause it; do not refresh
+  the same token from two places.
+
 ## [1.1.3] - 2026-10-29
 
 ### Changed
