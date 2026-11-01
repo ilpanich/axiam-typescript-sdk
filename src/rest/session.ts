@@ -317,10 +317,13 @@ export class SharedSession {
    * read it.
    *
    * `fetchOptions.redirect: 'error'` is the browser persona's half of CONTRACT.md §12.1
-   * rule 3 ("No redirect is followed", C165-26): the fetch adapter ignores `maxRedirects`,
-   * so without it the browser would follow a `307`/`308` and re-send the body to the
-   * `Location`. `fetch` then rejects, which every caller maps to a `NetworkError` that
-   * carries neither the `Location` nor the request.
+   * rule 3 ("No redirect is followed", C165-26). On the main client's `/oauth2/*` requests
+   * it makes `fetch` reject, which every caller maps to a `NetworkError` that carries
+   * neither the `Location` nor the request. Where `maxRedirects: 0` is set (the bare
+   * transport, `bareRequest`), axios's fetch adapter substitutes `redirect: 'manual'`
+   * (`lib/adapters/fetch.js`), so `'error'` is overridden there: the browser hands back an
+   * opaque-redirect (status 0), and `bareRequest` maps status 0 or any `3xx` to a
+   * `NetworkError` without the `Location` (`bareTransport.ts`).
    * `NodeSession` overrides this to {@link noCredentialsConfig}: its jar-free
    * agent pair is what keeps the cookies off there, and the fetch adapter
    * would bypass that pair.
