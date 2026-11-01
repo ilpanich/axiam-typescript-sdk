@@ -39,6 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exchange, UMA ticket, CIBA, and `loginWithProviderIdToken`) now sets `maxRedirects: 0`; a `3xx`
   is a `NetworkError` that names the status only. Previously Node followed a 307/308 and re-sent the
   form (client secret, provider ID token, raw nonce) to the `Location` target, cross-host included.
+- **Browser persona follows no redirect on `/oauth2/*` (§12.1 rule 3, C165-26).** The fetch config of
+  an `/oauth2/*` request now sets `redirect: 'error'`, and the RFC 7592 bare transport maps a redirect
+  handed back as a response (opaque-redirect, status 0, or any `3xx`) to a `NetworkError` that names
+  neither the `Location` nor the request. A browser no longer follows a `307`/`308` on
+  `/oauth2/register*` or an `/oauth2/*` call through the client.
 - **`oidcPar` pushes the begin URL's `axiam_idp_hint` (D-N36, C165-11)** when its own `idpHint` is
   unset; the argument wins when both are set. Before, `oidcBegin({ idpHint })` followed by
   `oidcPar({ request })` pushed no hint.

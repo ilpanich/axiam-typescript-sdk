@@ -315,12 +315,18 @@ export class SharedSession {
    * The fetch adapter derives its `credentials` from `withCredentials: false`
    * (`'omit'`); `fetchOptions.credentials` is set as well for adapters that
    * read it.
+   *
+   * `fetchOptions.redirect: 'error'` is the browser persona's half of CONTRACT.md §12.1
+   * rule 3 ("No redirect is followed", C165-26): the fetch adapter ignores `maxRedirects`,
+   * so without it the browser would follow a `307`/`308` and re-send the body to the
+   * `Location`. `fetch` then rejects, which every caller maps to a `NetworkError` that
+   * carries neither the `Location` nor the request.
    * `NodeSession` overrides this to {@link noCredentialsConfig}: its jar-free
    * agent pair is what keeps the cookies off there, and the fetch adapter
    * would bypass that pair.
    */
   oauth2RequestConfig(): AxiosRequestConfig {
-    return { ...this.noCredentialsConfig(), adapter: 'fetch', fetchOptions: { credentials: 'omit' } };
+    return { ...this.noCredentialsConfig(), adapter: 'fetch', fetchOptions: { credentials: 'omit', redirect: 'error' } };
   }
 }
 

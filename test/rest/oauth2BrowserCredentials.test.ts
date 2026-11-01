@@ -14,6 +14,8 @@ import { createSession, type SharedSession } from '../../src/rest/session.js';
 import { createNodeSession } from '../../src/node/session.js';
 import { AxiamClient } from '../../src/rest/client.js';
 import { readClientRegistration } from '../../src/rest/clientRegistration.js';
+import { bareRequest } from '../../src/rest/bareTransport.js';
+import { NetworkError } from '../../src/core/errors.js';
 
 const BASE_URL = 'https://axiam.test';
 const STOP = new Error('captured');
@@ -38,7 +40,7 @@ describe('browser persona: /oauth2/* carries the fetch adapter with credentials 
       const config = await finalConfig(createSession({ baseUrl: BASE_URL, tenantSlug: 'acme' }), path);
 
       expect(config.adapter).toBe('fetch');
-      expect(config.fetchOptions).toEqual({ credentials: 'omit' });
+      expect(config.fetchOptions).toEqual({ credentials: 'omit', redirect: 'error' });
       expect(config.withCredentials).toBe(false);
     },
   );
@@ -110,7 +112,7 @@ describe('the RFC 7592 calls on the bare transport (C164-06)', () => {
     const config = await bareInstanceConfig(client);
 
     expect(config.adapter).toBe('fetch');
-    expect(config.fetchOptions).toEqual({ credentials: 'omit' });
+    expect(config.fetchOptions).toEqual({ credentials: 'omit', redirect: 'error' });
     expect(config.withCredentials).toBe(false);
   });
 
@@ -125,5 +127,78 @@ describe('the RFC 7592 calls on the bare transport (C164-06)', () => {
     expect(config.fetchOptions).toBeUndefined();
     expect(config.withCredentials).toBe(false);
     expect(config.httpsAgent).toBeDefined();
+  });
+});
+
+describe('the browser persona follows no redirect on /oauth2/* (CONTRACT.md §12.1 rule 3, C165-26)', () => {
+  const OTHER_HOST = 'https://other.test';
+  const SECRET = 'registration-secret-token';
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /**
+   * A `fetch` that behaves as the platform does: a 307 from the AXIAM host is followed to its
+   * `Location` (a second request, with the body) unless the request says `redirect: 'error'`,
+   * in which case it rejects the way a browser does. `hosts` records every host it was asked for.
+   */
+  function redirectingFetch(hosts: string[]): ReturnType<typeof vi.fn> {
+    return vi.fn(async (input: Request) => {
+      const url = new URL(input.url);
+      hosts.push(url.origin);
+      if (url.origin === OTHER_HOST) return new Response('{}', { status: 200 });
+      if (input.redirect === 'error') throw new TypeError('Failed to fetch');
+      if (input.redirect === 'follow') {
+        hosts.push(OTHER_HOST);
+        return new Response('{}', { status: 200 });
+      }
+      return new Response(null, { status: 307, headers: { location: `${OTHER_HOST}/oauth2/register/c1` } });
+    });
+  }
+
+  it('a 307 on an RFC 7592 read is a NetworkError, the second host sees nothing and no secret is in the error', async () => {
+    const hosts: string[] = [];
+    vi.stubGlobal('fetch', redirectingFetch(hosts));
+    const client = new AxiamClient({ baseUrl: BASE_URL, tenantSlug: 'acme'});
+
+    const error = await readClientRegistration(client, `${BASE_URL}/oauth2/register/c1`, SECRET).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+
+    expect(error).toBeInstanceOf(NetworkError);
+    expect(hosts).not.toContain(OTHER_HOST);
+    expect(hosts.every((h) => h === BASE_URL)).toBe(true);
+    expect(String((error as Error).message)).not.toContain(SECRET);
+    expect(JSON.stringify(error, Object.getOwnPropertyNames(error))).not.toContain(SECRET);
+    expect(String((error as Error).message)).not.toContain(OTHER_HOST);
+  });
+
+  it('a redirect handed back as a response (opaque-redirect, status 0, or a 3xx) is a NetworkError too', async () => {
+    const client = new AxiamClient({ baseUrl: BASE_URL, tenantSlug: 'acme' });
+    for (const status of [0, 302, 307, 308]) {
+      vi.spyOn(axios, 'create').mockImplementationOnce((() => ({
+        request: async () => ({ status, data: '', headers: { location: `${OTHER_HOST}/x` } }),
+      })) as unknown as typeof axios.create);
+      const error = await bareRequest(client.session, 'op', { method: 'POST', url: `${BASE_URL}/oauth2/register` }).then(
+        () => undefined,
+        (e: unknown) => e,
+      );
+      expect(error).toBeInstanceOf(NetworkError);
+      expect(String((error as Error).message)).not.toContain(OTHER_HOST);
+    }
+    vi.restoreAllMocks();
+  });
+
+  it('a 307 on a main-client /oauth2/token POST never reaches the second host', async () => {
+    const hosts: string[] = [];
+    vi.stubGlobal('fetch', redirectingFetch(hosts));
+    const session = createSession({ baseUrl: BASE_URL, tenantSlug: 'acme' });
+    installInterceptors(session.axios, session);
+
+    await expect(session.axios.post('/oauth2/token', `refresh_token=${SECRET}`)).rejects.toBeDefined();
+
+    expect(hosts).not.toContain(OTHER_HOST);
   });
 });
