@@ -140,6 +140,8 @@ export type {
   IntrospectParams,
   IntrospectionResult,
   LoginClientCredentialsParams,
+  // §37 native sign-in (contract 1.65): the options `OidcClient.loginWithProviderIdToken` names.
+  LoginWithProviderIdTokenOptions,
   MtlsEndpointAliases,
   OidcBeginParams,
   OidcConfiguration,

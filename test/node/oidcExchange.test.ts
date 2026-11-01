@@ -12,8 +12,8 @@
 //   rule 7 discard  -> "no token material is returned on failure"
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { HttpResponse } from 'msw';
-import { AuthError, OAuthProtocolError, Sensitive } from '../../src/core/index.js';
+import { http, HttpResponse } from 'msw';
+import { AuthError, NetworkError, OAuthProtocolError, Sensitive } from '../../src/core/index.js';
 import { createNodeSession } from '../../src/node/session.js';
 import { createOidcClient } from '../../src/node/oidc.js';
 import {
@@ -30,6 +30,7 @@ import {
   REDIRECT_URI,
   signIdToken,
   TENANT_ID,
+  TOKEN_ENDPOINT,
   tokenHandler,
   tokenResponse,
   unsignedIdToken,
@@ -69,6 +70,32 @@ const server = createServer();
 beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
+
+describe('oidcExchange redirects (§12.1 rule 3, C165-14)', () => {
+  it('a 307 from the token endpoint is a NetworkError and the other host sees no request', async () => {
+    let otherHostCalls = 0;
+    server.use(
+      http.post('http://other.invalid/*', () => {
+        otherHostCalls += 1;
+        return HttpResponse.json({ access_token: 'x', token_type: 'Bearer', expires_in: 1 });
+      }),
+    );
+    const { state } = await setup();
+    server.use(
+      http.post(TOKEN_ENDPOINT, () => {
+        state.tokenCalls += 1;
+        return new HttpResponse(null, { status: 307, headers: { Location: 'http://other.invalid/oauth2/token' } });
+      }),
+    );
+    const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
+    const err = await oidc
+      .oidcExchange({ code: CODE, codeVerifier: new Sensitive('v'), redirectUri: REDIRECT_URI, nonce: NONCE })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NetworkError);
+    expect(state.tokenCalls).toBe(1);
+    expect(otherHostCalls).toBe(0);
+  });
+});
 
 describe('oidcExchange happy path (§12.1)', () => {
   it('posts a form-encoded authorization_code grant with tenant_id as a QUERY parameter', async () => {

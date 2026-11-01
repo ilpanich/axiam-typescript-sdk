@@ -104,14 +104,21 @@ export class OAuthProtocolError extends AuthError {
    * OPTIONAL, and §2 (contract 1.53, §28.12.3) dispatches on `error` alone.
    */
   readonly errorDescription: string;
+  /**
+   * The server's `Retry-After` in milliseconds, when this error is a `429` that carried one in
+   * delta-seconds form (contract 1.65 §37.3, C165-17). Absent otherwise; an HTTP-date is not read.
+   * Additive: honour it before retrying a rate-limited native sign-in or CIBA call.
+   */
+  readonly retryAfterMs?: number;
 
-  constructor(error: string, errorDescription: string = '') {
+  constructor(error: string, errorDescription: string = '', retryAfterMs?: number) {
     // `"<error>: <error_description>"`, or just `"<error>"` when the server
     // sent no description — never a dangling `": "`.
     super(errorDescription ? `${error}: ${errorDescription}` : error);
     this.name = 'OAuthProtocolError';
     this.error = error;
     this.errorDescription = errorDescription;
+    if (retryAfterMs !== undefined) this.retryAfterMs = retryAfterMs;
     Object.setPrototypeOf(this, OAuthProtocolError.prototype);
   }
 }

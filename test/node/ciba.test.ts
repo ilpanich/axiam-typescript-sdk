@@ -168,6 +168,28 @@ describe('§33.8 (1) — redaction', () => {
   });
 });
 
+// ── C165-14 — no redirect is followed ───────────────────────────────────────
+
+describe('§12.1 rule 3 — a CIBA form POST never follows a redirect', () => {
+  it('a 307 is a NetworkError and the other host sees no request', async () => {
+    let otherHostCalls = 0;
+    server.use(
+      http.post('http://other.invalid/*', () => {
+        otherHostCalls += 1;
+        return HttpResponse.json({ auth_req_id: random(), expires_in: 120 });
+      }),
+    );
+    const { oidc } = confidentialClient();
+    const seen = bcAuthorize(
+      () => new HttpResponse(null, { status: 307, headers: { Location: 'http://other.invalid/oauth2/bc-authorize' } }),
+    );
+    const err = await oidc.cibaInitiate(params()).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NetworkError);
+    expect(seen).toHaveLength(1);
+    expect(otherHostCalls).toBe(0);
+  });
+});
+
 // ── 2. Client authentication is mandatory ───────────────────────────────────
 
 describe('§33.8 (2) — client authentication is mandatory', () => {

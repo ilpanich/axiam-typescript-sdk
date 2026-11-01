@@ -134,7 +134,7 @@ export function isOAuth2ErrorBody(body: unknown): body is OAuth2ErrorResponseWir
  * Returns `undefined` for anything else, so the caller falls back to §2's
  * status rows.
  */
-export function oauth2ErrorFromBody(body: unknown): OAuthProtocolError | undefined {
+export function oauth2ErrorFromBody(body: unknown, retryAfterMs?: number): OAuthProtocolError | undefined {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) {
     return undefined;
   }
@@ -143,7 +143,7 @@ export function oauth2ErrorFromBody(body: unknown): OAuthProtocolError | undefin
     return undefined;
   }
   const description = typeof record.error_description === 'string' ? record.error_description : '';
-  return new OAuthProtocolError(record.error, description);
+  return new OAuthProtocolError(record.error, description, retryAfterMs);
 }
 
 /**

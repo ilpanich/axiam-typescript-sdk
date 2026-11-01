@@ -1117,6 +1117,8 @@ export interface CreateFederationConfigRequest {
   idp_signing_cert_pem?: string | null;
   /** OIDC discovery URL or SAML metadata URL. */
   metadata_url?: string | null;
+  /** `native_login`. */
+  native_login?: NativeLoginTrustRequest | null;
   /** Federation protocol: "OidcConnect" or "Saml". */
   protocol: string;
   /** Display name for the identity provider (e.g., "Google", "Okta"). */
@@ -1170,6 +1172,7 @@ export interface CreateFederationConfigRequestWire {
   idp_metadata_signing_cert_pem?: string | null;
   idp_signing_cert_pem?: string | null;
   metadata_url?: string | null;
+  native_login?: NativeLoginTrustRequest | null;
   protocol: string;
   provider: string;
   provider_kind?: string | null;
@@ -1363,6 +1366,18 @@ export interface CreateOAuth2ClientRequest {
    * anonymous browser is answered.
    */
   browser_sso?: boolean;
+  /**
+   * G-B (#817) — the federation provider (a federation config `id`) this
+   * client's sign-in page starts with when an authorization request carries no
+   * `axiam_idp_hint`; a hint that names a provider overrides it.
+   *
+   * Must name a provider this tenant can sign in with — its own enabled
+   * configs, or the organization's enabled ones it inherits — or the
+   * registration is refused with `400`. If that provider is later disabled or
+   * deleted the default is ignored at the authorization endpoint (the provider
+   * chooser is shown), never an error. Omit for none.
+   */
+  default_idp?: string | null;
   /**
    * RFC 9449 §5.2 — issue DPoP-bound (sender-constrained) access tokens to
    * this client. Independent of both the authentication method and
@@ -2079,6 +2094,8 @@ export interface FederationConfigResponse {
    * identifiers set.
    */
   mints_client_secret: boolean;
+  /** Native sign-in trust (G-A). */
+  native_login: NativeLoginTrustResponse;
   /**
    * Whether PKCE is sent on the authorization request. Always true for the
    * OAuth2 variant regardless of the stored flag.
@@ -2881,6 +2898,48 @@ export type NameIdFormat =
   // eslint-disable-next-line @typescript-eslint/ban-types
   | (string & {});
 
+/**
+ * Native sign-in trust (G-A): which ID tokens this provider issued to an app
+ * are accepted as a sign-in at the token endpoint.
+ *
+ * Mirrors the domain block on the wire, as `TokenExchangeTrustRequest` does,
+ * so an omitted member takes its documented default rather than failing
+ * deserialization. Only an `OidcConnect` provider may enable it.
+ */
+export interface NativeLoginTrustRequest {
+  /**
+   * The audiences a presented ID token may carry: the iOS bundle ID, Android
+   * client ID or Apple app ID the native SDK was configured with. Required
+   * (non-empty) when `enabled`; at most 64 entries of at most 512 characters,
+   * none blank, none repeated. The web `client_id` is accepted only when it is
+   * listed here.
+   */
+  client_ids?: string[];
+  /**
+   * Off unless explicitly enabled. Configuring a provider for browser login is
+   * not agreement to accept its ID tokens from apps.
+   */
+  enabled?: boolean;
+  /**
+   * Bound on `now - iat` for a presented ID token, 1 to 3600 seconds. Omitted:
+   * 300.
+   */
+  max_token_age_secs?: number | null;
+}
+
+/**
+ * Native sign-in trust as returned to an administrator. Nothing here is
+ * secret; it is never part of the unauthenticated providers listing.
+ */
+export interface NativeLoginTrustResponse {
+  /** The accepted ID-token audiences. */
+  client_ids: string[];
+  /** Whether ID tokens from apps are accepted as a sign-in. */
+  enabled: boolean;
+  /** Bound on `now - iat`, in seconds. */
+  max_token_age_secs: number;
+}
+
 /** The tenant's network policy, as the management API returns it. */
 export interface NetworkPolicyResponse {
   /**
@@ -3192,6 +3251,13 @@ export interface OAuth2ClientResponse {
   client_id: string;
   /** `created_at`. */
   created_at: string;
+  /**
+   * G-B (#817) — the provider this client's sign-in page starts with when a
+   * request carries no hint; absent for none. Echoed as stored: a value whose
+   * provider has since been disabled is shown, and ignored at the
+   * authorization endpoint.
+   */
+  default_idp?: string | null;
   /** `dpop_bound_access_tokens`. */
   dpop_bound_access_tokens: boolean;
   /** `dpop_require_nonce`. */
@@ -3262,6 +3328,26 @@ export interface OAuth2ClientResponse {
   token_endpoint_auth_method: ClientAuthMethod;
   /** `updated_at`. */
   updated_at: string;
+}
+
+/**
+ * OAuth 2.0 authorization-server behaviour that is a tenant's to decide
+ * (G-C, #818).
+ *
+ * A struct of its own rather than a field on `TokenPolicy` because it is not
+ * a lifetime, and so the resolved setting reads by its documented name,
+ * `oauth2.refresh_reuse_response`.
+ */
+export interface OAuth2Policy {
+  /**
+   * What a refused refresh-token replay does besides refusing. Ordered: a
+   * tenant may move from `refuse` to `revoke_session` and never back while its
+   * organization's baseline is `revoke_session`.
+   *
+   * Published as a reference to the `RefreshReuseResponse` schema, so the two
+   * legal values reach the SDK generators as an `enum` (F4-W1-06, #823).
+   */
+  refresh_reuse_response?: RefreshReuseResponse;
 }
 
 /** `OidcAuthorizeRequest` (generated from openapi.json). */
@@ -3958,6 +4044,48 @@ export interface ReadyResponse {
   /** `status`. */
   status: string;
 }
+
+/**
+ * What the token endpoint does when a refresh token that has already been
+ * rotated is presented again and **refused** (G-C, #818 — the T-254
+ * amendment).
+ *
+ * Two values, ordered by strictness:
+ *
+ * * `revoke_session` — the default (D-N2). The refusal also invalidates the
+ * session the replayed token names (which publishes to the revocation feed)
+ * and revokes every refresh token issued under that session — whichever
+ * client it was issued to, the console sign-in included, with no
+ * back-channel logout sent — as the authorization-code replay path does for
+ * a code (RFC 6749 §10.5; OAuth 2.0 Security BCP §4.14.2). Only a
+ * presentation by the token's own client, passing the token's sender
+ * constraint, triggers it (#821). On a client with no grace window the
+ * honest holder of a replayed token has nothing left to lose — its token is
+ * already dead and it never received the successor — so the revocation costs
+ * it nothing and costs whoever holds the successor everything. * `refuse` —
+ * the 1.1.x behaviour: the presentation is refused, marked on the session
+ * and audited, and nothing else is revoked.
+ *
+ * Neither value changes what is *accepted*. A `fapi2` client's presentation
+ * inside the grace window is accepted and marked whatever this says (D-N4);
+ * a token revoked at logout is not a replay and revokes nothing.
+ *
+ * This text is published as the schema's description in `sdks/openapi.json`,
+ * so it carries no rustdoc intra-doc links (F4-W1-08, #824).
+ *
+ * An **open** enum. The final `(string & {})` arm accepts a value this SDK's
+ * copy of the spec does not list, so the next one the server adds reaches a
+ * caller as itself rather than failing the response it arrived in (CONTRACT
+ * §27.11 rule 1). The named arms still autocomplete and still narrow; what
+ * the extra arm removes is the illusion that a value outside them cannot
+ * occur, which is what an exhaustive `switch` over the named ones quietly
+ * assumes.
+ */
+export type RefreshReuseResponse =
+  | "revoke_session"
+  | "refuse"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
 
 /**
  * Metadata only. The handle exists in plaintext exactly once, in
@@ -4841,6 +4969,11 @@ export interface SecuritySettings {
   mfa: MfaPolicy;
   /** `notification`. */
   notification: NotificationPolicy;
+  /**
+   * G-C (#818) — `oauth2.refresh_reuse_response`. Defaulted so a document
+   * written before the field reads as the default.
+   */
+  oauth2?: OAuth2Policy;
   /** `oidc`. */
   oidc: OidcPolicy;
   /** `opaque`. */
@@ -5158,6 +5291,14 @@ export interface SetOrgSettings {
   opaque_suite?: string;
   /** `password_history_count`. */
   password_history_count: number;
+  /**
+   * G-C (#818) — defaulted to `revoke_session` (D-N2): an API client written
+   * before the field lands on the new default. `refuse` restores the 1.1.x
+   * behaviour. Because it is defaulted, a `PUT` from a client written before
+   * 1.2.0 (which omits it) sets an organization on `refuse` back to
+   * `revoke_session` — the stricter direction (F4-W1-06).
+   */
+  refresh_reuse_response?: RefreshReuseResponse;
   /** `refresh_token_lifetime_secs`. */
   refresh_token_lifetime_secs: number;
   /** `require_digits`. */
@@ -5726,6 +5867,8 @@ export interface TenantSettingsOverride {
   opaque_suite?: string | null;
   /** `password_history_count`. */
   password_history_count?: number | null;
+  /** `refresh_reuse_response`. */
+  refresh_reuse_response?: RefreshReuseResponse | null;
   /** `refresh_token_lifetime_secs`. */
   refresh_token_lifetime_secs?: number | null;
   /** `require_digits`. */
@@ -6053,6 +6196,8 @@ export interface UpdateFederationConfigRequest {
    * clear it.
    */
   metadata_url?: string | null;
+  /** `native_login`. */
+  native_login?: NativeLoginTrustRequest | null;
   /** `provider`. */
   provider?: string | null;
   /**
@@ -6114,6 +6259,7 @@ export interface UpdateFederationConfigRequestWire {
   idp_metadata_signing_cert_pem?: string | null;
   idp_signing_cert_pem?: string | null;
   metadata_url?: string | null;
+  native_login?: NativeLoginTrustRequest | null;
   provider?: string | null;
   provider_slug?: string | null;
   require_pkce?: boolean | null;
@@ -6206,6 +6352,12 @@ export interface UpdateOAuth2ClientRequest {
   backchannel_user_code_parameter?: boolean | null;
   /** X7.3 — see [`CreateOAuth2ClientRequest::browser_sso`]. */
   browser_sso?: boolean | null;
+  /**
+   * G-B (#817) — see [`CreateOAuth2ClientRequest::default_idp`]. Omitted
+   * leaves it; `null` clears it; an id is held to the create rule (`400`
+   * unless it names a provider this tenant can sign in with).
+   */
+  default_idp?: string | null;
   /** `dpop_bound_access_tokens`. */
   dpop_bound_access_tokens?: boolean | null;
   /** `dpop_require_nonce`. */

@@ -116,6 +116,45 @@ describe('oidcRefresh (§12.1, §9)', () => {
     }
   });
 
+  // Contract 1.65 §9 ("A replayed refresh token ends the session"): the 1.65 port
+  // CONFIRMS the existing single-flight rules against `invalid_grant`. With the
+  // default `revoke_session` a second presentation of a rotated token costs the
+  // user their session, so N-1 replays must never happen.
+  it('answers a burst of N>=5 refreshes with ONE wire call and ONE shared invalid_grant, and never re-presents the spent token (§9, contract 1.65)', async () => {
+    const state = createMockState();
+    const presented: (string | null)[] = [];
+    server.use(
+      discoveryHandler(state),
+      http.post(TOKEN_ENDPOINT, async ({ request }) => {
+        presented.push(new URLSearchParams(await request.text()).get('refresh_token'));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return HttpResponse.json(
+          { error: 'invalid_grant', error_description: 'the refresh token is not valid' },
+          { status: 400 },
+        );
+      }),
+    );
+    const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
+    await oidc.oidcDiscover();
+
+    const settled = await Promise.allSettled(
+      Array.from({ length: 8 }, () => oidc.oidcRefresh({ refreshToken: new Sensitive('spent-refresh') })),
+    );
+
+    expect(presented).toEqual(['spent-refresh']);
+    const reasons = settled.map((r) => (r.status === 'rejected' ? r.reason : undefined));
+    for (const reason of reasons) {
+      expect(reason).toBeInstanceOf(OAuthProtocolError);
+      expect(reason).toMatchObject({ error: 'invalid_grant' });
+    }
+    // Every waiter received the one error the single wire call produced.
+    expect(new Set(reasons).size).toBe(1);
+
+    // Nothing retries on its own afterwards: no further request carries the spent token.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(presented).toEqual(['spent-refresh']);
+  });
+
   it('allows a fresh refresh after the previous one settled (not a permanent lock)', async () => {
     const state = createMockState();
     server.use(discoveryHandler(state), tokenHandler(state, () => HttpResponse.json(tokenResponse())));

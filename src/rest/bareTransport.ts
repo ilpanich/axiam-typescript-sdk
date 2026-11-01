@@ -59,8 +59,9 @@ export async function bareRequest<T>(
     maxRedirects: 0,
     validateStatus: () => true,
   });
+  let response: AxiosResponse<T>;
   try {
-    return await instance.request<T>(config);
+    response = await instance.request<T>(config);
   } catch (err) {
     const code =
       err && typeof err === 'object' && 'code' in err && typeof (err as { code?: unknown }).code === 'string'
@@ -68,6 +69,14 @@ export async function bareRequest<T>(
         : '';
     throw new NetworkError(`${operation}: the request failed before any response arrived${code}`);
   }
+  // CONTRACT.md §12.1 rule 3: no redirect is followed and a 3xx is a NetworkError. A browser
+  // `fetch` with `redirect: 'error'` rejects above; this catches an adapter that hands the
+  // redirect (or an opaque-redirect, status 0) back as a response. Neither the `Location`
+  // nor the request is put in the message.
+  if (response.status === 0 || (response.status >= 300 && response.status < 400)) {
+    throw new NetworkError(`${operation}: the server answered with a redirect, which is not followed`);
+  }
+  return response;
 }
 
 /**

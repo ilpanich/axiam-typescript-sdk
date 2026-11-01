@@ -91,6 +91,7 @@ export {
   isAccessDenied,
   isExpiredToken,
   SIGNED_REQUEST_LIFETIME_SECS,
+  PROVIDER_ID_TOKEN_GRANT_TYPE,
   type CibaSignerDescription,
   type CibaSigningKey,
 } from './oidc.js';
@@ -99,6 +100,8 @@ export type {
   IntrospectionResult,
   IntrospectParams,
   LoginClientCredentialsParams,
+  LoginWithProviderIdTokenOptions,
+  ProviderNonce,
   MtlsEndpointAliases,
   OidcBeginParams,
   OidcConfiguration,
@@ -164,6 +167,7 @@ export {
   computeCodeChallenge,
   CSPRNG_BYTES,
   generateCodeVerifier,
+  nativeNonce,
   randomUrlSafeToken,
 } from './oidcPkce.js';
 export {
