@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-11-04
+
 ### Added
 
 - **Contract 1.66 (§34.10)**: `CONTRACT.md` (sha256 `c98f9d56…`), `openapi.json` and
@@ -36,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A test confirming that a burst of `oidcRefresh` calls answered `400 invalid_grant` is one wire
   call with one shared error (§9).
 
+- Native sign-in with a provider ID token and idp_hint (contract 1.65 §37)
+
 ### Changed
 
 - **Server floor (D-N33):** federation-config admin calls (`federation.createConfig`, `getConfig`,
@@ -56,6 +60,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`oidcPar` pushes the begin URL's `axiam_idp_hint` (D-N36, C165-11)** when its own `idpHint` is
   unset; the argument wins when both are set. Before, `oidcBegin({ idpHint })` followed by
   `oidcPar({ request })` pushed no hint.
+
+- re-vendor CONTRACT.md 1.66 as amended at ilpanich/axiam 5f9d079
+
+- re-sync contract 1.66 and openapi.json; confirm the federated sign-in cookie binding (§12.1 rule 12b)
+
+- Bump the minor-patch group with 3 updates
+
+- re-vendor openapi.json and the management registry (logout/reset-mfa 500, D-N44)
+
+- re-vendor openapi.json and the management registry (end_session 500, D-N42)
+
+- re-vendor contract 1.65, openapi 1.2.0 and the management registry
+
+### Fixed
+
+- Contract 1.65 review sweep 2 (C165-32)
+
+- Contract 1.65 review sweep 2 (C165-26)
+
+- Contract 1.65 review findings (C165-14, C165-17, C165-04, C165-08, C165-11)
 
 ### Added (additive, C165-17)
 
