@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Contract 1.66 (§34.10)**: `CONTRACT.md` (sha256 `c98f9d56…`), `openapi.json` and
-  `management-registry.json` re-vendored byte for byte from AXIAM `a916544` (spec digest
+  `management-registry.json` re-vendored byte for byte from AXIAM `5f9d079` (spec digest
   `sha256:09419a6e…`); `proto/` is unchanged and the §27 layer regenerates identically (202
   operations). **No API change.** The optional `reauthenticate` start input (§12.1 rule 12c) is not
   ported.
