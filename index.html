@@ -1,5 +1,5 @@
-<!DOCTYPE html><html class="default" lang="en" data-base="./"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>AXIAM TypeScript SDK - v1.1.3</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="assets/style.css"/><link rel="stylesheet" href="assets/highlight.css"/><script defer src="assets/main.js"></script><script async src="assets/icons.js" id="tsd-icons-script"></script><script async src="assets/search.js" id="tsd-search-script"></script><script async src="assets/navigation.js" id="tsd-nav-script"></script><script async src="assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
-<div class="tsd-toolbar-contents container"><a href="index.html" class="title">AXIAM TypeScript SDK - v1.1.3</a>
+<!DOCTYPE html><html class="default" lang="en" data-base="./"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>AXIAM TypeScript SDK - v1.2.2</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="assets/style.css"/><link rel="stylesheet" href="assets/highlight.css"/><script defer src="assets/main.js"></script><script async src="assets/icons.js" id="tsd-icons-script"></script><script async src="assets/search.js" id="tsd-search-script"></script><script async src="assets/navigation.js" id="tsd-nav-script"></script><script async src="assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="index.html" class="title">AXIAM TypeScript SDK - v1.2.2</a>
 <div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
 <ul role="listbox" id="tsd-search-results"></ul>
 <div id="tsd-search-status" aria-live="polite" aria-atomic="true">
@@ -7,7 +7,7 @@
 <div class="container container-main">
 <div class="col-content">
 <div class="tsd-page-title">
-<h1>AXIAM TypeScript SDK - v1.1.3</h1></div>
+<h1>AXIAM TypeScript SDK - v1.2.2</h1></div>
 <div class="tsd-panel tsd-typography"><h1 id="axiam-sdk-typescriptjavascript" class="tsd-anchor-link">axiam-sdk (TypeScript/JavaScript)<a href="#axiam-sdk-typescriptjavascript" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h1>
 <p><a href="https://github.com/ilpanich/axiam-typescript-sdk/actions/workflows/sdk-ci-typescript.yml"><img src="https://github.com/ilpanich/axiam-typescript-sdk/actions/workflows/sdk-ci-typescript.yml/badge.svg?branch=main" alt="CI"></a>
 <a href="https://coveralls.io/github/ilpanich/axiam-typescript-sdk?branch=main"><img src="https://coveralls.io/repos/github/ilpanich/axiam-typescript-sdk/badge.svg?branch=main" alt="Coverage Status"></a>
@@ -25,12 +25,59 @@
 <li><strong>Node:</strong> <code>&gt;=22</code> — see <a href="#supported-node-versions">Supported Node versions</a></li>
 </ul>
 <h2 id="contract-conformance" class="tsd-anchor-link">Contract conformance<a href="#contract-conformance" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
-<p>This SDK conforms to <strong>contract 1.64</strong>: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
-§20, §21, §22, §23, §24, §25, §26, §27 (with §27.6.2), §28, §28.12, §29, §30, §31, §32, §33 and §36,
+<p>This SDK conforms to <strong>contract 1.66</strong>: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
+§20, §21, §22, §23, §24, §25, §26, §27 (with §27.6.2), §28, §28.12, §29, §30, §31, §32, §33, §36 and §37,
 with §32.7 and §33.2 signed (including §6.1 mTLS client certificates, the
 §10.1 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
 <code>verifyWebhook</code> signature verifier). Manifest pruning: not offered in any namespace (§27.10). §12 is implemented in full at its 1.38 shape: all
 <strong>thirteen</strong> operations, including the four public &quot;Sign in with X&quot; entry points.</p>
+<h3 id="contract-166-sign-in-hardening-§3410" class="tsd-anchor-link">Contract 1.66 — sign-in hardening (§34.10)<a href="#contract-166-sign-in-hardening-§3410" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>Contract 1.66 adds no operation and changes no API here. A federated sign-in is bound to the client
+that started it (§12.1 rule 12b): <code>ssoStart</code>, <code>ssoStartOauth2</code> and <code>samlLogin</code> set an
+<code>__Host-axiam_fed_bind</code> cookie, and the completions refuse with <code>401</code> without it. The §4 jar carries
+it, so <strong>send the start and the completion of one sign-in through the same client instance</strong> — a
+backend that builds a fresh client per HTTP request, or completes on another replica's client, is
+refused, and that <code>401</code> is terminal for the sign-in. The optional <code>reauthenticate</code> start input (rule
+12c) is not exposed.</p>
+<h3 id="contract-165-the-120-release-§349" class="tsd-anchor-link">Contract 1.65 — the 1.2.0 release (§34.9)<a href="#contract-165-the-120-release-§349" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>Contract 1.65 adds no management operation (202 in 29 namespaces). It adds native sign-in with a
+provider ID token (§37) and the <code>idpHint</code> input of <code>oidcBegin</code> and <code>oidcPar</code> (§12.1, §26.2 rule 8).
+See <a href="#native-sign-in-with-a-provider-id-token-contract-165-37">Native sign-in</a> and
+<a href="#choosing-the-provider-idphint-contract-165">Choosing the provider</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>What this SDK does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>(a) §37 native sign-in</td>
+<td><code>OidcClient.loginWithProviderIdToken(provider, idToken, nonce, options?)</code> and the SHOULD helper <code>nativeNonce()</code> returning <code>ProviderNonce</code>, with all thirteen §37.9 tests.</td>
+</tr>
+<tr>
+<td>(b) <code>idp_hint</code></td>
+<td><code>idpHint</code> on <code>oidcBegin</code> (emitted once as <code>axiam_idp_hint</code>) and on <code>oidcPar</code> (pushed body only).</td>
+</tr>
+<tr>
+<td>(h) server floor (D-N33)</td>
+<td>Federation-config admin calls need an AXIAM server <strong>1.2.0 or later</strong>: <code>FederationConfigResponse.native_login</code> is required from 1.2.0, and (no runtime response validation here) a response from an older server decodes with <code>native_login</code> <code>undefined</code>.</td>
+</tr>
+<tr>
+<td>(c) a replayed refresh token ends the session</td>
+<td>No code change. <code>oidcRefresh</code> is single-flight (§9), so a burst is one wire call; <code>invalid_grant</code> is an <code>OAuthProtocolError</code>, never retried. Confirmed by a test.</td>
+</tr>
+<tr>
+<td>(d), (e), (f), (g)</td>
+<td>No code change. The SDK parses no handoff callback URL; <code>ssoCompleteHandoff</code> takes the <code>code</code> the caller already extracted.</td>
+</tr>
+<tr>
+<td>(g), (i), (j) regenerated members</td>
+<td>The §27 layer is regenerated: <code>default_idp</code>, <code>refresh_reuse_response</code> (preserved by the read-modify-write <code>update</code> forms), <code>native_login</code>.</td>
+</tr>
+</tbody>
+</table>
 <h3 id="contract-164-the-112-release-§348" class="tsd-anchor-link">Contract 1.64 — the 1.1.2 release (§34.8)<a href="#contract-164-the-112-release-§348" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <p>Contract 1.64 adds no operation (202 in 29 namespaces). Every item of §34.8 that asks anything of
 this SDK, and what it does:</p>
@@ -1055,7 +1102,7 @@ splitting the vocabulary across two hosts, so <strong>all thirteen</strong> are 
 <td>Cached per origin, TTL ≥ 5 min, concurrent calls share one fetch</td>
 </tr>
 <tr>
-<td><code>oidcBegin({ configuration, redirectUri, scope?, extraParams? })</code></td>
+<td><code>oidcBegin({ configuration, redirectUri, scope?, extraParams?, idpHint? })</code></td>
 <td><em>none — pure local computation</em></td>
 <td>CSPRNG <code>state</code>/<code>nonce</code> (256-bit) + PKCE <strong>S256</strong> challenge; returns <code>{ url, state, nonce, codeVerifier }</code></td>
 </tr>
@@ -1116,6 +1163,30 @@ splitting the vocabulary across two hosts, so <strong>all thirteen</strong> are 
 </tr>
 </tbody>
 </table>
+<h4 id="choosing-the-provider-contract-165" class="tsd-anchor-link">Choosing the provider, <code>idpHint</code> (contract 1.65)<a href="#choosing-the-provider-contract-165" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4>
+<p>A relying party that already knows which provider its user should use can send the browser
+straight there. <code>idpHint</code> takes a provider's UUID, its <code>provider_slug</code> or a branded kind name
+(<code>google</code>, <code>apple</code>, …) and is emitted once as <code>axiam_idp_hint</code>; there is no <code>kc_idp_hint</code>.</p>
+<pre><code class="ts"><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">request</span><span class="hl-1"> = </span><span class="hl-4">oidc</span><span class="hl-1">.</span><span class="hl-3">oidcBegin</span><span class="hl-1">({ </span><span class="hl-4">configuration</span><span class="hl-1">, </span><span class="hl-4">redirectUri</span><span class="hl-1">, </span><span class="hl-4">idpHint:</span><span class="hl-1"> </span><span class="hl-5">&#39;corp-okta&#39;</span><span class="hl-1"> });</span><br/><span class="hl-6">// under PAR the hint rides the pushed body, never the redirect:</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">pushed</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">oidc</span><span class="hl-1">.</span><span class="hl-3">oidcPar</span><span class="hl-1">({ </span><span class="hl-4">request</span><span class="hl-1">, </span><span class="hl-4">redirectUri</span><span class="hl-1">, </span><span class="hl-4">configuration</span><span class="hl-1">, </span><span class="hl-4">idpHint:</span><span class="hl-1"> </span><span class="hl-5">&#39;corp-okta&#39;</span><span class="hl-1"> });</span>
+</code><button type="button">Copy</button></pre>
+
+<p>When <code>oidcPar</code> is given no <code>idpHint</code>, it pushes the hint the begin URL carries; an <code>idpHint</code> given to
+<code>oidcPar</code> wins.</p>
+<p>It is validated for emptiness and 256 UTF-8 bytes only (a <code>ValidationError</code>, no URL built) and is
+never trimmed, folded or looked up; an unresolvable hint is ignored by the server.</p>
+<h4 id="native-sign-in-with-a-provider-id-token-contract-165-§37" class="tsd-anchor-link">Native sign-in with a provider ID token (contract 1.65, §37)<a href="#native-sign-in-with-a-provider-id-token-contract-165-§37" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4>
+<p>A mobile or desktop app that holds the ID token Google, Apple or Facebook's native SDK produced
+presents it to AXIAM's token endpoint (<code>grant_type=urn:axiam:params:oauth:grant-type:provider-id-token</code>).
+This is not token exchange. <code>nativeNonce()</code> is the pair the two parties need.</p>
+<pre><code class="ts"><span class="hl-7">import</span><span class="hl-1"> { </span><span class="hl-4">createNodeSession</span><span class="hl-1">, </span><span class="hl-4">createOidcClient</span><span class="hl-1">, </span><span class="hl-4">nativeNonce</span><span class="hl-1"> } </span><span class="hl-7">from</span><span class="hl-1"> </span><span class="hl-5">&#39;axiam-sdk/node&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-0">const</span><span class="hl-1"> { </span><span class="hl-2">raw</span><span class="hl-1">, </span><span class="hl-2">hashed</span><span class="hl-1"> } = </span><span class="hl-3">nativeNonce</span><span class="hl-1">();                  </span><span class="hl-6">// raw: Sensitive&lt;string&gt;, hashed: hex SHA-256</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">providerToken</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">providerSdk</span><span class="hl-1">.</span><span class="hl-3">signIn</span><span class="hl-1">({ </span><span class="hl-4">nonce:</span><span class="hl-1"> </span><span class="hl-4">hashed</span><span class="hl-1"> });   </span><span class="hl-6">// give the provider the HASH</span><br/><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">tokens</span><span class="hl-1"> = </span><span class="hl-7">await</span><span class="hl-1"> </span><span class="hl-4">oidc</span><span class="hl-1">.</span><span class="hl-3">loginWithProviderIdToken</span><span class="hl-1">(</span><br/><span class="hl-1">  </span><span class="hl-5">&#39;corp-google&#39;</span><span class="hl-1">,          </span><span class="hl-6">// the provider&#39;s UUID or provider_slug, sent verbatim (not a kind name)</span><br/><span class="hl-1">  </span><span class="hl-4">providerToken</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">raw</span><span class="hl-1">,                    </span><span class="hl-6">// the RAW nonce, sent byte for byte</span><br/><span class="hl-1">  { </span><span class="hl-4">scopes:</span><span class="hl-1"> [</span><span class="hl-5">&#39;openid&#39;</span><span class="hl-1">] }, </span><span class="hl-6">// none are added for you: omit them and there is no ID token</span><br/><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<p><code>loginWithProviderIdToken</code> is <strong>never retried</strong>: the provider's token is single-use across the
+deployment, and <code>invalid_grant</code> is the server's one generic answer to every refusal of it. Recover
+with a fresh provider token and a fresh <code>nativeNonce()</code>. An empty <code>provider</code>, <code>idToken</code> or <code>nonce</code>
+and a slug-only client are refused locally with no request. Neither the ID token nor the raw nonce
+is logged, kept or put in an error; hold the raw nonce only for the length of the attempt. The
+result is the ordinary <code>OidcTokenSet</code>, returned and not adopted as the client's credential.</p>
 <h4 id="the-four-public-login-provider-operations-and-their-rules" class="tsd-anchor-link">The four public login-provider operations, and their rules<a href="#the-four-public-login-provider-operations-and-their-rules" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4>
 <p><strong>An empty provider list is a success</strong> (§12.1 note 9). An unknown organization, a known one
 with nothing configured, and a request naming no workspace at all <em>all</em> answer <code>200</code> with an
@@ -2307,6 +2378,8 @@ the TypeDoc API reference to this repo's GitHub Pages site.</p>
 <li><a href="#contract-conformance"><span>Contract conformance</span></a></li>
 <li>
 <ul>
+<li><a href="#contract-166-sign-in-hardening-§3410"><span>Contract 1.66 — sign-<wbr/>in hardening (§34.10)</span></a></li>
+<li><a href="#contract-165-the-120-release-§349"><span>Contract 1.65 — the 1.2.0 release (§34.9)</span></a></li>
 <li><a href="#contract-164-the-112-release-§348"><span>Contract 1.64 — the 1.1.2 release (§34.8)</span></a></li>
 <li><a href="#contract-163-the-111-release-§347"><span>Contract 1.63 — the 1.1.1 release (§34.7)</span></a></li>
 <li><a href="#contract-162-the-110-release-§346"><span>Contract 1.62 — the 1.1.0 release (§34.6)</span></a></li>
@@ -2364,6 +2437,8 @@ the TypeDoc API reference to this repo's GitHub Pages site.</p>
 <li><a href="#the-thirteen-operations"><span>The thirteen operations</span></a></li>
 <li>
 <ul>
+<li><a href="#choosing-the-provider-contract-165"><span>Choosing the provider,  (contract 1.65)</span></a></li>
+<li><a href="#native-sign-in-with-a-provider-id-token-contract-165-§37"><span>Native sign-<wbr/>in with a provider <wbr/>ID token (contract 1.65, §37)</span></a></li>
 <li><a href="#the-four-public-login-provider-operations-and-their-rules"><span>The four public login-<wbr/>provider operations, and their rules</span></a></li></ul></li>
 <li><a href="#the-caller-owns-the-login-state"><span>The caller owns the login state</span></a></li>
 <li><a href="#framework-glue"><span>Framework glue</span></a></li>
@@ -2447,7 +2522,7 @@ the TypeDoc API reference to this repo's GitHub Pages site.</p>
 <li><a href="#building-from-source"><span>Building from source</span></a></li>
 <li><a href="#license"><span>License</span></a></li></ul></div></details></div>
 <div class="site-menu">
-<nav class="tsd-navigation"><a href="modules.html">AXIAM TypeScript SDK - v1.1.3</a>
+<nav class="tsd-navigation"><a href="modules.html">AXIAM TypeScript SDK - v1.2.2</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
 <li>Loading...</li></ul></nav></div></div></div><footer>
 <p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>
