@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Contract 1.66 (§34.10)**: `CONTRACT.md` (sha256 `c98f9d56…`), `openapi.json` and
+  `management-registry.json` re-vendored byte for byte from AXIAM `a916544` (spec digest
+  `sha256:09419a6e…`); `proto/` is unchanged and the §27 layer regenerates identically (202
+  operations). **No API change.** The optional `reauthenticate` start input (§12.1 rule 12c) is not
+  ported.
+- A test confirming §12.1 rule 12b (#837) against a real loopback server: the
+  `axiam_fed_bind` cookie an `ssoStart` response sets is presented on the following `ssoComplete`
+  of the same client and absent from a second client's
+  (`test/node/ssoFederationBinding.test.ts`). No §4 change was needed.
 - **Contract 1.65 (§34.9)**: `CONTRACT.md`, `openapi.json` (1.2.0) and `management-registry.json`
   re-vendored byte for byte from AXIAM `76d35d9`; `CONTRACT.md` re-vendored again from `d93976b`
   (the 2026-10-31 amendments: §12.1 rule 3 redirects, §26.2 rule 8 / D-N36, §37.2 rules 9 and 12,

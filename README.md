@@ -20,12 +20,22 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to **contract 1.65**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
+This SDK conforms to **contract 1.66**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
 §20, §21, §22, §23, §24, §25, §26, §27 (with §27.6.2), §28, §28.12, §29, §30, §31, §32, §33, §36 and §37,
 with §32.7 and §33.2 signed (including §6.1 mTLS client certificates, the
 §10.1 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
 `verifyWebhook` signature verifier). Manifest pruning: not offered in any namespace (§27.10). §12 is implemented in full at its 1.38 shape: all
 **thirteen** operations, including the four public "Sign in with X" entry points.
+
+### Contract 1.66 — sign-in hardening (§34.10)
+
+Contract 1.66 adds no operation and changes no API here. A federated sign-in is bound to the client
+that started it (§12.1 rule 12b): `ssoStart`, `ssoStartOauth2` and `samlLogin` set an
+`__Host-axiam_fed_bind` cookie, and the completions refuse with `401` without it. The §4 jar carries
+it, so **send the start and the completion of one sign-in through the same client instance** — a
+backend that builds a fresh client per HTTP request, or completes on another replica's client, is
+refused, and that `401` is terminal for the sign-in. The optional `reauthenticate` start input (rule
+12c) is not exposed.
 
 ### Contract 1.65 — the 1.2.0 release (§34.9)
 
