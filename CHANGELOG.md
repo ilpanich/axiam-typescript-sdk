@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-11
+
+### Changed
+
+- Update CodeQL action versions in workflow
+
+- Update CodeQL action version to 4.38.1
+
+- Update CodeQL action version to v4.38.1
+
+- Update CodeQL initialization action version
+
+- Bump jsdom from 30.1.3 to 31.0.0
+
+- Bump the minor-patch group with 10 updates
+
+- Bump github/codeql-action/analyze from 4.39.1 to 4.39.3
+
+- Bump github/codeql-action/init from 4.39.1 to 4.39.3
+
+- Bump bufbuild/buf-action from 1.6.0 to 1.7.0
+
 ## [1.3.0] - 2026-11-08
 
 ### Changed
