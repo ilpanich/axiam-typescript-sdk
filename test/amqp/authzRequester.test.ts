@@ -183,6 +183,17 @@ describe('createAuthzRequester', () => {
     expect(ch.consumed).toHaveLength(0);
   });
 
+  it.each([Number.NaN, Infinity, 0, -1, 2 ** 31])('refuses timeoutMs %s with a RangeError', async (timeoutMs) => {
+    const ch = new FakeChannel();
+    await expect(createAuthzRequester(ch, options({ timeoutMs }))).rejects.toThrow(RangeError);
+    expect(ch.declared).toHaveLength(0);
+  });
+
+  it('accepts a timeoutMs of 2^31-1', async () => {
+    const r = await createAuthzRequester(new FakeChannel(), options({ timeoutMs: 2 ** 31 - 1 }));
+    await r.close();
+  });
+
   it('refuses a non-UUID tenant and an empty subkey', async () => {
     await expect(createAuthzRequester(new FakeChannel(), options({ tenantId: 'acme' }))).rejects.toThrow(TypeError);
     await expect(

@@ -225,4 +225,25 @@ describe('§8 signed AuthzResponse — settling a delivery read from a queue', (
     expect(v.settle(channel, good).accepted).toBe(true);
     expect(channel.ack).toHaveBeenCalledWith(good);
   });
+
+  it('the security event of a discarded delivery names its exchange and routing key (§8 rule 4)', () => {
+    const { v, logger } = verifier();
+    const channel = { ack: vi.fn(), nack: vi.fn() };
+    v.settle(channel, message(wire(V1.replace('"allowed":true', '"allowed":false'), V1_SIG)));
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    const [event, , context] = logger.warn.mock.calls[0] as [string, string, Record<string, unknown>];
+    expect(event).toBe('axiam_sdk.security');
+    expect(context).toMatchObject({ exchange: '', routingKey: 'amq.gen-abc', tenantId: TENANT });
+    expect(typeof context.timestamp).toBe('string');
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain(V1_SIG);
+  });
+
+  it('the warning for an unsigned response admitted by the opt-out names its exchange and routing key', () => {
+    const { v, logger } = verifier({ acceptUnsignedResponses: true });
+    const channel = { ack: vi.fn(), nack: vi.fn() };
+    const unsigned = Buffer.from(`{"correlation_id":"${CORRELATION}","allowed":true}`, 'utf8');
+    expect(v.settle(channel, message(unsigned)).accepted).toBe(true);
+    const [, , context] = logger.warn.mock.calls[0] as [string, string, Record<string, unknown>];
+    expect(context).toMatchObject({ exchange: '', routingKey: 'amq.gen-abc', tenantId: TENANT });
+  });
 });

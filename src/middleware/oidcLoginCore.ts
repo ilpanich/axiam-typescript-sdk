@@ -231,8 +231,14 @@ function setBindingCookie(redirectUri: string, value: string): string {
   return `${oidcBindingCookieName(redirectUri)}=${value}; ${bindingCookieAttributes(redirectUri)}; Max-Age=${BINDING_COOKIE_MAX_AGE_SEC}`;
 }
 
-/** The clearing `Set-Cookie` every callback response carries (§12.8 rule 1 (d)). */
-function clearBindingCookie(redirectUri: string): string {
+/**
+ * The clearing `Set-Cookie` every callback response carries (§12.8 rule 1 (d)).
+ *
+ * @internal Exported for the framework adapters, which send it themselves when
+ *   {@link completeOidcLogin} throws (the store or `onSuccess` failed), so the
+ *   error response clears the cookie too.
+ */
+export function clearBindingCookie(redirectUri: string): string {
   return `${oidcBindingCookieName(redirectUri)}=; ${bindingCookieAttributes(redirectUri)}; Max-Age=0`;
 }
 
@@ -379,6 +385,13 @@ export async function beginOidcLogin<TRequest = unknown>(
  * - any §12.4 ID-token failure or `OAuthProtocolError` (an `AuthError`
  *   sub-type) → `401 authentication_failed`;
  * - `NetworkError` → `503 oidc_unavailable`, never a silent success.
+ *
+ * Errors that are not a login outcome — `options.store.consume` rejects, or
+ * `options.onSuccess` throws — propagate unchanged to the caller, so the
+ * application's own error handling sees them. The state is already consumed
+ * by then. The caller MUST still clear the binding cookie on the error
+ * response it sends (rule 1 (d), "and any other error"); the Express and
+ * Fastify adapters append it before re-throwing.
  *
  * @param context the presented binding cookie and the framework request. A
  *   caller that passes no `bindingCookie` has every callback refused (rule 1

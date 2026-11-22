@@ -36,6 +36,7 @@ import {
 } from './mcpCore.js';
 import {
   beginOidcLogin,
+  clearBindingCookie,
   completeOidcLogin,
   oidcBindingCookieName,
   type OidcLoginOptions,
@@ -426,11 +427,11 @@ export function oidcLoginHandlers(options: OidcLoginOptions<Request>): {
   const bindingCookieName = oidcBindingCookieName(options.redirectUri);
 
   const callback: RequestHandler = async (req: Request, res: Response): Promise<void> => {
-    const query = req.query as Record<string, unknown>;
-    const bindingCookie = parseCookieHeader(req.headers.cookie)[bindingCookieName];
-    sendOidcOutcome(
-      res,
-      await completeOidcLogin(
+    let outcome: OidcLoginOutcome;
+    try {
+      const query = req.query as Record<string, unknown>;
+      const bindingCookie = parseCookieHeader(req.headers.cookie)[bindingCookieName];
+      outcome = await completeOidcLogin(
         options,
         {
           ...(typeof query.state === 'string' ? { state: query.state } : {}),
@@ -441,8 +442,17 @@ export function oidcLoginHandlers(options: OidcLoginOptions<Request>): {
             : {}),
         },
         { request: req, ...(bindingCookie !== undefined ? { bindingCookie } : {}) },
-      ),
-    );
+      );
+    } catch (err) {
+      // §12.8 rule 1 (d), "and any other error": the store or onSuccess threw.
+      // The error response Express builds from `next(err)` keeps this header,
+      // and the application's error handler still receives the error itself.
+      if (!res.headersSent) {
+        res.append('Set-Cookie', clearBindingCookie(options.redirectUri));
+      }
+      throw err;
+    }
+    sendOidcOutcome(res, outcome);
   };
 
   return { login, callback };

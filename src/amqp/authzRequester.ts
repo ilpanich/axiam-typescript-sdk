@@ -37,6 +37,21 @@ const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[
 
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
+/** The largest delay `setTimeout` honours; Node runs anything larger (or `NaN`, `≤ 0`) after 1 ms. */
+const MAX_TIMEOUT_MS = 2 ** 31 - 1;
+
+/**
+ * Refuse a `timeoutMs` that `setTimeout` would silently turn into "time out
+ * at once" (non-finite, not positive, or above 2³¹−1 ms), so the
+ * misconfiguration is visible at construction instead of failing every check.
+ */
+function assertTimeout(timeoutMs: number | undefined): void {
+  if (timeoutMs === undefined) return;
+  if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_TIMEOUT_MS) {
+    throw new RangeError(`axiam: authz requester timeoutMs must be a finite number in (0, ${MAX_TIMEOUT_MS}]`);
+  }
+}
+
 /** Thrown by {@link AuthzRequester.check} once the requester is closed or its reply queue went away. */
 export class AuthzRequesterClosedError extends Error {
   constructor() {
@@ -107,7 +122,12 @@ export interface AuthzRequesterOptions {
   tenantId: string;
   /** The tenant's HKDF-derived AMQP subkey for `key_version` 2 (§8.1, provisioned out of band) — never the master key. */
   subkey: Sensitive<Buffer>;
-  /** Bound on each {@link AuthzRequester.check}, in milliseconds. Defaults to {@link DEFAULT_AUTHZ_TIMEOUT_MS}. */
+  /**
+   * Bound on each {@link AuthzRequester.check}, in milliseconds. Defaults to
+   * {@link DEFAULT_AUTHZ_TIMEOUT_MS}. A value that is not finite, not
+   * positive, or above 2³¹−1 is refused with a `RangeError` when the
+   * requester is created.
+   */
   timeoutMs?: number;
   /**
    * Accept unsigned responses, for ONE rolling upgrade against a server older
@@ -360,7 +380,15 @@ export class AuthzRequester {
  * starts with `axiam.` is refused: the server would answer such a request on
  * the shared `axiam.authz.response` queue (§8 rule 5).
  *
- * @throws TypeError on a non-UUID tenant or an empty subkey; Error on a non-private reply queue.
+ * The caller owns `channel` and its connection, and therefore their error
+ * handling: attach `'error'` listeners to both (an amqplib connection or
+ * channel that emits `'error'` with no listener throws an uncaught exception
+ * and ends the process), and call {@link AuthzRequester.close} when either
+ * closes, so outstanding checks are released at once instead of waiting for
+ * their timeout. {@link connectAuthzRequester} does both itself.
+ *
+ * @throws TypeError on a non-UUID tenant or an empty subkey; RangeError on an
+ *   invalid `timeoutMs`; Error on a non-private reply queue.
  */
 export async function createAuthzRequester(
   channel: AuthzRequesterChannel,
@@ -378,6 +406,7 @@ async function createOn(
   if (options.subkey.expose().length === 0) {
     throw new TypeError('axiam: authz requester needs the tenant subkey');
   }
+  assertTimeout(options.timeoutMs);
   const { queue } = await channel.assertQueue('', { exclusive: true, autoDelete: true, durable: false });
   if (typeof queue !== 'string' || queue.length === 0 || queue.startsWith(SERVER_QUEUE_PREFIX)) {
     throw new Error(`axiam: authz reply queue ${JSON.stringify(queue)} is not a private queue`);
@@ -391,6 +420,15 @@ async function createOn(
  * Connect to the broker at `amqpUrl` (MUST be `amqps://`, CONTRACT.md §8b) and
  * return a requester on its own channel; {@link AuthzRequester.close} also
  * closes that connection.
+ *
+ * The connection and channel are private to the requester, so it handles
+ * their events itself: an `'error'` on either (a socket error, a missed
+ * heartbeat, a channel-level exception) is logged through `options.logger`
+ * — the error's message only, never the URL or a key — instead of escaping
+ * as an uncaught exception, and a `'close'` of either closes the requester:
+ * every outstanding check rejects at once with
+ * {@link AuthzRequesterClosedError}, and so does every later one. Reconnect
+ * by building a new requester.
  */
 export async function connectAuthzRequester(
   amqpUrl: string,
@@ -398,15 +436,38 @@ export async function connectAuthzRequester(
 ): Promise<AuthzRequester> {
   const socketOptions = buildAmqpConnectOptions(amqpUrl, options.tls, 'connectAuthzRequester() amqpUrl');
   const connection = await amqp.connect(amqpUrl, socketOptions);
+  // Listen from the start: an 'error' with no listener throws out of
+  // amqplib's socket handler and takes the whole process down.
+  let requester: AuthzRequester | undefined;
+  let gone = false;
+  const onError = (source: 'connection' | 'channel') => (err: unknown) => {
+    options.logger?.warn('axiam_sdk.amqp', `AMQP authz requester ${source} error`, {
+      timestamp: new Date().toISOString(),
+      reason: err instanceof Error ? err.message : 'unknown',
+    });
+  };
+  const onGone = () => {
+    gone = true;
+    void requester?.close();
+  };
+  connection.on('error', onError('connection'));
+  connection.on('close', onGone);
   try {
     const channel = await connection.createChannel();
-    return await createOn(channel as unknown as AuthzRequesterChannel, options, async () => {
+    channel.on('error', onError('channel'));
+    channel.on('close', onGone);
+    requester = await createOn(channel as unknown as AuthzRequesterChannel, options, async () => {
       try {
         await connection.close();
       } catch {
         // already closed
       }
     });
+    if (gone) {
+      // Closed while the reply queue was being set up.
+      await requester.close();
+    }
+    return requester;
   } catch (err) {
     await connection.close().catch(() => undefined);
     throw err;

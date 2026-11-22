@@ -94,6 +94,17 @@ written for 1.67 or an entry saved by older glue produces, is refused like a mis
 carries `Set-Cookie: <name>=; <same attributes>; Max-Age=0`. The login response is the only one
 that sets a value.
 
+**Clearing on the error path.** "Every other error" includes an error that is not a login
+outcome: the store's `consume` fails (a database or cache outage), or the application's
+`onSuccess` throws (its own session write fails). The core does not turn these into an outcome;
+they propagate unchanged, so the application's error handling still sees them, and by then the
+state is already consumed. The adapter therefore sends the clearing header on the error path
+itself: it wraps the call to the core and, when it throws and the response has not started,
+appends the clearing `Set-Cookie` and re-throws (Express `res.append`, Fastify `reply.header`; the
+framework's error response keeps headers already set). A port may instead set the clearing header
+before running anything, as long as no error handler in its framework discards response headers.
+The test matrix carries one test per adapter for each of the two throws.
+
 **Concurrent sign-ins.** Two logins started in one browser: the second overwrites the cookie, so
 the first callback is refused and the user starts again (§12.8 rule 1 (g)). Accepted cost.
 
@@ -170,6 +181,8 @@ accepts absolute URLs.
 | Matching cookie | success; `onSuccess` gets the request; cookie cleared; replay is `401` |
 | Entry stored with no digest | `401`, no exchange |
 | Every other callback error | clears the cookie |
+| Exchange fails (`AuthError` → `401`, `NetworkError` → `503`) | clears the cookie; `onSuccess` not called |
+| `onSuccess` throws, or the store's `consume` rejects | the framework's error response (default handler, and an application error handler that receives the same error) clears the cookie |
 | `return_to` `https://evil.example/x`, `//evil.example/x`, `/\evil.example`, `/a\b`, `/a` + CR, `/a` + NUL, `/a` + DEL | dropped at login; stored directly, not followed |
 | `return_to` `/dashboard?tab=1` | stored and followed |
 | Predicate accepting `https://app.example/x` | that value followed; `https://evil.example/x` still not |

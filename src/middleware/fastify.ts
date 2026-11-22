@@ -34,6 +34,7 @@ import {
 } from './mcpCore.js';
 import {
   beginOidcLogin,
+  clearBindingCookie,
   completeOidcLogin,
   oidcBindingCookieName,
   type OidcLoginOptions,
@@ -409,11 +410,11 @@ export const oidcLoginPlugin: (
     });
 
     fastify.get(callbackPath, async (request: FastifyRequest, reply: FastifyReply) => {
-      const query = request.query as Record<string, unknown>;
-      const bindingCookie = parseCookieHeader(request.headers.cookie)[bindingCookieName];
-      await sendOidcOutcome(
-        reply,
-        await completeOidcLogin(
+      let outcome: OidcLoginOutcome;
+      try {
+        const query = request.query as Record<string, unknown>;
+        const bindingCookie = parseCookieHeader(request.headers.cookie)[bindingCookieName];
+        outcome = await completeOidcLogin(
           options,
           {
             ...(typeof query.state === 'string' ? { state: query.state } : {}),
@@ -424,8 +425,17 @@ export const oidcLoginPlugin: (
               : {}),
           },
           { request, ...(bindingCookie !== undefined ? { bindingCookie } : {}) },
-        ),
-      );
+        );
+      } catch (err) {
+        // §12.8 rule 1 (d), "and any other error": the store or onSuccess threw.
+        // Fastify's error handler keeps headers already set on the reply, and
+        // the application's setErrorHandler still receives the error itself.
+        if (!reply.sent) {
+          void reply.header('set-cookie', clearBindingCookie(options.redirectUri));
+        }
+        throw err;
+      }
+      await sendOidcOutcome(reply, outcome);
     });
   };
 

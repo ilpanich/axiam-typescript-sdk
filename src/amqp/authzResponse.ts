@@ -105,6 +105,19 @@ export interface AuthzResponseVerifierOptions {
   logger?: ConsumeLogger;
 }
 
+/**
+ * Where a response was read from, for the security event a discarded (or an
+ * unsigned-admitted) response logs (CONTRACT.md §8 rule 4: timestamp,
+ * exchange, routing key, tenant). {@link AuthzResponseVerifier.settle} takes
+ * it from the delivery's `msg.fields`.
+ */
+export interface AuthzResponseDelivery {
+  /** The exchange the response was published to (`''` for the default exchange). */
+  exchange: string;
+  /** The routing key it was published with (the reply queue's name on the default exchange). */
+  routingKey: string;
+}
+
 /** The ack/nack subset of an amqplib `Channel` that {@link AuthzResponseVerifier.settle} needs. */
 export interface SettleChannel {
   /** `channel.ack(msg)`. */
@@ -176,13 +189,17 @@ export class AuthzResponseVerifier {
    * acceptance the matching request is retired, so a second response for it
    * is dropped. On any failure nothing is retired — the genuine answer may
    * still arrive — and a security event is logged without either signature.
+   *
+   * @param delivery where the body was read from; when given, the security
+   *   event names its exchange and routing key (§8 rule 4).
+   *   {@link settle} passes it.
    */
-  verify(body: Buffer): AuthzResponseVerdict {
+  verify(body: Buffer, delivery?: AuthzResponseDelivery): AuthzResponseVerdict {
     // Byte offsets: latin1 maps each byte to one UTF-16 unit, and the
     // signature member is pure ASCII, so the match index is a byte index.
     const match = TRAILING_SIGNATURE.exec(body.toString('latin1'));
     if (!match) {
-      return this.#unsignedOrRefuse(body);
+      return this.#unsignedOrRefuse(body, delivery);
     }
 
     // Rule 2 — the canonical bytes are the received bytes with the trailing
@@ -191,7 +208,7 @@ export class AuthzResponseVerifier {
     const expected = createHmac('sha256', this.#subkey.expose()).update(canonical).digest();
     const received = Buffer.from(match[1], 'hex');
     if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
-      return this.#refuse('signature');
+      return this.#refuse('signature', delivery);
     }
 
     // Rule 1 on the VERIFIED bytes, which are also what is delivered.
@@ -199,10 +216,10 @@ export class AuthzResponseVerifier {
     try {
       parsed = JSON.parse(canonical.toString('utf8'));
     } catch {
-      return this.#refuse('malformed');
+      return this.#refuse('malformed', delivery);
     }
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      return this.#refuse('malformed');
+      return this.#refuse('malformed', delivery);
     }
     const r = parsed as Record<string, unknown>;
     if (
@@ -214,16 +231,16 @@ export class AuthzResponseVerifier {
       (r.reason_code !== undefined && !isString(r.reason_code)) ||
       Object.prototype.hasOwnProperty.call(r, 'hmac_signature')
     ) {
-      return this.#refuse('malformed');
+      return this.#refuse('malformed', delivery);
     }
 
     // Rule 3 — the binding.
     if (r.tenant_id.toLowerCase() !== this.#tenantId) {
-      return this.#refuse('tenant');
+      return this.#refuse('tenant', delivery);
     }
     const nonce = this.#outstanding.get(r.correlation_id);
     if (nonce === undefined || nonce !== r.nonce) {
-      return this.#refuse('unknown_request');
+      return this.#refuse('unknown_request', delivery);
     }
 
     this.#outstanding.delete(r.correlation_id);
@@ -246,7 +263,10 @@ export class AuthzResponseVerifier {
    * and nack it **without requeue** when discarded (§8 rule 4).
    */
   settle(channel: SettleChannel, msg: ConsumeMessage): AuthzResponseVerdict {
-    const verdict = this.verify(msg.content);
+    const verdict = this.verify(msg.content, {
+      exchange: msg.fields.exchange,
+      routingKey: msg.fields.routingKey,
+    });
     if (verdict.accepted) {
       channel.ack(msg);
     } else {
@@ -256,33 +276,33 @@ export class AuthzResponseVerifier {
   }
 
   /** No trailing signature: refused, unless the opt-out admits a body with no signature member at all. */
-  #unsignedOrRefuse(body: Buffer): AuthzResponseVerdict {
+  #unsignedOrRefuse(body: Buffer, delivery: AuthzResponseDelivery | undefined): AuthzResponseVerdict {
     let parsed: unknown;
     try {
       parsed = JSON.parse(body.toString('utf8'));
     } catch {
-      return this.#refuse('malformed');
+      return this.#refuse('malformed', delivery);
     }
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      return this.#refuse('malformed');
+      return this.#refuse('malformed', delivery);
     }
     const r = parsed as Record<string, unknown>;
     // A body that carries a signature anywhere but at the end is not
     // "unsigned": it fails, whatever the opt-out says.
     if (!this.#acceptUnsigned || Object.prototype.hasOwnProperty.call(r, 'hmac_signature')) {
-      return this.#refuse('unsigned');
+      return this.#refuse('unsigned', delivery);
     }
     if (!isString(r.correlation_id) || typeof r.allowed !== 'boolean') {
-      return this.#refuse('malformed');
+      return this.#refuse('malformed', delivery);
     }
     if (!this.#outstanding.has(r.correlation_id)) {
-      return this.#refuse('unknown_request');
+      return this.#refuse('unknown_request', delivery);
     }
     this.#outstanding.delete(r.correlation_id);
     this.#logger?.warn(
       'axiam_sdk.security',
       'accepted an UNSIGNED AMQP authorization response (acceptUnsignedResponses is set; pre-1.68 server)',
-      { timestamp: new Date().toISOString(), tenantId: this.#tenantId },
+      this.#eventContext(delivery),
     );
     return {
       accepted: true,
@@ -296,11 +316,21 @@ export class AuthzResponseVerifier {
     };
   }
 
-  #refuse(reason: AuthzResponseRejection): AuthzResponseVerdict {
-    this.#logger?.warn('axiam_sdk.security', `AMQP authorization response discarded (${reason})`, {
-      timestamp: new Date().toISOString(),
-      tenantId: this.#tenantId,
-    });
+  #refuse(reason: AuthzResponseRejection, delivery: AuthzResponseDelivery | undefined): AuthzResponseVerdict {
+    this.#logger?.warn(
+      'axiam_sdk.security',
+      `AMQP authorization response discarded (${reason})`,
+      this.#eventContext(delivery),
+    );
     return { accepted: false, reason };
+  }
+
+  /** §8 rule 4: timestamp, exchange, routing key, tenant — never a signature value. */
+  #eventContext(delivery: AuthzResponseDelivery | undefined): Record<string, unknown> {
+    return {
+      timestamp: new Date().toISOString(),
+      ...(delivery !== undefined ? { exchange: delivery.exchange, routingKey: delivery.routingKey } : {}),
+      tenantId: this.#tenantId,
+    };
   }
 }

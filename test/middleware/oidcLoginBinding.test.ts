@@ -335,7 +335,10 @@ describe.each(ADAPTERS)('§12.8 login glue — %s', (_name, build) => {
 
       const retry = await h.callback(queryA, `${HOST_COOKIE}=${cookieA}`);
       expect(retry.status).toBe(401);
+      expect(retry.body).toEqual(UNIFORM_401);
       expect(idp.tokenCalls()).toBe(0);
+      expect(onSuccess).not.toHaveBeenCalled();
+      expectCleared(retry);
       await h.close();
     });
 
@@ -438,6 +441,32 @@ describe.each(ADAPTERS)('§12.8 login glue — %s', (_name, build) => {
       expect(unknown.status).toBe(401);
       expect(unknown.body).toEqual(UNIFORM_401);
       expectCleared(unknown);
+      await h.close();
+    });
+
+    it.each([
+      ['the token endpoint refuses the code (AuthError)', 401, () => HttpResponse.json({ error: 'invalid_grant', error_description: 'code expired' }, { status: 400 })],
+      ['the token endpoint is unreachable (NetworkError)', 503, () => HttpResponse.error()],
+    ])('a callback whose exchange fails clears the cookie: %s', async (_case, status, tokenReply) => {
+      const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
+      const store = new MemoryOidcStateStore();
+      const key = await generateSigningKey('exchange-fail-kid');
+      const mock = createMockState();
+      server.use(discoveryHandler(mock), jwksHandler(mock, [key.jwk]), http.post(TOKEN_ENDPOINT, tokenReply));
+      const onSuccess = vi.fn();
+      const h = await build({ client: oidc, store, redirectUri: REDIRECT_URI, onSuccess });
+      const binding = 'b'.repeat(43);
+      await store.save({
+        state: 'stored-state',
+        nonce: 'stored-nonce',
+        codeVerifier: new Sensitive('v'.repeat(43)),
+        redirectUri: REDIRECT_URI,
+        bindingDigest: sha256Hex(binding),
+      });
+      const res = await h.callback('state=stored-state&code=c', `${HOST_COOKIE}=${binding}`);
+      expect(res.status).toBe(status);
+      expect(onSuccess).not.toHaveBeenCalled();
+      expectCleared(res);
       await h.close();
     });
   });

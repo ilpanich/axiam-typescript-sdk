@@ -30,6 +30,11 @@ changes for integrators** — C7, C6 and N15 below — each with a migration not
   the presented cookie value (named by `oidcBindingCookieName(redirectUri)`) in the new third
   `context` argument, and send each outcome's new `setCookie`; without a cookie every callback is
   refused.
+  The cookie is cleared on the error path too: when the state store's `consume` rejects or
+  `onSuccess` throws, both adapters append the clearing `Set-Cookie` before re-throwing, so the
+  framework's error response carries it and the application's error handler still receives the
+  original error. A direct caller of `completeOidcLogin` must do the same, because such errors
+  propagate unchanged.
 - **`onSuccess` receives the framework request** as a third argument (§12.8 rule 2), so a session
   can be created on the request that completed the sign-in. Existing two-argument callbacks keep
   working. `OidcLoginOptions` gains a type parameter for it (default `unknown`).
@@ -74,10 +79,19 @@ changes for integrators** — C7, C6 and N15 below — each with a migration not
   then `NetworkError`). `close()` releases every waiter with `AuthzRequesterClosedError`. Unsigned
   answers are refused unless `acceptUnsignedResponses` is set (one rolling upgrade against a
   pre-1.68 server). Also exported: `buildAuthzRequest`, `AUTHZ_REQUEST_QUEUE`,
-  `DEFAULT_AUTHZ_TIMEOUT_MS`.
+  `DEFAULT_AUTHZ_TIMEOUT_MS`. `connectAuthzRequester` listens for its connection's and
+  channel's `'error'` (logged through `logger` as `axiam_sdk.amqp`, message only, so a broker
+  restart or a missed heartbeat is not an uncaught exception that ends the process) and `'close'`
+  (the requester closes: outstanding checks reject at once with `AuthzRequesterClosedError`).
+  With `createAuthzRequester` the caller owns the channel and must do both. A `timeoutMs` that is
+  not finite, not positive or above 2³¹−1 is refused with a `RangeError` at creation (Node would
+  otherwise fire such a timer after 1 ms).
 - `AuthzResponseVerifier`: the verification step on its own — over the received bytes, never a
   re-serialization, with the tenant subkey, checking `tenant_id`, `correlation_id` and `nonce`
-  against an outstanding request; `settle()` acks or nacks without requeue. The four contract
+  against an outstanding request; `settle()` acks or nacks without requeue. Its security events
+  carry the timestamp, the tenant and, through `settle()` or the new optional second argument of
+  `verify(body, delivery)` (`AuthzResponseDelivery`), the delivery's exchange and routing key
+  (§8 rule 4), never a signature value. The four contract
   vectors are tests. `AuthzResponse` gains the optional `reason_code`, `tenant_id`, `nonce` and
   `hmac_signature` members.
 - `isSafeReturnTo`, `oidcBindingCookieName`, `OIDC_BINDING_COOKIE_NAME`,
@@ -85,7 +99,10 @@ changes for integrators** — C7, C6 and N15 below — each with a migration not
   `OidcStateEntry.bindingDigest`; `assertAccessTokenHeader`, `assertNoPurposeClaim`,
   `isAccessTokenTyp` (`axiam-sdk/node`).
 - `docs/login-glue-binding.md`: the design of the browser binding (cookie name and fallback,
-  order of consume and compare, store interface), for the other SDKs' ports.
+  order of consume and compare, store interface, clearing on the error path), for the other
+  SDKs' ports.
+- The §12.4 rule 2 conformance test for the unknown-`kid` re-fetch window
+  (`test/node/jwksRefetchWindow.test.ts`); no code change was needed.
 - **Contract 1.68 (§34.12)**: `CONTRACT.md` (sha256 `1f34656c…`), `openapi.json` and
   `management-registry.json` re-vendored byte for byte from AXIAM `e502a3b` (spec digest
   `sha256:badfb480…`); `proto/` is unchanged. The §27 layer is regenerated: `AuditLogEntry` gains
