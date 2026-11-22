@@ -10,3 +10,6 @@ export const AXIAM_REQUIRE_ACCESS_METADATA = Symbol('axiam:requireAccess');
 
 /** Set by {@link RequireRole}; read by {@link AxiamGuard}. Value shape: `string[]`. */
 export const AXIAM_REQUIRE_ROLE_METADATA = Symbol('axiam:requireRole');
+
+/** Set by {@link RequireScope}; read by {@link AxiamGuard}. Value shape: `string[]`. */
+export const AXIAM_REQUIRE_SCOPE_METADATA = Symbol('axiam:requireScope');

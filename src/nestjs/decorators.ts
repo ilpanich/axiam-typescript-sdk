@@ -12,6 +12,7 @@ import {
   AXIAM_REQUIRE_ACCESS_METADATA,
   AXIAM_REQUIRE_AUTH_METADATA,
   AXIAM_REQUIRE_ROLE_METADATA,
+  AXIAM_REQUIRE_SCOPE_METADATA,
 } from './metadata.js';
 
 /** `{ param: 'id' }` form of the `@RequireAccess` `resource` argument (§11.2.3.b): resolve the resource id from the named route parameter at request time. */
@@ -67,10 +68,25 @@ export function RequireAccess(
 
 /**
  * `@RequireRole(...roles)` (CONTRACT.md §11.1, MAY) — a local (no server
- * round-trip) check that the authenticated identity's roles contain at
+ * round-trip) check that the verified token's `roles` claim contains at
  * least one of `roles`. Cheaper but coarser than `@RequireAccess`; NOT a
  * substitute for a resource-level check.
+ *
+ * Contract 1.68 (§11.2 rule 11): only the `roles` claim is read, and a token
+ * without one is refused 403 — the application must request the `roles`
+ * scope for this decorator to admit anyone. It never reads `scope`; use
+ * {@link RequireScope} for that.
  */
 export function RequireRole(...roles: string[]): ClassDecorator & MethodDecorator {
   return SetMetadata(AXIAM_REQUIRE_ROLE_METADATA, roles);
+}
+
+/**
+ * `@RequireScope(...scopes)` (CONTRACT.md §11.1, contract 1.68) — a local
+ * (no server round-trip) check that the verified token's `scope` claim
+ * contains at least one of `scopes` (whole entries, exact and
+ * case-sensitive). 403 on failure and when the token has no `scope` claim.
+ */
+export function RequireScope(...scopes: string[]): ClassDecorator & MethodDecorator {
+  return SetMetadata(AXIAM_REQUIRE_SCOPE_METADATA, scopes);
 }

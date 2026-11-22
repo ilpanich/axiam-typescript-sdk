@@ -59,7 +59,9 @@ describe('axiamMiddleware (Express)', () => {
     expect(axiamUser).toBeDefined();
     expect(axiamUser?.userId).toBe('user-1');
     expect(axiamUser?.tenantId).toBe('tenant-1');
-    expect(axiamUser?.roles).toEqual(['read', 'write']);
+    // Contract 1.68 (N15): `scope` is exposed as scopes, never as roles.
+    expect(axiamUser?.roles).toBeUndefined();
+    expect(axiamUser?.scopes).toEqual(['read', 'write']);
   });
 
   it('valid Authorization: Bearer token (no cookie) also passes', async () => {
@@ -75,7 +77,8 @@ describe('axiamMiddleware (Express)', () => {
     await axiamMiddleware(session)(req, res, next);
 
     expect(next).toHaveBeenCalledOnce();
-    expect((req as AxiamRequest).axiamUser?.roles).toEqual(['admin']);
+    expect((req as AxiamRequest).axiamUser?.roles).toBeUndefined();
+    expect((req as AxiamRequest).axiamUser?.scopes).toEqual(['admin']);
   });
 
   it('missing credentials -> 401 JSON, next() not called', async () => {

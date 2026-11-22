@@ -10,6 +10,7 @@ export {
   requireAccess,
   requireAuth,
   requireRole,
+  requireScope,
   type AxiamRequest,
 } from './express.js';
 export {
@@ -18,6 +19,7 @@ export {
   requireAccessHook,
   requireAuthHook,
   requireRoleHook,
+  requireScopeHook,
   type AxiamFastifyRequest,
   type OidcLoginRoutePaths,
   type PreHandlerHook,
@@ -26,6 +28,11 @@ export {
 export {
   beginOidcLogin,
   completeOidcLogin,
+  isSafeReturnTo,
+  oidcBindingCookieName,
+  OIDC_BINDING_COOKIE_NAME,
+  OIDC_BINDING_COOKIE_NAME_LOOPBACK,
+  type OidcCallbackContext,
   type OidcCallbackQuery,
   type OidcLoginOptions,
   type OidcLoginOutcome,
@@ -202,6 +209,7 @@ export {
 export type { IdTokenClaims } from '../node/oidcIdToken.js';
 export {
   MemoryOidcStateStore,
+  OIDC_STATE_MAX_ENTRIES,
   OIDC_STATE_TTL_MS,
   type OidcStateEntry,
   type OidcStateStore,
@@ -211,6 +219,7 @@ export {
   evaluateAccess,
   fromParam,
   hasAnyRole,
+  hasAnyScope,
   resolveResourceId,
   ResourceResolutionError,
   type AuthzChecker,

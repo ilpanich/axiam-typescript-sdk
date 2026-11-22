@@ -45,7 +45,7 @@ import { isOAuth2Endpoint } from '../rest/interceptors.js';
 import { withRetry } from '../rest/retry.js';
 import type { SharedSession } from '../rest/session.js';
 import { createJwksVerifier, type JwksVerifier } from './jwks.js';
-import type { IdTokenClaims } from './oidcIdToken.js';
+import { resolveClockSkewSec, type IdTokenClaims } from './oidcIdToken.js';
 import {
   CODE_CHALLENGE_METHOD_S256,
   computeCodeChallenge,
@@ -999,6 +999,12 @@ export class OidcClient {
   #pendingRefresh: Promise<OidcTokenSet> | null = null;
 
   constructor(session: SharedSession, options: OidcClientOptions) {
+    // A non-finite skew is a configuration fault: refuse it here, where the
+    // error names the option, rather than at the first token it would have
+    // let through unexpired (see `resolveClockSkewSec`).
+    if (options.clockSkewSec !== undefined) {
+      resolveClockSkewSec(options.clockSkewSec);
+    }
     this.#session = session;
     this.#options = options;
     this.#discoveryCache = new DiscoveryCache(options.discoveryTtlMs ?? MIN_DISCOVERY_TTL_MS);

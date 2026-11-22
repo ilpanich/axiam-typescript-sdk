@@ -7,7 +7,13 @@
 // TTL").
 
 import { AuthError } from '../core/index.js';
-import { assertTenantClaim, type PresentedProofs, type Verifier } from '../node/jwks.js';
+import {
+  assertAccessTokenHeader,
+  assertNoPurposeClaim,
+  assertTenantClaim,
+  type PresentedProofs,
+  type Verifier,
+} from '../node/jwks.js';
 import type { RevocationFeed } from '../node/revocationFeed.js';
 
 /**
@@ -93,22 +99,42 @@ export interface AxiamIdentity {
   userId: string;
   /** The tenant the verified token was minted for (the token's `tenant_id` claim). */
   tenantId: string;
-  /** Roles derived from the token's space-separated `scope` claim (§10). */
-  roles: string[];
+  /**
+   * The verified token's `roles` claim (CONTRACT.md §10 interface contract,
+   * §11.2 rule 11; contract 1.68): the names of the subject's global roles in
+   * the tenant, as the server issued them.
+   *
+   * `undefined` when the token carries no `roles` claim — the application did
+   * not request, or its client is not registered for, the `roles` scope — and
+   * also when the claim is not a JSON array of strings. `[]` when the scope was
+   * granted and the subject holds no such role. The two are kept apart on
+   * purpose: one means "ask for the scope", the other "the user holds none".
+   *
+   * **Never filled from `scope`.** Through 1.3.x this held the `scope` claim
+   * split on spaces (N15): a scope names what the *client* asked for, not
+   * what the user holds. The granted scopes are {@link AxiamIdentity.scopes}.
+   */
+  roles?: string[];
+  /**
+   * The verified token's granted OAuth2 scopes: its `scope` claim split on
+   * single spaces (RFC 6749 §3.3). `undefined` when the token has no `scope`
+   * claim, or one that is not a string. Read by `requireScope`.
+   */
+  scopes?: string[];
 }
 
 /**
  * Verify `token` locally against `session`'s cached JWKS and map the
  * verified claims to the identity shape injected by both middleware
- * modules. Roles are derived from the `scope` claim (space-separated) —
- * AXIAM's access token carries no dedicated `roles` claim server-side
- * (mirrors the Rust SDK's src/middleware/actix.rs).
+ * modules. `roles` is the token's `roles` claim and `scopes` its `scope`
+ * claim; neither is derived from the other (contract 1.68, §11.2 rule 11).
  *
  * This is the SDK's **documented §10 guard entry point** for TypeScript, and
  * it applies the complete CONTRACT.md §10.1 minimum local-verification set:
- * rules 1/2/3/5/6/7 inside `verifyAccessToken` (EdDSA `alg` pinned before key
- * lookup, REQUIRED numeric `exp`, `nbf` when present, conditional `iss`/`aud`,
- * a named bounded clock skew), rule 4 — the `tenant_id` assertion — both
+ * rules 1/2/3/5/6/7 and 10–12 inside `verifyAccessToken` (EdDSA `alg` pinned
+ * before key lookup, REQUIRED numeric `exp`, `nbf` when present, conditional
+ * `iss`/`aud`, a named bounded clock skew; `typ` `at+jwt` when present, no
+ * `purpose` claim, a REQUIRED `kid`), rule 4 — the `tenant_id` assertion — both
  * there and again here, so a caller-supplied `Verifier` implementation that
  * ignores its expectations still cannot get a cross-tenant token past the
  * middleware, and rule 9 — see `proofs` below.
@@ -178,6 +204,11 @@ export async function authenticateRequest(
   // may implement themselves — the middleware must not delegate a
   // fail-closed control to a type it does not own.
   assertTenantClaim(claims.tenant_id, session.tenantHeaderValue);
+  // §10.1 rules 10–12 (contract 1.68; N14), re-asserted for the same reason:
+  // a caller-supplied Verifier that ignores them must not let an MFA
+  // challenge or a WebAuthn state token through as an access token.
+  assertAccessTokenHeader(token);
+  assertNoPurposeClaim(claims);
 
   // §10.4 rules 4 and 6. Runs LAST: every §10.1 rule has already decided, and
   // the feed can only turn an accept into a reject. A token with no `sid`
@@ -192,11 +223,21 @@ export async function authenticateRequest(
     }
   }
 
-  const roles = (claims.scope ?? '').split(' ').filter(Boolean);
+  // §11.2 rule 11 (contract 1.68; N15): roles come from the `roles` claim
+  // alone, and scopes from `scope` alone — the two never stand in for each
+  // other. Read off the verified payload, not the typed claims model.
+  const rawRoles = (claims as { roles?: unknown }).roles;
+  const roles =
+    Array.isArray(rawRoles) && rawRoles.every((role): role is string => typeof role === 'string')
+      ? [...rawRoles]
+      : undefined;
+  const rawScope = (claims as { scope?: unknown }).scope;
+  const scopes = typeof rawScope === 'string' ? rawScope.split(' ').filter(Boolean) : undefined;
 
   return {
     userId: claims.sub,
     tenantId: claims.tenant_id,
-    roles,
+    ...(roles !== undefined ? { roles } : {}),
+    ...(scopes !== undefined ? { scopes } : {}),
   };
 }

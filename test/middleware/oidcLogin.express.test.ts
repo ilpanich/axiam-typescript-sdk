@@ -34,8 +34,14 @@ function fakeRes(): Response & {
   statusCode?: number;
   body?: unknown;
   redirectedTo?: string;
+  setCookies: string[];
 } {
-  const res: Record<string, unknown> = {};
+  const res: Record<string, unknown> = { setCookies: [] };
+  // §12.8: the adapter sends the binding cookie with `res.append('Set-Cookie', …)`.
+  res.append = vi.fn((name: string, value: string) => {
+    if (name.toLowerCase() === 'set-cookie') (res.setCookies as string[]).push(value);
+    return res;
+  });
   res.status = vi.fn((code: number) => {
     res.statusCode = code;
     return res;
@@ -48,11 +54,26 @@ function fakeRes(): Response & {
     res.redirectedTo = url;
     return res;
   });
-  return res as unknown as Response & { statusCode?: number; body?: unknown; redirectedTo?: string };
+  return res as unknown as Response & {
+    statusCode?: number;
+    body?: unknown;
+    redirectedTo?: string;
+    setCookies: string[];
+  };
 }
 
-function fakeReq(query: Record<string, unknown> = {}): Request {
-  return { query } as unknown as Request;
+function fakeReq(query: Record<string, unknown> = {}, cookie?: string): Request {
+  return { query, headers: cookie !== undefined ? { cookie } : {} } as unknown as Request;
+}
+
+/**
+ * The `Cookie` header the browser that called the login route sends back on
+ * its callback (CONTRACT.md §12.8): the binding cookie the login response set.
+ */
+function bindingCookieHeader(loginRes: { setCookies: string[] }): string {
+  const line = loginRes.setCookies.find((c) => c.startsWith('__Host-axiam_oidc_bind='));
+  expect(line).toBeDefined();
+  return line!.split(';')[0];
 }
 
 /** A MemoryOidcStateStore that also records what was saved, so a test can read the nonce. */
@@ -173,11 +194,16 @@ describe('oidcLoginHandlers callback route (§12)', () => {
     });
 
     server.use(discoveryHandler(createMockState()));
-    await handlers.login(fakeReq({ returnTo: '/dashboard' }), fakeRes(), vi.fn());
+    const loginRes = fakeRes();
+    await handlers.login(fakeReq({ returnTo: '/dashboard' }), loginRes, vi.fn());
     await setupExchange(saved);
 
     const res = fakeRes();
-    await handlers.callback(fakeReq({ state: saved[0].state, code: 'idp-code' }), res, vi.fn());
+    await handlers.callback(
+      fakeReq({ state: saved[0].state, code: 'idp-code' }, bindingCookieHeader(loginRes)),
+      res,
+      vi.fn(),
+    );
 
     expect(res.redirectedTo).toBe('/dashboard');
     expect(received).toHaveLength(1);
@@ -197,11 +223,12 @@ describe('oidcLoginHandlers callback route (§12)', () => {
     });
 
     server.use(discoveryHandler(createMockState()));
-    await handlers.login(fakeReq({ returnTo: '/dashboard' }), fakeRes(), vi.fn());
+    const loginRes = fakeRes();
+    await handlers.login(fakeReq({ returnTo: '/dashboard' }), loginRes, vi.fn());
     await setupExchange(saved);
 
     const res = fakeRes();
-    await handlers.callback(fakeReq({ state: saved[0].state, code: 'c' }), res, vi.fn());
+    await handlers.callback(fakeReq({ state: saved[0].state, code: 'c' }, bindingCookieHeader(loginRes)), res, vi.fn());
 
     expect(res.redirectedTo).toBe('/home');
   });
@@ -212,11 +239,12 @@ describe('oidcLoginHandlers callback route (§12)', () => {
     const handlers = oidcLoginHandlers({ client: oidc, store, redirectUri: REDIRECT_URI });
 
     server.use(discoveryHandler(createMockState()));
-    await handlers.login(fakeReq(), fakeRes(), vi.fn());
+    const loginRes = fakeRes();
+    await handlers.login(fakeReq(), loginRes, vi.fn());
     await setupExchange(saved);
 
     const res = fakeRes();
-    await handlers.callback(fakeReq({ state: saved[0].state, code: 'c' }), res, vi.fn());
+    await handlers.callback(fakeReq({ state: saved[0].state, code: 'c' }, bindingCookieHeader(loginRes)), res, vi.fn());
 
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({ authenticated: true, sub: 'user-1', expiresIn: 900 });
@@ -252,13 +280,17 @@ describe('oidcLoginHandlers callback route (§12)', () => {
     expect(unknown.body).toMatchObject({ error: 'authentication_failed' });
 
     server.use(discoveryHandler(createMockState()));
-    await handlers.login(fakeReq(), fakeRes(), vi.fn());
+    const loginRes = fakeRes();
+    await handlers.login(fakeReq(), loginRes, vi.fn());
     await setupExchange(saved);
-    await handlers.callback(fakeReq({ state: saved[0].state, code: 'c' }), fakeRes(), vi.fn());
+    const cookie = bindingCookieHeader(loginRes);
+    const first = fakeRes();
+    await handlers.callback(fakeReq({ state: saved[0].state, code: 'c' }, cookie), first, vi.fn());
+    expect(first.statusCode).toBe(200);
 
     // Replay of a state that already succeeded: rejected identically.
     const replay = fakeRes();
-    await handlers.callback(fakeReq({ state: saved[0].state, code: 'c' }), replay, vi.fn());
+    await handlers.callback(fakeReq({ state: saved[0].state, code: 'c' }, cookie), replay, vi.fn());
     expect(replay.statusCode).toBe(401);
   });
 
@@ -290,7 +322,8 @@ describe('oidcLoginHandlers callback route (§12)', () => {
     const handlers = oidcLoginHandlers({ client: oidc, store, redirectUri: REDIRECT_URI });
 
     server.use(discoveryHandler(createMockState()));
-    await handlers.login(fakeReq(), fakeRes(), vi.fn());
+    const loginRes = fakeRes();
+    await handlers.login(fakeReq(), loginRes, vi.fn());
     server.use(
       tokenHandler(createMockState(), () =>
         HttpResponse.json(
@@ -301,7 +334,7 @@ describe('oidcLoginHandlers callback route (§12)', () => {
     );
 
     const res = fakeRes();
-    await handlers.callback(fakeReq({ state: saved[0].state, code: 'c' }), res, vi.fn());
+    await handlers.callback(fakeReq({ state: saved[0].state, code: 'c' }, bindingCookieHeader(loginRes)), res, vi.fn());
 
     expect(res.statusCode).toBe(401);
     expect(res.body).toMatchObject({
@@ -317,7 +350,8 @@ describe('oidcLoginHandlers callback route (§12)', () => {
     const handlers = oidcLoginHandlers({ client: oidc, store, redirectUri: REDIRECT_URI });
 
     server.use(discoveryHandler(createMockState()));
-    await handlers.login(fakeReq(), fakeRes(), vi.fn());
+    const loginRes = fakeRes();
+    await handlers.login(fakeReq(), loginRes, vi.fn());
     server.use(
       jwksHandler(createMockState(), [key.jwk]),
       http.post(TOKEN_ENDPOINT, async () =>
@@ -326,7 +360,7 @@ describe('oidcLoginHandlers callback route (§12)', () => {
     );
 
     const res = fakeRes();
-    await handlers.callback(fakeReq({ state: saved[0].state, code: 'c' }), res, vi.fn());
+    await handlers.callback(fakeReq({ state: saved[0].state, code: 'c' }, bindingCookieHeader(loginRes)), res, vi.fn());
 
     expect(res.statusCode).toBe(401);
     expect(res.body).toMatchObject({ error: 'authentication_failed' });
@@ -345,11 +379,12 @@ describe('oidcLoginHandlers callback route (§12)', () => {
     });
 
     server.use(discoveryHandler(createMockState()));
-    await handlers.login(fakeReq(), fakeRes(), vi.fn());
+    const loginRes = fakeRes();
+    await handlers.login(fakeReq(), loginRes, vi.fn());
     server.use(http.post(TOKEN_ENDPOINT, () => HttpResponse.json({}, { status: 502 })));
 
     const res = fakeRes();
-    await handlers.callback(fakeReq({ state: saved[0].state, code: 'c' }), res, vi.fn());
+    await handlers.callback(fakeReq({ state: saved[0].state, code: 'c' }, bindingCookieHeader(loginRes)), res, vi.fn());
 
     expect(res.statusCode).toBe(503);
     expect(res.body).toMatchObject({ error: 'oidc_unavailable' });

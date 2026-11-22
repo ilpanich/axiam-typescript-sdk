@@ -61,7 +61,9 @@ describe('axiamPlugin (Fastify)', () => {
     const body = response.json();
     expect(body.axiamUser.userId).toBe('user-1');
     expect(body.axiamUser.tenantId).toBe('tenant-1');
-    expect(body.axiamUser.roles).toEqual(['read', 'write']);
+    // Contract 1.68 (N15): `scope` is exposed as scopes, never as roles.
+    expect(body.axiamUser.roles).toBeUndefined();
+    expect(body.axiamUser.scopes).toEqual(['read', 'write']);
 
     await app.close();
   });
@@ -79,7 +81,8 @@ describe('axiamPlugin (Fastify)', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().axiamUser.roles).toEqual(['admin']);
+    expect(response.json().axiamUser.roles).toBeUndefined();
+    expect(response.json().axiamUser.scopes).toEqual(['admin']);
 
     await app.close();
   });

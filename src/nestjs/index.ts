@@ -9,6 +9,7 @@ export {
   RequireAccess,
   RequireAuth,
   RequireRole,
+  RequireScope,
   type NestParamResource,
   type NestResourceSpec,
   type RequireAccessMetadata,
@@ -18,6 +19,7 @@ export {
   AXIAM_REQUIRE_ACCESS_METADATA,
   AXIAM_REQUIRE_AUTH_METADATA,
   AXIAM_REQUIRE_ROLE_METADATA,
+  AXIAM_REQUIRE_SCOPE_METADATA,
 } from './metadata.js';
 // Re-exported so the nestjs entry point's own generated docs can resolve
 // `RequireAccessMetadata.opts`/`AxiamGuard`'s constructor parameter without a
