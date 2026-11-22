@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Monthly dependency refresh (2026-11): runtime floors `amqplib` ^2.4.0 and `jose` ^6.2.18; dev tooling `vitest` / `@vitest/coverage-v8` ^5.1.1, `msw` ^3.0.7, `ts-proto` ^2.23.5, `@nestjs/common` / `@nestjs/core` ^12.6.0. Node support unchanged (22 floor, 26 newest); TypeScript stays on 6.0.x until typedoc accepts 7.x.
+
 ## [1.3.1] - 2026-11-11
 
 ### Changed
