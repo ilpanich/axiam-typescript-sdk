@@ -20,12 +20,34 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-This SDK conforms to **contract 1.66**: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
+The vendored `CONTRACT.md` is **contract 1.68**. This SDK conforms to **contract 1.66** as listed
+here, **plus the contract 1.68 obligations of §34.12 (a)–(g)** — the table under "Contract 1.68"
+below says what each one does here. Of contract 1.67 (§34.11) it implements the additive
+`AuditLogEntry.organization_id` ((c)) and, through 1.68's §10.1 rules 10–12, the verifier half of
+(e); the documentation and test updates §34.11 (a)–(d) ask for are **not** done in this release,
+so it does not claim 1.67 or 1.68 in full. Contract 1.66: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
 §20, §21, §22, §23, §24, §25, §26, §27 (with §27.6.2), §28, §28.12, §29, §30, §31, §32, §33, §36 and §37,
 with §32.7 and §33.2 signed (including §6.1 mTLS client certificates, the
 §10.1 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
 `verifyWebhook` signature verifier). Manifest pruning: not offered in any namespace (§27.10). §12 is implemented in full at its 1.38 shape: all
 **thirteen** operations, including the four public "Sign in with X" entry points.
+
+### Contract 1.68 — security audit 2026-11-14, Wave 2 (§34.12) — release 1.4.0
+
+Release 1.4.0 is a **minor** release with three **behaviour changes for integrators** — the login
+glue binding (C7), the `returnTo` rule (C6) and `requireRole` reading only the `roles` claim (N15).
+Read the migration notes in the [CHANGELOG](./CHANGELOG.md#140---unreleased) before upgrading.
+
+| Clause | What this SDK does |
+|---|---|
+| (a) login glue binds the callback to the browser (C7, §12.8 rules 1, 2, 4) | `oidcLoginHandlers` (Express) and `oidcLoginPlugin` (Fastify) set `__Host-axiam_oidc_bind` at login (`axiam_oidc_bind` without `Secure` only for a plain-HTTP loopback `redirectUri`), store its SHA-256 as `OidcStateEntry.bindingDigest`, and at the callback consume the state **first**, then compare in constant time; a missing or different cookie is the uniform `401` with no code exchange and no `onSuccess`. Every callback response clears the cookie, including the error response the framework sends when the state store or `onSuccess` throws (the error itself still reaches the application's error handler). `onSuccess` receives the framework request as a third argument. The framework-neutral `completeOidcLogin` takes the presented cookie in a new `context` argument and refuses every callback without one. Design: [`docs/login-glue-binding.md`](./docs/login-glue-binding.md). |
+| (b) `returnTo` (C6, §12.8 rules 3, 4) | Followed only as a same-origin relative path (`isSafeReturnTo`), checked when stored and again before the redirect; otherwise dropped. `allowReturnTo` widens it. |
+| (c) unknown-`kid` re-fetch window (§12.4 rule 2) | No code change: `jose`'s `createRemoteJWKSet` with a 60 s cooldown. The rule's conformance test is carried (`test/node/jwksRefetchWindow.test.ts`) against the §10 verifier: with a warm cache, 50 tokens with 50 different unknown `kid`s in one window cost at most one JWKS fetch and are all rejected; with the mocked clock past the window and a rotated set, the new `kid` is accepted after one fetch. The §10 verifier is bound to the JWKS URI and reads no discovery document. |
+| (d) access-token kind (N14, §10.1 rules 10–12) | `verifyAccessToken` and `authenticateRequest` refuse a header `typ` other than `at+jwt` (case-insensitive, `application/` allowed), a `purpose` claim, and a header with no `kid` (no single-key fallback). A token from a server before 1.67 (`typ: JWT`) is refused. |
+| (e) roles (N15, §11.2 rule 11) | `AxiamIdentity.roles` is the token's `roles` claim only (`undefined` when absent, `[]` kept distinct); the new `AxiamIdentity.scopes` carries `scope`. `requireRole`/`requireRoleHook`/`@RequireRole` fail closed without a `roles` claim; `requireScope`/`requireScopeHook`/`@RequireScope` are added. **Request the `roles` scope** (and register it on the client) for `requireRole` to admit anyone. |
+| (f) signed `AuthzResponse` (N2, §8) | New `AuthzRequester` (`createAuthzRequester(channel, …)` / `connectAuthzRequester(amqpsUrl, …)`): publishes a signed `AuthzRequest` with fresh random `correlation_id` and `nonce` to `axiam.authz.request` on the default exchange, `reply_to` a private exclusive auto-delete broker-named queue (an empty or `axiam.`-prefixed name is refused), and resolves `check()` only with an answer `AuthzResponseVerifier` verifies over its received bytes (tenant subkey, own `tenant_id`, the request's `correlation_id` and `nonce`). Forged or mismatched answers are nacked without requeue and the check keeps waiting, until its timeout. Unsigned answers are refused unless `acceptUnsignedResponses` is set. A discarded answer's security event names the delivery's exchange and routing key (§8 rule 4). `connectAuthzRequester` handles its own connection's and channel's `'error'` (logged, never an uncaught exception) and `'close'` (the requester closes, releasing every waiter at once); with `createAuthzRequester` the caller owns both. The four contract vectors and the request vector are tests. |
+| (g) §3a for every cookie-accepting guard | No change: `axiamMiddleware` and `axiamPlugin` already apply it, and every §11 helper reads their identity. |
+| (h), (i) | Informative; no SDK change. |
 
 ### Contract 1.66 — sign-in hardening (§34.10)
 
@@ -216,7 +238,9 @@ rule on every inbound token: EdDSA `alg` pinned before the JWKS is consulted, a 
 `exp` (`jose` only checks `exp` *if present*, so `requiredClaims: ['exp']` is passed
 explicitly), `nbf` honoured when present, `tenant_id` asserted against the session's
 configured tenant, `iss`/`aud` checked when configured, all under a named 60-second
-`CLOCK_SKEW_LEEWAY_SEC` — **and, since contract 1.51, rule 9**: a token carrying `cnf` is
+`CLOCK_SKEW_LEEWAY_SEC`, **since contract 1.68 rules 10–12** (a header `typ` other than `at+jwt`,
+a `purpose` claim, or a header with no `kid` is refused, so AXIAM's MFA-challenge and WebAuthn
+state tokens never pass as access tokens) — **and, since contract 1.51, rule 9**: a token carrying `cnf` is
 refused unless transport evidence backs it. `axiamMiddleware`/`axiamPlugin` derive that
 evidence automatically from the request's own raw socket (the peer certificate the TLS
 layer verified for *this* connection, when Node itself terminates TLS) via the new
@@ -320,9 +344,9 @@ never contains `@grpc/grpc-js` or `amqplib`):
 | `axiam-sdk` / `axiam-sdk/rest` | Browser + Node, REST-only  | `AxiamClient`: `login`/`verifyMfa`/`refresh`/`logout`, `can`/`batchCheck` over the FND-04 REST authz endpoint |
 | `axiam-sdk/browser`     | Browser only                | The WebAuthn **platform ceremony** — `webauthnRegister`/`webauthnSetupRegister`/`webauthnLogin`/`webauthnDiscoverableLogin` over `navigator.credentials` (CONTRACT.md §24.6b). The relying-party operations themselves are on `AxiamClient` in `/rest` and work in Node too. |
 | `axiam-sdk/grpc`        | Node only                   | Everything in `/rest` plus `AuthzGrpcClient.checkAccess`/`batchCheck` and `UserInfoGrpcClient.getUserInfo` over gRPC, the Node persona (`createNodeSession`), and the local-JWKS verifier |
-| `axiam-sdk/amqp`        | Node only                   | `consume()` — HMAC-verified AMQP audit/authz event consumer (CONTRACT.md §8) |
+| `axiam-sdk/amqp`        | Node only                   | `consume()` — HMAC-verified AMQP audit/authz event consumer, and `AuthzRequester` / `AuthzResponseVerifier` for authorization over AMQP with the signed `AuthzResponse` (CONTRACT.md §8) |
 | `axiam-sdk/node`        | Node only                   | The Node persona (`createNodeSession`/`createNodeClient`, cookie jar + local-JWKS verifier) plus the **OIDC/SSO relying-party helpers** — `OidcClient`, `MemoryOidcStateStore`, PKCE primitives (CONTRACT.md §12) |
-| `axiam-sdk/middleware`  | Node only                   | `axiamMiddleware` (Express) / `axiamPlugin` (Fastify) — shared local-JWKS verify core (CONTRACT.md §10) — plus `requireAuth`/`requireAccess`/`requireRole` declarative route guards (CONTRACT.md §11) and the `oidcLoginHandlers`/`oidcLoginPlugin` "Login with AXIAM" routes (CONTRACT.md §12) |
+| `axiam-sdk/middleware`  | Node only                   | `axiamMiddleware` (Express) / `axiamPlugin` (Fastify) — shared local-JWKS verify core (CONTRACT.md §10) — plus `requireAuth`/`requireAccess`/`requireRole`/`requireScope` declarative route guards (CONTRACT.md §11) and the `oidcLoginHandlers`/`oidcLoginPlugin` "Login with AXIAM" routes (CONTRACT.md §12) |
 | `axiam-sdk/nestjs`      | Node only, optional         | `@RequireAccess`/`@RequireAuth`/`@RequireRole` metadata decorators + `AxiamGuard` (CONTRACT.md §11, Tier 2) |
 
 **Browser code should only ever import from `axiam-sdk` or `axiam-sdk/rest`.** Importing
@@ -668,6 +692,39 @@ await consume(
 );
 ```
 
+#### Authorization over AMQP — `AuthzRequester` (contract 1.68, §8)
+
+The server signs every `AuthzResponse` with the requester's tenant subkey and binds it to the
+request (`tenant_id`, `nonce`, `correlation_id`). `AuthzRequester` publishes the request and
+accepts only that signed answer:
+
+```typescript
+import { connectAuthzRequester, Sensitive } from 'axiam-sdk/amqp';
+
+const authz = await connectAuthzRequester('amqps://broker.example.com:5671', {
+  tenantId,                                // your OWN tenant (UUID)
+  subkey: new Sensitive(tenantSubkey),     // the tenant's HKDF-derived AMQP subkey, key_version 2
+  timeoutMs: 5_000,                        // default 10 s
+});
+const decision = await authz.check({ subjectId, action: 'documents:read', resourceId });
+if (decision.allowed) { /* … */ }
+await authz.close();
+```
+
+Each request goes to `axiam.authz.request` with a fresh random `correlation_id` and `nonce`, and
+`reply_to` names a private queue (exclusive, auto-delete, broker-named `amq.gen-…`) only this
+requester consumes — the signature proves only "a holder of the tenant subkey", which every producer
+of the tenant is, so the private queue is what keeps another same-tenant service from reading or
+answering in your place (§8 trust boundary). An answer that does not verify, names another tenant,
+or matches no outstanding request is nacked without requeue and the check keeps waiting; with no
+verified answer it rejects with `NetworkError` at the timeout. A deny is a decision
+(`allowed: false`, `reasonCode`), not an error. `createAuthzRequester(channel, options)` takes an
+existing amqplib channel instead. Against a server older than 1.68 every answer is unsigned and
+refused; `acceptUnsignedResponses: true` admits them, with a warning, for one rolling upgrade.
+`AuthzResponseVerifier` is the verification step on its own, for an application that publishes its
+requests itself. A broker confirm of the publish still says nothing about AXIAM having decided
+(§8, minimal profile).
+
 #### Transport security (§8b)
 
 `consume()` and `reactorServe()` both require `amqps://` and enforce it before
@@ -922,6 +979,7 @@ import {
   fromParam,
   requireAccess,
   requireRole,
+  requireScope,
   type AuthzVerifiableSession,
 } from 'axiam-sdk/middleware';
 
@@ -941,8 +999,23 @@ app.get('/documents/:id', requireAccess(authzSession, 'read', fromParam('id')), 
 });
 
 // Local-only (no server round-trip) role check — NOT a substitute for requireAccess.
+// Reads ONLY the token's `roles` claim (contract 1.68): request the `roles` scope.
 app.get('/admin', requireRole(session, 'admin'), (_req, res) => res.json({ ok: true }));
+
+// OAuth2 scope check — what the client was granted, not what the user holds.
+app.get('/reports', requireScope(session, 'reports:read'), (_req, res) => res.json({ ok: true }));
 ```
+
+**`requireRole` needs the `roles` scope (contract 1.68, §11.2 rule 11).** It reads the verified
+token's `roles` claim and nothing else, and a token without one is refused `403`. The server
+emits `roles` — the subject's global role names in the tenant, direct or through groups — only
+when the client requested **and is registered for** the `roles` scope, so add `roles` to the
+`scope` you pass to `oidcBegin`/`oidcPar`/the device and CIBA flows and to the client's
+registered scopes. Until then every `requireRole` route answers `403`. The claim is a snapshot
+taken when the token was minted (stale for at most one access-token lifetime); `requireAccess`
+evaluates live. Before 1.4.0 `requireRole` matched OAuth2 **scopes** (N15) — a route that relied
+on that should use `requireScope`. The same holds for `requireRoleHook`/`@RequireRole`, and
+`requireScopeHook`/`@RequireScope` are the Fastify and NestJS scope helpers.
 
 The Fastify equivalents are `requireAuthHook`/`requireAccessHook`/`requireRoleHook`, each
 returning a plain `preHandler` function:
@@ -1188,7 +1261,8 @@ console.log(tokens.idClaims?.sub);   // validated ID-token subject
 
 `MemoryOidcStateStore` is an optional, opt-in reference store for that bookkeeping (10-minute
 TTL, single-use `consume(state)` — mirroring the server's own `federation_login_state`
-semantics). It is single-process; use a shared store (Redis, a database) behind a load
+semantics — and, since 1.4.0, at most `OIDC_STATE_MAX_ENTRIES` (10 000) entries, the oldest
+evicted first; the second constructor argument lowers it). It is single-process; use a shared store (Redis, a database) behind a load
 balancer by implementing `OidcStateStore` yourself. The core operations never require one.
 
 ### Framework glue
@@ -1202,8 +1276,8 @@ const { login, callback } = oidcLoginHandlers({
   redirectUri: 'https://app.example.com/auth/callback',
   scope: 'openid profile email',
   // Establishing YOUR app session is your decision — the SDK validates the login
-  // and hands you the token set.
-  onSuccess: (tokens) => establishMySession(String(tokens.idClaims?.sub)),
+  // and hands you the token set, the consumed entry and the request.
+  onSuccess: (tokens, _entry, req) => establishMySession(req, String(tokens.idClaims?.sub)),
 });
 
 app.get('/auth/login', login);       // 302 -> AXIAM /oauth2/authorize
@@ -1216,10 +1290,21 @@ core, so they cannot drift. Failure mapping is identical: `400` malformed callba
 authentication failure (unknown/expired/replayed state, IdP error, ID-token failure, OAuth2
 protocol error), `503` when AXIAM is unreachable — never a silent success.
 
-The login handler reads an optional `?returnTo=` and stores it with the login state.
-**Validate or allowlist that value in your application** if you accept it from user input —
-an unchecked redirect target is an open-redirect vector, and the SDK cannot know which
-destinations your app considers safe.
+**Browser binding (contract 1.68, §12.8; C7).** The login route sets an
+`__Host-axiam_oidc_bind` cookie (`HttpOnly; Secure; SameSite=Lax; Path=/`, ten minutes) and the
+callback completes only for the browser presenting it: a callback link replayed into another
+browser — login CSRF — gets the uniform `401`, the code is never exchanged and `onSuccess` never
+runs. Serve both routes over HTTPS; for plain-HTTP development on `localhost`, `127.0.0.1` or
+`[::1]` the cookie is `axiam_oidc_bind` without `Secure`. A custom `OidcStateStore` must persist
+`bindingDigest`. Two sign-ins started at once in one browser: the later one wins. Design notes:
+[`docs/login-glue-binding.md`](./docs/login-glue-binding.md).
+
+**`returnTo` (§12.8 rule 3; C6).** The login handler reads an optional `?returnTo=` and stores it
+only when it is a same-origin relative path — a single leading `/`, not `//` or `/\`, no
+backslash and no control character — and checks it again before redirecting. Anything else is
+dropped and the callback falls back to `successRedirect` or the JSON summary. To allow, say, your
+other origins, pass `allowReturnTo: (value) => myAllowlist.has(value)`; it is consulted only for
+values the default rule refuses.
 
 ### ID-token validation (always on)
 

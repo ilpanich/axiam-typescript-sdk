@@ -40,16 +40,17 @@ function sessionFor(tenant = 'tenant-1') {
 }
 
 describe('authenticateRequest', () => {
-  it('maps verified claims to an identity, deriving roles from scope', async () => {
+  it('maps verified claims to an identity: scope fills scopes, never roles (contract 1.68, N15)', async () => {
     const key = await setup();
     const token = await baseJwt().setSubject('user-1').sign(key);
 
     const identity = await authenticateRequest(sessionFor(), token);
 
-    expect(identity).toEqual({ userId: 'user-1', tenantId: 'tenant-1', roles: ['read', 'write'] });
+    expect(identity).toEqual({ userId: 'user-1', tenantId: 'tenant-1', scopes: ['read', 'write'] });
+    expect(identity.roles).toBeUndefined();
   });
 
-  it('yields an empty roles array when scope is absent', async () => {
+  it('yields no roles and no scopes when the token carries neither claim', async () => {
     const key = await setup();
     const token = await new SignJWT({ tenant_id: 'tenant-1' })
       .setProtectedHeader({ alg: 'EdDSA', kid: KID })
@@ -59,7 +60,8 @@ describe('authenticateRequest', () => {
       .sign(key);
 
     const identity = await authenticateRequest(sessionFor(), token);
-    expect(identity.roles).toEqual([]);
+    expect(identity.roles).toBeUndefined();
+    expect(identity.scopes).toBeUndefined();
   });
 
   it('throws AuthError on an unverifiable token', async () => {

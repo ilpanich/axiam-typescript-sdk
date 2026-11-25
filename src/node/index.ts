@@ -22,6 +22,10 @@ export {
   createVerifier,
   createJwksVerifier,
   assertTenantClaim,
+  // §10.1 rules 10–12 — the token must be an access token (contract 1.68).
+  assertAccessTokenHeader,
+  assertNoPurposeClaim,
+  isAccessTokenTyp,
   // §10.1 rule 9 — sender-constrained tokens (contract 1.15).
   verifyCertificateBinding,
   // Rule 9 extended for DPoP (contract 1.16). The full rule; prefer it over
@@ -158,6 +162,7 @@ export {
 } from './oidcTypes.js';
 export {
   MemoryOidcStateStore,
+  OIDC_STATE_MAX_ENTRIES,
   OIDC_STATE_TTL_MS,
   type OidcStateEntry,
   type OidcStateStore,

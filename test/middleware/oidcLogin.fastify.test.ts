@@ -43,6 +43,14 @@ function capturingStore(): { store: MemoryOidcStateStore; saved: OidcStateEntry[
   return { store, saved };
 }
 
+/** The `Cookie` header the login browser sends back on its callback (CONTRACT.md §12.8). */
+function bindingCookieHeader(setCookie: string | string[] | number | undefined): string {
+  const lines = Array.isArray(setCookie) ? setCookie : [String(setCookie)];
+  const line = lines.find((c) => c.startsWith('__Host-axiam_oidc_bind='));
+  expect(line).toBeDefined();
+  return line!.split(';')[0];
+}
+
 async function buildApp(
   options: OidcLoginOptions & { loginPath?: string; callbackPath?: string },
 ): Promise<FastifyInstance> {
@@ -107,7 +115,7 @@ describe('oidcLoginPlugin (Fastify, §12)', () => {
       },
     });
 
-    await app.inject({ method: 'GET', url: '/auth/login?returnTo=/reports' });
+    const login = await app.inject({ method: 'GET', url: '/auth/login?returnTo=/reports' });
     server.use(
       jwksHandler(createMockState(), [key.jwk]),
       http.post(TOKEN_ENDPOINT, async () =>
@@ -118,6 +126,7 @@ describe('oidcLoginPlugin (Fastify, §12)', () => {
     const response = await app.inject({
       method: 'GET',
       url: `/auth/callback?state=${encodeURIComponent(saved[0].state)}&code=idp-code`,
+      headers: { cookie: bindingCookieHeader(login.headers['set-cookie']) },
     });
 
     expect(response.statusCode).toBe(302);
@@ -135,7 +144,7 @@ describe('oidcLoginPlugin (Fastify, §12)', () => {
     server.use(discoveryHandler(createMockState()));
     const app = await buildApp({ client: oidc, store, redirectUri: REDIRECT_URI });
 
-    await app.inject({ method: 'GET', url: '/auth/login' });
+    const login = await app.inject({ method: 'GET', url: '/auth/login' });
     server.use(
       jwksHandler(createMockState(), [key.jwk]),
       http.post(TOKEN_ENDPOINT, async () =>
@@ -146,6 +155,7 @@ describe('oidcLoginPlugin (Fastify, §12)', () => {
     const response = await app.inject({
       method: 'GET',
       url: `/auth/callback?state=${encodeURIComponent(saved[0].state)}&code=c`,
+      headers: { cookie: bindingCookieHeader(login.headers['set-cookie']) },
     });
 
     expect(response.statusCode).toBe(200);

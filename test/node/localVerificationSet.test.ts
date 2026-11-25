@@ -97,7 +97,8 @@ describe('CONTRACT.md §10.1 minimum local-verification set', () => {
       token,
     );
 
-    expect(identity).toEqual({ userId: 'user-1', tenantId: TENANT, roles: ['read', 'write'] });
+    // Contract 1.68 (§11.2 rule 11; N15): `scope` fills `scopes`, never `roles`.
+    expect(identity).toEqual({ userId: 'user-1', tenantId: TENANT, scopes: ['read', 'write'] });
   });
 
   // Rule 1 — signature, alg pinned to EdDSA before key lookup.
