@@ -265,7 +265,7 @@ export class SharedSession {
 
   /**
    * Host-isolation guard (3A, defense in depth): returns `true` when `url`
-   * targets a host other than this session's base origin — an absolute
+   * targets an origin (scheme, host and port) other than this session's base origin — an absolute
    * third-party URL, or a redirect that axios/the browser resolved off-origin.
    * The tenant identifier and CSRF token must never be attached to such a
    * request. A relative/host-less `url` (the normal case, merged against
@@ -278,8 +278,11 @@ export class SharedSession {
       return false;
     }
     try {
+      // Origin, not host: a same-host URL on another scheme (`http://` against
+      // an `https://` base) is a different origin and must not receive the
+      // tenant header or the CSRF token in cleartext.
       const target = new URL(url, this.baseUrl);
-      return target.host !== new URL(this.baseUrl).host;
+      return target.origin !== new URL(this.baseUrl).origin;
     } catch {
       return true;
     }

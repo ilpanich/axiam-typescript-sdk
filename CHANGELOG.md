@@ -7,6 +7,117 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (behaviour — read before upgrading)
+
+- **"Login with AXIAM" binds the callback to the browser that started it (C7, CONTRACT.md
+  §12.8 rules 1–2).** `oidcLoginHandlers` (Express) and `oidcLoginPlugin` (Fastify) now set an
+  `__Host-axiam_oidc_bind` cookie (`HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=600`;
+  `axiam_oidc_bind` without `Secure` only for a plain-HTTP loopback `redirectUri`) and store its
+  SHA-256 on the state entry as `bindingDigest`. The callback consumes the state first, then
+  refuses a missing or different cookie with the same `401` as an unknown state, **without
+  exchanging the code or calling `onSuccess`**, and every callback response clears the cookie.
+  Before, a victim's browser that loaded an attacker's `callback?state=…&code=…` completed the
+  attacker's login (login CSRF).
+  *Migration:* serve the login and callback routes over HTTPS (or plain HTTP on loopback in
+  development) so the browser keeps the cookie. A custom `OidcStateStore` must persist and return
+  the new optional `bindingDigest` member unchanged, or every callback is refused. Sign-ins in
+  flight when you deploy fail once and restart. If you call `completeOidcLogin` directly, pass
+  the presented cookie value (named by `oidcBindingCookieName(redirectUri)`) in the new third
+  `context` argument, and send each outcome's new `setCookie`; without a cookie every callback is
+  refused.
+  The cookie is cleared on the error path too: when the state store's `consume` rejects or
+  `onSuccess` throws, both adapters append the clearing `Set-Cookie` before re-throwing, so the
+  framework's error response carries it and the application's error handler still receives the
+  original error. A direct caller of `completeOidcLogin` must do the same, because such errors
+  propagate unchanged.
+- **`onSuccess` receives the framework request** as a third argument (§12.8 rule 2), so a session
+  can be created on the request that completed the sign-in. Existing two-argument callbacks keep
+  working. `OidcLoginOptions` gains a type parameter for it (default `unknown`).
+- **`returnTo` is followed only as a same-origin relative path (C6, §12.8 rule 3).** A value that
+  does not start with a single `/`, starts with `//` or `/\`, or contains a backslash or a
+  control character is dropped at login and not followed at the callback, which then falls back
+  to `successRedirect` or the JSON summary. Before, `?returnTo=https://other.example` sent the
+  user to that origin after a genuine sign-in (open redirect).
+  *Migration:* if you legitimately return to other origins, pass `allowReturnTo` (consulted only
+  for values the default rule refuses).
+- **`requireRole` reads only the token's `roles` claim and fails closed (N15, §11.2 rule 11).**
+  `AxiamIdentity.roles` is now the `roles` claim (`undefined` when absent, `[]` kept distinct) and
+  is **no longer** the `scope` claim split on spaces; the type becomes `roles?: string[]`.
+  `requireRole`, `requireRoleHook` and `@RequireRole` refuse `403` a token without a `roles` claim.
+  Before, any user whose client was granted a scope named like a role passed that role's guard.
+  *Migration:* add `roles` to the scope your application requests and to the client's registered
+  scopes (the server emits the claim only then, SA-18); until you do, every `requireRole` route
+  answers `403`. A route that meant "the client was granted scope X" should use the new
+  `requireScope`. Code reading `identity.roles` must handle `undefined`; the scopes are on the new
+  `identity.scopes`.
+- **Access-token verification refuses non-access tokens (N14, §10.1 rules 10–12).**
+  `verifyAccessToken` and `authenticateRequest` (so `axiamMiddleware`, `axiamPlugin` and every
+  guard) refuse a header `typ` other than `at+jwt` (case-insensitive, `application/` allowed), a
+  token whose claims carry `purpose`, and a header with no `kid` — `jose`'s single-key fallback no
+  longer applies on this path. Before, an MFA-challenge token (after the password step only) or
+  the anonymous WebAuthn discoverable-state token verified as an access token when no expected
+  audience was configured. A token from a server before 1.67 (`typ: JWT`) is refused; its holder
+  refreshes.
+
+### Added
+
+- `requireScope` (Express), `requireScopeHook` (Fastify), `@RequireScope` (NestJS) and
+  `hasAnyScope` (§11.1, contract 1.68); `AxiamIdentity.scopes`.
+- **AMQP authorization requester** (`axiam-sdk/amqp`, §8 "Signed authorization responses", N2,
+  D-9): `AuthzRequester`, built with `createAuthzRequester(channel, options)` or
+  `connectAuthzRequester(amqpsUrl, options)`. `check({ subjectId, action, resourceId, scope? })`
+  publishes a signed `AuthzRequest` (fresh random `correlation_id` and `nonce`) to
+  `axiam.authz.request` on the default exchange with `reply_to` a private, exclusive, auto-delete,
+  broker-named queue (an empty or `axiam.`-prefixed name is refused), and resolves only with an
+  answer that verifies under the tenant subkey and matches that request; forged or mismatched
+  answers are nacked without requeue and the check keeps waiting until `timeoutMs` (default 10 s,
+  then `NetworkError`). `close()` releases every waiter with `AuthzRequesterClosedError`. Unsigned
+  answers are refused unless `acceptUnsignedResponses` is set (one rolling upgrade against a
+  pre-1.68 server). Also exported: `buildAuthzRequest`, `AUTHZ_REQUEST_QUEUE`,
+  `DEFAULT_AUTHZ_TIMEOUT_MS`. `connectAuthzRequester` listens for its connection's and
+  channel's `'error'` (logged through `logger` as `axiam_sdk.amqp`, message only, so a broker
+  restart or a missed heartbeat is not an uncaught exception that ends the process) and `'close'`
+  (the requester closes: outstanding checks reject at once with `AuthzRequesterClosedError`).
+  With `createAuthzRequester` the caller owns the channel and must do both. A `timeoutMs` that is
+  not finite, not positive or above 2³¹−1 is refused with a `RangeError` at creation (Node would
+  otherwise fire such a timer after 1 ms).
+- `AuthzResponseVerifier`: the verification step on its own — over the received bytes, never a
+  re-serialization, with the tenant subkey, checking `tenant_id`, `correlation_id` and `nonce`
+  against an outstanding request; `settle()` acks or nacks without requeue. Its security events
+  carry the timestamp, the tenant and, through `settle()` or the new optional second argument of
+  `verify(body, delivery)` (`AuthzResponseDelivery`), the delivery's exchange and routing key
+  (§8 rule 4), never a signature value. The four contract
+  vectors are tests. `AuthzResponse` gains the optional `reason_code`, `tenant_id`, `nonce` and
+  `hmac_signature` members.
+- `isSafeReturnTo`, `oidcBindingCookieName`, `OIDC_BINDING_COOKIE_NAME`,
+  `OIDC_BINDING_COOKIE_NAME_LOOPBACK`, `OidcCallbackContext`, `OidcLoginOptions.allowReturnTo`,
+  `OidcStateEntry.bindingDigest`; `assertAccessTokenHeader`, `assertNoPurposeClaim`,
+  `isAccessTokenTyp` (`axiam-sdk/node`).
+- `docs/login-glue-binding.md`: the design of the browser binding (cookie name and fallback,
+  order of consume and compare, store interface, clearing on the error path), for the other
+  SDKs' ports.
+- The §12.4 rule 2 conformance test for the unknown-`kid` re-fetch window
+  (`test/node/jwksRefetchWindow.test.ts`); no code change was needed.
+- **Contract 1.68 (§34.12)**: `CONTRACT.md` (sha256 `1f34656c…`), `openapi.json` and
+  `management-registry.json` re-vendored byte for byte from AXIAM `e502a3b` (spec digest
+  `sha256:badfb480…`); `proto/` is unchanged. The §27 layer is regenerated: `AuditLogEntry` gains
+  the optional `organization_id` (contract 1.67, §34.11 (c)); no operation changes. The 1.67
+  documentation and test updates of §34.11 (a)–(d) are not part of this release; the README's
+  conformance statement says so.
+
+### Fixed
+
+- `MemoryOidcStateStore` is bounded: at most `OIDC_STATE_MAX_ENTRIES` (10 000) entries by
+  default, oldest evicted first (new optional second constructor argument).
+- A non-finite ID-token clock skew (`NaN`, `±Infinity`) is refused with a `TypeError` —
+  `resolveClockSkewSec`, and `createOidcClient` at construction — instead of `NaN` disabling the
+  `exp`/`iat` checks. Finite values are still clamped into `[0, 60]`.
+- `SharedSession.isForeignHost` compares the origin, not the host, so a same-host URL on another
+  scheme no longer receives the tenant header or the CSRF token.
+### Changed
+
+- Monthly dependency refresh (2026-11): runtime floors `amqplib` ^2.4.0 and `jose` ^6.2.18; dev tooling `vitest` / `@vitest/coverage-v8` ^5.1.1, `msw` ^3.0.7, `ts-proto` ^2.23.5, `@nestjs/common` / `@nestjs/core` ^12.6.0. Node support unchanged (22 floor, 26 newest); TypeScript stays on 6.0.x until typedoc accepts 7.x.
+
 ## [1.3.1] - 2026-11-11
 
 ### Changed

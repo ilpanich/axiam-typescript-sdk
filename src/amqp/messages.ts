@@ -9,6 +9,8 @@
 // verification, or the field order (and therefore the signed bytes) could
 // silently diverge.
 
+import type { AuthzResponseVerifier } from './authzResponse.js';
+
 /**
  * Authorization check request received from `axiam.authz.request`.
  *
@@ -56,15 +58,27 @@ export interface AuthzRequest {
 }
 
 /**
- * Authorization decision published to `axiam.authz.response`.
+ * Authorization decision published to the request's `reply_to` queue, else
+ * `axiam.authz.response`.
  *
- * Does not carry `hmac_signature` in v1.0 (CONTRACT.md §8, message-types
- * table).
+ * Server-signed from contract 1.68 (CONTRACT.md §8, "Signed authorization
+ * responses"): it carries `tenant_id`, `nonce` and `hmac_signature`, bound to
+ * the request it answers. Through 1.67 it carried none of them, so all three
+ * are optional here. Never verify one by re-serializing this object — verify
+ * the received bytes with {@link AuthzResponseVerifier}.
  */
 export interface AuthzResponse {
   correlation_id: string;
   allowed: boolean;
   reason?: string;
+  /** `allowed`, `no_grant`, `denied_by_rule`, `tenant_suspended`, or a code this SDK does not know (verbatim). */
+  reason_code?: string;
+  /** The `tenant_id` of the request this answers (contract 1.68). */
+  tenant_id?: string;
+  /** The `nonce` of the request this answers, echoed (contract 1.68). */
+  nonce?: string;
+  /** HMAC-SHA256 over the received bytes minus this trailing member, under the tenant subkey (contract 1.68). */
+  hmac_signature?: string;
 }
 
 /**
@@ -128,9 +142,10 @@ export interface NotificationEvent {
 /**
  * Message type names subject to HMAC verification per CONTRACT.md §8's
  * message-types table (`axiam.authz.request` -> AuthzRequest,
- * `axiam.audit.events` -> AuditEventMessage). `AuthzResponse` and
- * `NotificationEvent` are server-published and never carry
- * `hmac_signature`.
+ * `axiam.audit.events` -> AuditEventMessage) — the messages a producer
+ * signs. `AuthzResponse` is server-signed from contract 1.68 but verified over
+ * its received bytes by {@link AuthzResponseVerifier}, not by this path;
+ * `NotificationEvent` carries no `hmac_signature`.
  */
 export const HMAC_SIGNED_MESSAGE_TYPES = ['AuthzRequest', 'AuditEventMessage'] as const;
 

@@ -11,6 +11,11 @@ export { Sensitive } from '../core/index.js';
 export * from './hmac.js';
 export * from './messages.js';
 export * from './consumer.js';
+// Contract 1.68 (§8, "Signed authorization responses"): the requester-side
+// verifier for the now server-signed AuthzResponse.
+export * from './authzResponse.js';
+// ... and the requester that publishes signed AuthzRequests with a private reply_to queue.
+export * from './authzRequester.js';
 // §8b transport security: the amqps://-only guard and the TLS material both
 // AMQP entry points accept. Exported so a caller can validate a broker URL
 // (and fail at config-load time) without opening a connection first.

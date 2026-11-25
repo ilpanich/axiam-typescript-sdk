@@ -33,8 +33,24 @@ export interface OidcStateEntry {
   codeVerifier: Sensitive<string>;
   /** The `redirect_uri` that was sent on the authorization request and must be replayed on exchange. */
   redirectUri: string;
-  /** Optional application-owned data, e.g. the page the user was heading to before login. */
+  /**
+   * Optional application-owned data, e.g. the page the user was heading to
+   * before login. The login glue stores it only when it is a same-origin
+   * relative path (CONTRACT.md §12.8 rule 3) and checks it again before
+   * redirecting, whatever a store returns.
+   */
   returnTo?: string;
+  /**
+   * SHA-256 (lower-case hex) of the browser-binding cookie the login glue set
+   * for this login (CONTRACT.md §12.3 rule 1, §12.8 rule 1; contract 1.68).
+   *
+   * Optional so that a store written for contract 1.67 still compiles and an
+   * entry without it can still be read — but the 1.68 callback refuses such an
+   * entry with the uniform 401. A caller-supplied store MUST persist and return
+   * it unchanged. It is not secret (it is a digest of a random value) but it is
+   * not logged either.
+   */
+  bindingDigest?: string;
 }
 
 /**
@@ -68,10 +84,22 @@ export interface OidcStateStore {
 export const OIDC_STATE_TTL_MS = 600_000;
 
 /**
+ * Default maximum number of entries a {@link MemoryOidcStateStore} holds.
+ *
+ * The login route is unauthenticated and every call saves one entry, so
+ * without a bound a client looping on it grows the map for the whole
+ * 10-minute TTL. At the bound the oldest entry is evicted: its login fails
+ * once and the user starts again, which is the cheaper failure than the
+ * process running out of memory.
+ */
+export const OIDC_STATE_MAX_ENTRIES = 10_000;
+
+/**
  * In-memory reference implementation of {@link OidcStateStore} (§12.3 rule 1).
  *
  * @remarks
- * Per-instance (never process-global), single-use, 10-minute TTL. Expired
+ * Per-instance (never process-global), single-use, 10-minute TTL, and
+ * bounded at {@link OIDC_STATE_MAX_ENTRIES} entries (oldest evicted). Expired
  * entries are dropped lazily on {@link consume} and swept opportunistically on
  * {@link save}, so no timer is held and the store needs no shutdown hook — a
  * long-lived `setInterval` would keep a Node process alive and would be a
@@ -92,15 +120,23 @@ export const OIDC_STATE_TTL_MS = 600_000;
 export class MemoryOidcStateStore implements OidcStateStore {
   readonly #entries = new Map<string, { entry: OidcStateEntry; expiresAt: number }>();
   readonly #ttlMs: number;
+  readonly #maxEntries: number;
 
   /**
    * @param ttlMs entry lifetime in milliseconds. Defaults to
    *   {@link OIDC_STATE_TTL_MS} (10 minutes) and is **clamped to it**: a
    *   shorter TTL is honoured (useful in tests), a longer one is reduced,
    *   because §12.3 rule 1 fixes 10 minutes as the maximum.
+   * @param maxEntries the most entries held at once. Defaults to
+   *   {@link OIDC_STATE_MAX_ENTRIES}; at the bound, saving a new entry evicts
+   *   the oldest. Must be a positive integer.
    */
-  constructor(ttlMs: number = OIDC_STATE_TTL_MS) {
+  constructor(ttlMs: number = OIDC_STATE_TTL_MS, maxEntries: number = OIDC_STATE_MAX_ENTRIES) {
+    if (!Number.isInteger(maxEntries) || maxEntries < 1) {
+      throw new RangeError('MemoryOidcStateStore maxEntries must be a positive integer');
+    }
     this.#ttlMs = Math.min(ttlMs, OIDC_STATE_TTL_MS);
+    this.#maxEntries = maxEntries;
   }
 
   /** Number of unexpired entries currently held. Intended for tests and metrics. */
@@ -112,6 +148,14 @@ export class MemoryOidcStateStore implements OidcStateStore {
   /** Persist `entry` under its own `state`, expiring `ttlMs` from now. */
   async save(entry: OidcStateEntry): Promise<void> {
     this.#sweep();
+    // Re-saving a state replaces it; re-insert so it counts as the newest.
+    this.#entries.delete(entry.state);
+    // A Map iterates in insertion order, so the first key is the oldest entry.
+    while (this.#entries.size >= this.#maxEntries) {
+      const oldest = this.#entries.keys().next();
+      if (oldest.done) break;
+      this.#entries.delete(oldest.value);
+    }
     this.#entries.set(entry.state, { entry, expiresAt: Date.now() + this.#ttlMs });
   }
 

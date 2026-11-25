@@ -13,7 +13,7 @@
 
 import { AuthzError, NetworkError, type Sensitive } from '../core/index.js';
 import type { AccessCheck, AccessDecision } from '../rest/types.js';
-import type { VerifiableSession } from './verifyCore.js';
+import type { AxiamIdentity, VerifiableSession } from './verifyCore.js';
 
 /**
  * The minimal shape `requireAccess`/`requireAccessHook` need from an authz
@@ -342,7 +342,33 @@ function umaChallengeHeaderValue(realm: string, asUri: string, ticket: string): 
   return `UMA realm="${realm}", as_uri="${asUri}", ticket="${ticket}"`;
 }
 
-/** Local (no server round-trip) role check (§11.2.9): true iff `roles` and the identity's roles share at least one entry. */
-export function hasAnyRole(identityRoles: readonly string[], roles: readonly string[]): boolean {
+/**
+ * Local (no server round-trip) role check (§11.2.9, §11.2 rule 11): true iff
+ * `roles` and the identity's roles share at least one entry, by exact,
+ * case-sensitive equality.
+ *
+ * `identityRoles` is {@link AxiamIdentity.roles} — the verified token's `roles`
+ * claim and nothing else (contract 1.68; N15). `undefined` (the token carries
+ * no `roles` claim) and `[]` (it says the user holds none) both fail: the check
+ * fails closed and never falls back to `scope`.
+ */
+export function hasAnyRole(identityRoles: readonly string[] | undefined, roles: readonly string[]): boolean {
+  if (!Array.isArray(identityRoles)) {
+    return false;
+  }
   return roles.some((role) => identityRoles.includes(role));
+}
+
+/**
+ * Local (no server round-trip) scope check (§11.1 `require_scope`, §11.2 rule
+ * 11 (d); contract 1.68): true iff the identity's granted OAuth2 scopes —
+ * {@link AxiamIdentity.scopes}, the token's `scope` claim split on single
+ * spaces — contain at least one of `scopes`, each compared as a whole entry by
+ * exact, case-sensitive equality. `undefined` (no `scope` claim) fails.
+ */
+export function hasAnyScope(identityScopes: readonly string[] | undefined, scopes: readonly string[]): boolean {
+  if (!Array.isArray(identityScopes)) {
+    return false;
+  }
+  return scopes.some((scope) => identityScopes.includes(scope));
 }

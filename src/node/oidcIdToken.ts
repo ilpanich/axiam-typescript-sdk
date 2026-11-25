@@ -100,10 +100,21 @@ export function idTokenAuthError(reason: IdTokenFailureReason, message: string):
 /**
  * Resolve the effective clock skew: the caller's value clamped into
  * `[0, MAX_CLOCK_SKEW_SEC]`, or the maximum when unset.
+ *
+ * A non-finite value (`NaN`, `±Infinity`) — or anything that is not a number —
+ * is refused with a `TypeError` rather than clamped: `NaN` survives
+ * `Math.min`/`Math.max` unchanged, and every `exp`/`iat` comparison against it
+ * is `false`, so an ID token would never expire. A finite value above the
+ * bound is still clamped down, not refused (§12.4 rule 5).
+ *
+ * @throws TypeError when `clockSkewSec` is defined and not a finite number.
  */
 export function resolveClockSkewSec(clockSkewSec?: number): number {
   if (clockSkewSec === undefined) {
     return MAX_CLOCK_SKEW_SEC;
+  }
+  if (typeof clockSkewSec !== 'number' || !Number.isFinite(clockSkewSec)) {
+    throw new TypeError('clockSkewSec must be a finite number of seconds');
   }
   return Math.min(Math.max(clockSkewSec, 0), MAX_CLOCK_SKEW_SEC);
 }

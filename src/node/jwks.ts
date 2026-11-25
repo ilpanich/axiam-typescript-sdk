@@ -362,6 +362,9 @@ export interface Verifier {
    * | 6 | `aud` | checked only when `expectedAudience` is supplied. |
    * | 7 | clock skew | {@link CLOCK_SKEW_LEEWAY_SEC}, passed as `clockTolerance`. |
    * | 9 | `cnf` | (contract 1.51 fix) `proofs` defaults to `{}` — no evidence — so a token carrying `cnf` is refused unless the caller supplies matching evidence. Enforced by handing the verified claims and `proofs` to {@link verifyTokenBinding}, the same function {@link verifyCertificateBinding}, `authenticateRequest` and a hand-rolled guard share, so local verification never disagrees with itself about whether a token is a bearer token. An unbound token is unaffected whether or not `proofs` is supplied. |
+   * | 10 | `typ` | (contract 1.68) a header `typ` that is present must be `at+jwt` (case-insensitive, `application/` allowed); `JWT`, `logout+jwt`, `secevent+jwt` and every `axiam-…+jwt` purpose type are refused. No `typ` is not refused by this rule. See `isAccessTokenTyp` (exported from `axiam-sdk/node`). |
+   * | 11 | `purpose` | (contract 1.68) a payload carrying a `purpose` member is refused, whatever its value. |
+   * | 12 | `kid` | (contract 1.68) a header with no `kid` is refused before any key lookup — there is no "only key in the set" fallback on this path. An unknown `kid` follows the §12.4 rule 2 re-fetch window. |
    *
    * **`proofs` and which entry point to call.** This method is the SDK's
    * documented §10 guard entry point (see {@link verifySignatureOnlyUnchecked}),
@@ -502,6 +505,17 @@ export function createJwksVerifier(jwksUri: string): JwksVerifier {
       proofs: PresentedProofs = {},
     ): Promise<AxiamClaims> {
       const { jwtVerify } = await import('jose');
+
+      // §10.1 rules 10 and 12 (contract 1.68; N14) — read from the header
+      // BEFORE any key lookup. Rule 12: a token with no `kid` is refused here,
+      // because jose's remote key set would otherwise select "the only key in
+      // the set" for it — and AXIAM's purpose tokens (MFA challenge, MFA setup,
+      // WebAuthn state) and its logout token all carry no `kid` while being
+      // signed with the access-token key. Rule 10: a present `typ` must be
+      // `at+jwt`. Both are access-token-path rules only; `verifyIdToken` below
+      // and the logout-token path apply their own.
+      assertAccessTokenHeader(token);
+
       const jwks = await getJwks();
       // §10.1 rule 1: explicit algorithm allowlist — never trust the token's
       // own `alg` header; defense against algorithm-confusion attacks
@@ -542,6 +556,12 @@ export function createJwksVerifier(jwksUri: string): JwksVerifier {
       // "Nothing to compare against, so nothing to check" is the SEC-080
       // defect, not a pass.
       assertTenantClaim(payload.tenant_id, expectations.expectedTenantId);
+
+      // §10.1 rule 11 (contract 1.68; N14): a claim set carrying `purpose` is
+      // a purpose token, never an access token — whatever its value (`null`
+      // included) and whatever `typ` said. Read off the verified payload
+      // itself, not a claims model that might drop unknown members.
+      assertNoPurposeClaim(payload);
 
       const claims = payload as unknown as AxiamClaims;
 
@@ -614,6 +634,71 @@ export function createJwksVerifier(jwksUri: string): JwksVerifier {
       return checkIdTokenClaims(claims, { ...expectations, clockSkewSec: skew });
     },
   };
+}
+
+/**
+ * CONTRACT.md §10.1 rules 10 and 12 (contract 1.68; N14) — the header half of
+ * "this token is an access token": the JOSE header MUST carry a non-empty
+ * `kid` (no single-key fallback), and a `typ` that is present MUST satisfy
+ * {@link isAccessTokenTyp}.
+ *
+ * Exported so the §10 guard (`authenticateRequest`) re-asserts it on its own
+ * side, as it does rule 4, without trusting a caller-supplied {@link Verifier}
+ * to have applied it. Decodes the header without verifying anything else.
+ *
+ * @throws AuthError when the token is not a three-segment JWS with a JSON
+ * header, carries no `kid`, or carries a `typ` other than `at+jwt`.
+ */
+export function assertAccessTokenHeader(token: string): void {
+  let header: { kid?: unknown; typ?: unknown };
+  try {
+    const segments = token.split('.');
+    if (segments.length !== 3) {
+      throw new Error('not three segments');
+    }
+    const parsed: unknown = JSON.parse(Buffer.from(segments[0], 'base64url').toString('utf8'));
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      throw new Error('header is not an object');
+    }
+    header = parsed as { kid?: unknown; typ?: unknown };
+  } catch {
+    throw new AuthError('access token is not a well-formed JWS');
+  }
+  if (typeof header.kid !== 'string' || header.kid.length === 0) {
+    throw new AuthError('access token carries no kid header (CONTRACT.md §10.1 rule 12)');
+  }
+  if (header.typ !== undefined && !isAccessTokenTyp(header.typ)) {
+    throw new AuthError('token typ is not at+jwt: not an access token (CONTRACT.md §10.1 rule 10)');
+  }
+}
+
+/**
+ * CONTRACT.md §10.1 rule 11 (contract 1.68; N14): a claim set carrying a
+ * `purpose` member is a purpose token (MFA challenge, MFA setup, WebAuthn
+ * state), never an access token — whatever the value, `null` included, and
+ * whatever `typ` said. Pass the verified payload itself, not a claims model
+ * that may drop unknown members.
+ *
+ * @throws AuthError when `payload` has an own `purpose` member.
+ */
+export function assertNoPurposeClaim(payload: object): void {
+  if (Object.prototype.hasOwnProperty.call(payload, 'purpose')) {
+    throw new AuthError('token carries a purpose claim: not an access token (CONTRACT.md §10.1 rule 11)');
+  }
+}
+
+/**
+ * CONTRACT.md §10.1 rule 10 (contract 1.68): whether a JOSE `typ` names an
+ * access token — `at+jwt` (RFC 9068 §2.1), compared ASCII case-insensitively,
+ * with or without the `application/` media-type prefix (RFC 7515 §4.1.9),
+ * exactly as the server compares it. A non-string `typ` is not one.
+ */
+export function isAccessTokenTyp(typ: unknown): boolean {
+  if (typeof typ !== 'string') {
+    return false;
+  }
+  const lower = typ.toLowerCase();
+  return lower === 'at+jwt' || lower === 'application/at+jwt';
 }
 
 /**

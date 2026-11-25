@@ -23,6 +23,7 @@ import {
   assertAuthzClient,
   evaluateAccess,
   hasAnyRole,
+  hasAnyScope,
   ResourceResolutionError,
   type AuthzVerifiableSession,
 } from '../middleware/authzCore.js';
@@ -31,6 +32,7 @@ import {
   AXIAM_REQUIRE_ACCESS_METADATA,
   AXIAM_REQUIRE_AUTH_METADATA,
   AXIAM_REQUIRE_ROLE_METADATA,
+  AXIAM_REQUIRE_SCOPE_METADATA,
 } from './metadata.js';
 import type { NestResourceSpec, RequireAccessMetadata } from './decorators.js';
 
@@ -107,12 +109,13 @@ export class AxiamGuard implements CanActivate {
     const targets = [context.getHandler(), context.getClass()];
     const requireAuth = this.reflector.getAllAndOverride<boolean>(AXIAM_REQUIRE_AUTH_METADATA, targets);
     const requireRoles = this.reflector.getAllAndOverride<string[]>(AXIAM_REQUIRE_ROLE_METADATA, targets);
+    const requireScopes = this.reflector.getAllAndOverride<string[]>(AXIAM_REQUIRE_SCOPE_METADATA, targets);
     const requireAccessMeta = this.reflector.getAllAndOverride<RequireAccessMetadata>(
       AXIAM_REQUIRE_ACCESS_METADATA,
       targets,
     );
 
-    if (!requireAuth && !requireRoles && !requireAccessMeta) {
+    if (!requireAuth && !requireRoles && !requireScopes && !requireAccessMeta) {
       return true;
     }
 
@@ -127,6 +130,10 @@ export class AxiamGuard implements CanActivate {
 
     if (requireRoles && !hasAnyRole(axiamUser.roles, requireRoles)) {
       throw new ForbiddenException({ error: 'authorization_denied', message: 'missing required role' });
+    }
+
+    if (requireScopes && !hasAnyScope(axiamUser.scopes, requireScopes)) {
+      throw new ForbiddenException({ error: 'authorization_denied', message: 'missing required scope' });
     }
 
     if (requireAccessMeta) {

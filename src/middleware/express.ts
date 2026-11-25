@@ -12,6 +12,7 @@ import {
   authzUnavailableBody,
   evaluateAccess,
   hasAnyRole,
+  hasAnyScope,
   invalidRequestBody,
   missingAuthBody,
   resolveResourceId,
@@ -20,7 +21,13 @@ import {
   type RequireAccessOptions,
   type ResourceSpec,
 } from './authzCore.js';
-import { CSRF_HEADER_NAME, extractCredential, isCsrfValid, isSafeMethod } from './cookieHeader.js';
+import {
+  CSRF_HEADER_NAME,
+  extractCredential,
+  isCsrfValid,
+  isSafeMethod,
+  parseCookieHeader,
+} from './cookieHeader.js';
 import {
   challengeFor401,
   challengeFor403,
@@ -29,7 +36,9 @@ import {
 } from './mcpCore.js';
 import {
   beginOidcLogin,
+  clearBindingCookie,
   completeOidcLogin,
+  oidcBindingCookieName,
   type OidcLoginOptions,
   type OidcLoginOutcome,
 } from './oidcLoginCore.js';
@@ -248,11 +257,21 @@ export function requireAccess(
 }
 
 /**
- * `requireRole(session, ...roles)` (CONTRACT.md §11.1, MAY) — a local
- * (no server round-trip) check that the authenticated identity's `roles`
- * (from `req.axiamUser`, itself derived from the verified token's `scope`
- * claim) contain at least one of `roles`. Cheaper but coarser than
- * `requireAccess`; NOT a substitute for a resource-level check.
+ * `requireRole(session, ...roles)` (CONTRACT.md §11.1, MAY; §11.2 rule 11) —
+ * a local (no server round-trip) check that the verified token's **`roles`
+ * claim** (`req.axiamUser.roles`) contains at least one of `roles`, by exact,
+ * case-sensitive equality. Cheaper but coarser than `requireAccess`; NOT a
+ * substitute for a resource-level check.
+ *
+ * **Request the `roles` scope (contract 1.68).** The server puts a `roles`
+ * claim — the subject's global role names in the tenant — in an access token
+ * only when the client requested, and is registered for, the `roles` scope.
+ * Without it the token has no `roles` claim and every `requireRole` answers
+ * 403: the check fails closed and never reads `scope`. Through 1.3.x this
+ * helper matched OAuth2 scopes (N15); a route that relied on that should use
+ * {@link requireScope}. The claim is a snapshot taken when the token was
+ * minted (stale for at most one access-token lifetime); `requireAccess`
+ * evaluates live and stays the authoritative check.
  *
  * `session` is taken first for signature parity with
  * `requireAuth`/`requireAccess` (every §11 helper does). The role check itself
@@ -285,12 +304,51 @@ export function requireRole(session: VerifiableSession, ...roles: string[]): Req
   };
 }
 
+/**
+ * `requireScope(session, ...scopes)` (CONTRACT.md §11.1, contract 1.68; §11.2
+ * rule 11 (d)) — a local (no server round-trip) check that the verified
+ * token's `scope` claim (`req.axiamUser.scopes`) contains at least one of
+ * `scopes`, each compared as a whole entry by exact, case-sensitive equality.
+ * A route that needs several stacks the helper. 401 when no identity is
+ * present (mount `axiamMiddleware`/`requireAuth` first), 403 on failure and
+ * when the token has no `scope` claim. A scope says what the *client* was
+ * granted, not what the user holds — use {@link requireRole} or
+ * `requireAccess` for that.
+ */
+export function requireScope(session: VerifiableSession, ...scopes: string[]): RequestHandler {
+  const challenges = mcpGuardChallenges(session, 'requireScope');
+
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const axiamUser = (req as AxiamRequest).axiamUser;
+    if (!axiamUser) {
+      if (challenges) {
+        res.setHeader(
+          'WWW-Authenticate',
+          challengeFor401(challenges, req.headers.cookie, req.headers.authorization),
+        );
+      }
+      res.status(401).json(missingAuthBody());
+      return;
+    }
+    if (!hasAnyScope(axiamUser.scopes, scopes)) {
+      res.status(403).json(authzDeniedBodyShared('missing required scope'));
+      return;
+    }
+    next();
+  };
+}
+
 // ---------------------------------------------------------------------------
 // "Login with AXIAM" route handlers (CONTRACT.md §12)
 // ---------------------------------------------------------------------------
 
 /** Apply an {@link OidcLoginOutcome} to an Express response. */
 function sendOidcOutcome(res: Response, outcome: OidcLoginOutcome): void {
+  // §12.8 rule 1: the binding cookie is set by the login and cleared by every
+  // callback response; the core decides the value, the adapter only sends it.
+  if (outcome.setCookie !== undefined) {
+    res.append('Set-Cookie', outcome.setCookie);
+  }
   if (outcome.kind === 'redirect') {
     res.redirect(outcome.url);
     return;
@@ -315,15 +373,28 @@ function sendOidcOutcome(res: Response, outcome: OidcLoginOutcome): void {
  * (`oidcLoginPlugin`) also uses — so the two frameworks cannot drift on flow
  * semantics or error mapping.
  *
+ * **Browser binding (CONTRACT.md §12.8, contract 1.68).** The `login` handler
+ * sets the `__Host-axiam_oidc_bind` cookie (`axiam_oidc_bind` on a plain-HTTP
+ * loopback `redirectUri`) and the `callback` handler completes the sign-in only
+ * for a request presenting that same cookie, so a callback link replayed into
+ * another browser — login CSRF — answers the uniform 401 without exchanging the
+ * code or calling `onSuccess`. Every callback response clears the cookie. Two
+ * sign-ins started at once in one browser: the later one wins and the earlier
+ * callback is refused. The routes must be served over HTTPS (or plain HTTP on
+ * loopback in development) for the browser to keep the cookie.
+ *
  * The `login` handler reads an optional `?returnTo=` query parameter and
- * stores it with the login state, so the callback can send the user back where
- * they started. **Validate or allowlist that value in your own application if
- * you accept it from user input** — an unchecked `returnTo` is an open-redirect
- * vector, and the SDK cannot know which destinations your app considers safe.
+ * stores it with the login state **only when it is a same-origin relative
+ * path** (one leading `/`, not `//` or `/\`, no backslash or control
+ * character); the callback checks it again before redirecting. Anything else —
+ * an absolute URL, a scheme-relative `//host` — is dropped, and the callback
+ * falls back to `successRedirect` or the JSON summary. Widen the rule, for
+ * example to an allowlist of your other origins, with `allowReturnTo`.
  *
  * Establishing your application's own session is the `onSuccess` hook's job:
- * the SDK validates the login and hands you the token set, but what a session
- * means (a signed cookie, a database row, a JWT of your own) is your decision.
+ * the SDK validates the login and hands you the token set, the consumed entry
+ * and the Express `Request` that completed it, but what a session means (a
+ * signed cookie, a database row, a JWT of your own) is your decision.
  *
  * @example
  * ```ts
@@ -334,14 +405,14 @@ function sendOidcOutcome(res: Response, outcome: OidcLoginOutcome): void {
  *   store,
  *   redirectUri: 'https://app.example.com/auth/callback',
  *   scope: 'openid profile email',
- *   onSuccess: (tokens) => { myAppSession.establish(tokens.idClaims!.sub); },
+ *   onSuccess: (tokens, _entry, req) => { myAppSession.establish(req, tokens.idClaims!.sub); },
  * });
  *
  * app.get('/auth/login', login);
  * app.get('/auth/callback', callback);
  * ```
  */
-export function oidcLoginHandlers(options: OidcLoginOptions): {
+export function oidcLoginHandlers(options: OidcLoginOptions<Request>): {
   /** `GET` handler that redirects the browser to the AXIAM authorization endpoint. */
   login: RequestHandler;
   /** `GET` handler for the redirect URI: consumes `state`, exchanges `code`, validates the ID token. */
@@ -352,19 +423,36 @@ export function oidcLoginHandlers(options: OidcLoginOptions): {
     sendOidcOutcome(res, await beginOidcLogin(options, returnTo));
   };
 
+  // §12.8 rule 1 (b): the callback reads the one name the login set.
+  const bindingCookieName = oidcBindingCookieName(options.redirectUri);
+
   const callback: RequestHandler = async (req: Request, res: Response): Promise<void> => {
-    const query = req.query as Record<string, unknown>;
-    sendOidcOutcome(
-      res,
-      await completeOidcLogin(options, {
-        ...(typeof query.state === 'string' ? { state: query.state } : {}),
-        ...(typeof query.code === 'string' ? { code: query.code } : {}),
-        ...(typeof query.error === 'string' ? { error: query.error } : {}),
-        ...(typeof query.error_description === 'string'
-          ? { error_description: query.error_description }
-          : {}),
-      }),
-    );
+    let outcome: OidcLoginOutcome;
+    try {
+      const query = req.query as Record<string, unknown>;
+      const bindingCookie = parseCookieHeader(req.headers.cookie)[bindingCookieName];
+      outcome = await completeOidcLogin(
+        options,
+        {
+          ...(typeof query.state === 'string' ? { state: query.state } : {}),
+          ...(typeof query.code === 'string' ? { code: query.code } : {}),
+          ...(typeof query.error === 'string' ? { error: query.error } : {}),
+          ...(typeof query.error_description === 'string'
+            ? { error_description: query.error_description }
+            : {}),
+        },
+        { request: req, ...(bindingCookie !== undefined ? { bindingCookie } : {}) },
+      );
+    } catch (err) {
+      // §12.8 rule 1 (d), "and any other error": the store or onSuccess threw.
+      // The error response Express builds from `next(err)` keeps this header,
+      // and the application's error handler still receives the error itself.
+      if (!res.headersSent) {
+        res.append('Set-Cookie', clearBindingCookie(options.redirectUri));
+      }
+      throw err;
+    }
+    sendOidcOutcome(res, outcome);
   };
 
   return { login, callback };

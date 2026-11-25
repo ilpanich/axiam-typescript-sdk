@@ -10,6 +10,7 @@ import {
   authzUnavailableBody,
   evaluateAccess,
   hasAnyRole,
+  hasAnyScope,
   invalidRequestBody,
   missingAuthBody,
   resolveResourceId,
@@ -18,7 +19,13 @@ import {
   type RequireAccessOptions,
   type ResourceSpec,
 } from './authzCore.js';
-import { CSRF_HEADER_NAME, extractCredential, isCsrfValid, isSafeMethod } from './cookieHeader.js';
+import {
+  CSRF_HEADER_NAME,
+  extractCredential,
+  isCsrfValid,
+  isSafeMethod,
+  parseCookieHeader,
+} from './cookieHeader.js';
 import {
   challengeFor401,
   challengeFor403,
@@ -27,7 +34,9 @@ import {
 } from './mcpCore.js';
 import {
   beginOidcLogin,
+  clearBindingCookie,
   completeOidcLogin,
+  oidcBindingCookieName,
   type OidcLoginOptions,
   type OidcLoginOutcome,
 } from './oidcLoginCore.js';
@@ -261,7 +270,10 @@ export function requireAccessHook(
 /**
  * `requireRoleHook(session, ...roles)` (CONTRACT.md §11.1, MAY) — the
  * Fastify `preHandler` counterpart to `requireRole`; see that function's
- * doc for the full semantics (local-only check, no server round-trip).
+ * doc for the full semantics (local-only check, no server round-trip). It
+ * reads only the token's `roles` claim and fails closed (403) when the token
+ * has none — the application must request the `roles` scope (contract 1.68,
+ * §11.2 rule 11); it never reads `scope`, for which see `requireScopeHook`.
  * `session` is taken first for signature parity with
  * `requireAuthHook`/`requireAccessHook`; the role check reads nothing from it,
  * and §28.5 is the only thing that does.
@@ -291,12 +303,47 @@ export function requireRoleHook(session: VerifiableSession, ...roles: string[]):
   };
 }
 
+/**
+ * `requireScopeHook(session, ...scopes)` (CONTRACT.md §11.1, contract 1.68) —
+ * the Fastify `preHandler` counterpart to `requireScope`: a local check that
+ * the verified token's `scope` claim contains at least one of `scopes` (whole
+ * entries, exact and case-sensitive). 401 without an identity, 403 on failure
+ * and when the token has no `scope` claim.
+ */
+export function requireScopeHook(session: VerifiableSession, ...scopes: string[]): PreHandlerHook {
+  const challenges = mcpGuardChallenges(session, 'requireScopeHook');
+
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const axiamUser = (request as AxiamFastifyRequest).axiamUser;
+    if (!axiamUser) {
+      if (challenges) {
+        void reply.header(
+          'WWW-Authenticate',
+          challengeFor401(challenges, request.headers.cookie, request.headers.authorization),
+        );
+      }
+      await reply.code(401).send(missingAuthBody());
+      return;
+    }
+    if (!hasAnyScope(axiamUser.scopes, scopes)) {
+      await reply.code(403).send(authzDeniedBodyShared('missing required scope'));
+      return;
+    }
+  };
+}
+
 // ---------------------------------------------------------------------------
 // "Login with AXIAM" routes (CONTRACT.md §12)
 // ---------------------------------------------------------------------------
 
 /** Apply an {@link OidcLoginOutcome} to a Fastify reply. */
 async function sendOidcOutcome(reply: FastifyReply, outcome: OidcLoginOutcome): Promise<void> {
+  // §12.8 rule 1: the binding cookie is set by the login and cleared by every
+  // callback response; the core decides the value, the adapter only sends it.
+  // Fastify accumulates repeated `set-cookie` headers rather than replacing them.
+  if (outcome.setCookie !== undefined) {
+    void reply.header('set-cookie', outcome.setCookie);
+  }
   if (outcome.kind === 'redirect') {
     // 302 + Location, written directly rather than via @fastify/redirect — the
     // SDK adds no new dependency for a two-line response.
@@ -328,8 +375,10 @@ export interface OidcLoginRoutePaths {
  * The Fastify counterpart of Express's `oidcLoginHandlers`, built on the same
  * {@link beginOidcLogin} / {@link completeOidcLogin} core, so the two
  * frameworks cannot drift on flow semantics or error mapping. See
- * `oidcLoginHandlers` for the `returnTo` open-redirect caveat and the
- * `onSuccess` session-establishment contract, which apply identically here.
+ * `oidcLoginHandlers` for the browser binding (`__Host-axiam_oidc_bind`,
+ * CONTRACT.md §12.8), the same-origin `returnTo` rule and `allowReturnTo`, and
+ * the `onSuccess` session-establishment contract, which apply identically
+ * here — `onSuccess` receives the `FastifyRequest` that completed the sign-in.
  *
  * Unlike `axiamPlugin` this plugin is deliberately **encapsulated** (no
  * `skip-override` marker): it registers routes rather than a hook, so there is
@@ -341,15 +390,17 @@ export interface OidcLoginRoutePaths {
  *   client: oidc,
  *   store: new MemoryOidcStateStore(),
  *   redirectUri: 'https://app.example.com/auth/callback',
- *   onSuccess: (tokens) => { myAppSession.establish(tokens.idClaims!.sub); },
+ *   onSuccess: (tokens, _entry, request) => { myAppSession.establish(request, tokens.idClaims!.sub); },
  * }));
  * ```
  */
 export const oidcLoginPlugin: (
-  options: OidcLoginOptions & OidcLoginRoutePaths,
+  options: OidcLoginOptions<FastifyRequest> & OidcLoginRoutePaths,
 ) => FastifyPluginAsync = (options) => {
   const loginPath = options.loginPath ?? '/auth/login';
   const callbackPath = options.callbackPath ?? '/auth/callback';
+  // §12.8 rule 1 (b): the callback reads the one name the login set.
+  const bindingCookieName = oidcBindingCookieName(options.redirectUri);
 
   const plugin: FastifyPluginAsync = async (fastify) => {
     fastify.get(loginPath, async (request: FastifyRequest, reply: FastifyReply) => {
@@ -359,18 +410,32 @@ export const oidcLoginPlugin: (
     });
 
     fastify.get(callbackPath, async (request: FastifyRequest, reply: FastifyReply) => {
-      const query = request.query as Record<string, unknown>;
-      await sendOidcOutcome(
-        reply,
-        await completeOidcLogin(options, {
-          ...(typeof query.state === 'string' ? { state: query.state } : {}),
-          ...(typeof query.code === 'string' ? { code: query.code } : {}),
-          ...(typeof query.error === 'string' ? { error: query.error } : {}),
-          ...(typeof query.error_description === 'string'
-            ? { error_description: query.error_description }
-            : {}),
-        }),
-      );
+      let outcome: OidcLoginOutcome;
+      try {
+        const query = request.query as Record<string, unknown>;
+        const bindingCookie = parseCookieHeader(request.headers.cookie)[bindingCookieName];
+        outcome = await completeOidcLogin(
+          options,
+          {
+            ...(typeof query.state === 'string' ? { state: query.state } : {}),
+            ...(typeof query.code === 'string' ? { code: query.code } : {}),
+            ...(typeof query.error === 'string' ? { error: query.error } : {}),
+            ...(typeof query.error_description === 'string'
+              ? { error_description: query.error_description }
+              : {}),
+          },
+          { request, ...(bindingCookie !== undefined ? { bindingCookie } : {}) },
+        );
+      } catch (err) {
+        // §12.8 rule 1 (d), "and any other error": the store or onSuccess threw.
+        // Fastify's error handler keeps headers already set on the reply, and
+        // the application's setErrorHandler still receives the error itself.
+        if (!reply.sent) {
+          void reply.header('set-cookie', clearBindingCookie(options.redirectUri));
+        }
+        throw err;
+      }
+      await sendOidcOutcome(reply, outcome);
     });
   };
 
