@@ -7,11 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.4.0] - Unreleased
-
-Security release for the 2026-11-14 audit, Wave 3 (SA-20). **Minor version: three behaviour
-changes for integrators** — C7, C6 and N15 below — each with a migration note.
-
 ### Changed (behaviour — read before upgrading)
 
 - **"Login with AXIAM" binds the callback to the browser that started it (C7, CONTRACT.md
@@ -119,6 +114,9 @@ changes for integrators** — C7, C6 and N15 below — each with a migration not
   `exp`/`iat` checks. Finite values are still clamped into `[0, 60]`.
 - `SharedSession.isForeignHost` compares the origin, not the host, so a same-host URL on another
   scheme no longer receives the tenant header or the CSRF token.
+### Changed
+
+- Monthly dependency refresh (2026-11): runtime floors `amqplib` ^2.4.0 and `jose` ^6.2.18; dev tooling `vitest` / `@vitest/coverage-v8` ^5.1.1, `msw` ^3.0.7, `ts-proto` ^2.23.5, `@nestjs/common` / `@nestjs/core` ^12.6.0. Node support unchanged (22 floor, 26 newest); TypeScript stays on 6.0.x until typedoc accepts 7.x.
 
 ## [1.3.1] - 2026-11-11
 
