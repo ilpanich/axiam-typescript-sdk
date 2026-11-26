@@ -190,26 +190,42 @@ without the clearing `Set-Cookie` (a rule 1 (d) miss); a character in U+0080–U
 raw latin1 byte the browser cannot read as UTF-8, and lands on the wrong path. A destination an
 integrator's `allowReturnTo` admitted may even hold CR/LF, which must never reach a header.
 
-**What the `Location` value must be** (the reference algorithm is `encodeurl`, in
-`encodeRedirectLocation`, `src/middleware/oidcLoginCore.ts`):
+**What the `Location` value must be.** These four rules are **normative**; they are the
+specification, and a framework's redirect helper or a library encoder (`encodeurl`,
+`encodeURI`, `Uri.EscapeUriString`, `URLEncoder`, …) is acceptable only where it gives the same
+result. The reference implementation is `encodeRedirectLocation`, `src/middleware/oidcLoginCore.ts`.
 
-1. Every character outside the URL-safe set is UTF-8 percent-encoded with upper-case hex digits:
-   space becomes `%20`, `é` `%C3%A9`, `€` `%E2%82%AC`, CR `%0D`, LF `%0A`, `"` `%22`, `<` `%3C`,
-   `>` `%3E`, `` ` `` `%60`, `{` `%7B`, `}` `%7D`, DEL `%7F`, every other control character
-   `%XX`. The URL-safe set that is left as it is: `A-Z a-z 0-9` and
-   `! # $ % & ' ( ) * + , - . / : ; = ? @ [ \ ] ^ _ | ~` (a `\` cannot arrive here under the
-   default rule; a port may encode it as `%5C`).
-2. A `%` that already starts a well-formed escape (`%` and two hex digits) is **kept**, so a value
-   that is already encoded is not encoded twice (`/a%20b` stays `/a%20b`); any other `%` becomes
-   `%25`.
-3. In a language whose strings are UTF-16, a lone surrogate is replaced by U+FFFD (`%EF%BF%BD`)
-   before encoding; it must not make the encoder throw.
-4. The result is pure ASCII: no byte below `0x21`, none above `0x7E`, so no space, CR or LF.
-   A CR/LF in the destination therefore cannot split the header or inject another one.
+1. **Characters.** Every character outside the URL-safe set is UTF-8 percent-encoded with
+   upper-case hex digits: space becomes `%20`, `é` `%C3%A9`, `€` `%E2%82%AC`, CR `%0D`, LF `%0A`,
+   `"` `%22`, `<` `%3C`, `>` `%3E`, `` ` `` `%60`, `{` `%7B`, `}` `%7D`, DEL `%7F`, every other
+   control character `%XX`. The URL-safe set, which MUST be left as it is, is exactly:
+   `A-Z a-z 0-9` and `! # $ % & ' ( ) * + , - . / : ; = ? @ [ \ ] ^ _ | ~`. A backslash is in the
+   set and is kept as `\` (the default `returnTo` rule refuses one before it can get here; a value
+   an integrator's predicate admitted keeps it).
+2. **Existing escapes.** A `%` followed by two hex digits (either case) is a well-formed escape
+   and is **kept as it is**, so an encoded value is not encoded twice (`/a%20b` stays `/a%20b`,
+   `/%%41` becomes `/%25%41`). Any other `%` becomes `%25` (`/a%2` becomes `/a%252`).
+3. **Lone surrogates.** In a language whose strings are UTF-16, every lone (unpaired) surrogate,
+   however many are adjacent, is replaced by U+FFFD (encoded `%EF%BF%BD`) **before** encoding, and
+   the encoder MUST NOT throw on any input (`/\uD800\uD800` becomes `/%EF%BF%BD%EF%BF%BD`). A valid
+   pair is one character (`/😀` becomes `/%F0%9F%98%80`).
+4. **Result.** Pure ASCII: no byte below `0x21` and none above `0x7E`, so no space, CR or LF; a
+   CR/LF in the destination cannot split the header or inject another one.
+
+**Where `encodeurl` (Express's `res.redirect`) differs from these rules**, as observed with the
+`encodeurl` Express 5 ships: `/%%41` becomes `/%25%2541` (a well-formed escape is double-encoded,
+against rule 2); `/a%2` stays `/a%2` (a truncated escape is kept, against rule 2); and two adjacent
+lone surrogates (`/\uD800\uD800`) make it throw `URIError` (against rule 3). On every other row
+below it agrees with the rules. Both adapters here therefore
+run `encodeRedirectLocation` first, and `res.redirect`'s own pass then finds nothing to change. A
+port on a framework whose helper encodes must do the same, or show with the matrix below that the
+helper meets the four rules.
 
 Test it per adapter, against the real framework, not a response double (a double that records the
 `url` passed to a redirect helper hides this defect): `/a b` gives `/a%20b`; `/café` gives
-`/caf%C3%A9`; `/€` gives `/%E2%82%AC`; a lone surrogate gives `%EF%BF%BD`; `/a%20b` is unchanged;
+`/caf%C3%A9`; `/€` gives `/%E2%82%AC`; a lone surrogate gives `%EF%BF%BD`, and so do two adjacent
+ones (`/\uD800\uD800`, `/\uDC00\uDC00`) without an exception; `/a%20b` is unchanged; `/%%41` gives
+`/%25%41`; `/a%2` gives `/a%252`;
 a CR/LF value admitted through `allowReturnTo` gives `%0D%0A` and injects no header; a non-ASCII
 `success_redirect` is encoded too. Each of these answers `302`, with the binding cookie cleared and
 `onSuccess` called once.

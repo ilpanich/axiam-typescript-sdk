@@ -153,6 +153,11 @@ const ENCODED: Array<[string, string, string]> = [
   ['a character above latin1', '/€', '/%E2%82%AC'],
   ['a non-ASCII path with a query', '/日本?q=é', '/%E6%97%A5%E6%9C%AC?q=%C3%A9'],
   ['a lone surrogate', '/a\uD800b', '/a%EF%BF%BDb'],
+  ['two adjacent lone high surrogates', '/\uD800\uD800', '/%EF%BF%BD%EF%BF%BD'],
+  ['two adjacent lone low surrogates', '/\uDC00\uDC00', '/%EF%BF%BD%EF%BF%BD'],
+  ['a valid surrogate pair (an emoji)', '/\u{1F600}', '/%F0%9F%98%80'],
+  ['a % before a well-formed escape', '/%%41', '/%25%41'],
+  ['a truncated escape', '/a%2', '/a%252'],
   ['an existing percent-escape (not double-encoded)', '/a%20b?x=%E2%82%AC', '/a%20b?x=%E2%82%AC'],
   ['an already-safe path', '/dashboard?tab=1', '/dashboard?tab=1'],
 ];

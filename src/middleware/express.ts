@@ -37,6 +37,7 @@ import {
 import {
   beginOidcLogin,
   completeOidcLogin,
+  encodeRedirectLocation,
   oidcBindingClearCookie,
   oidcBindingCookieName,
   type OidcLoginOptions,
@@ -350,7 +351,9 @@ function sendOidcOutcome(res: Response, outcome: OidcLoginOutcome): void {
     res.append('Set-Cookie', outcome.setCookie);
   }
   if (outcome.kind === 'redirect') {
-    res.redirect(outcome.url);
+    // Encoded here by the rules of docs/login-glue-binding.md Decision 7; the
+    // framework helper's own encoding then finds nothing left to change.
+    res.redirect(encodeRedirectLocation(outcome.url));
     return;
   }
   if (outcome.kind === 'json') {

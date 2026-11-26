@@ -249,27 +249,29 @@ export function oidcBindingClearCookie(redirectUri: string): string {
 }
 
 /**
- * Percent-encode a redirect destination for use as a `Location` header value.
+ * Percent-encode a redirect destination for use as a `Location` header value,
+ * by the rules of docs/login-glue-binding.md Decision 7 (normative there):
  *
- * `res.redirect` in Express does this (it runs the URL through `encodeurl`);
- * `reply.header('location', ...)` in Fastify does not, and Node refuses a header
- * value holding a character outside latin1, which would turn a genuine sign-in
- * into a bare 500 that also loses the binding-clearing `Set-Cookie`. This is the
- * same algorithm: an existing, well-formed `%XX` escape is kept (no double
- * encoding), every other character outside the URL-safe set is encoded as UTF-8
- * (a space, a non-ASCII character, CR and LF included), and a lone surrogate,
- * which `encodeURI` would throw on, becomes U+FFFD. The result is pure ASCII.
+ * 1. every lone surrogate becomes U+FFFD, so the encoder never
+ *    throws, whatever the surrogates' arrangement;
+ * 2. every character outside the URL-safe set
+ *    `! # $ % & ' ( ) * + , - . / 0-9 : ; = ? @ A-Z [ \ ] ^ _ a-z | ~` is
+ *    UTF-8 percent-encoded with upper-case hex (space, CR, LF, non-ASCII, `"`,
+ *    `<`, `>`, `` ` ``, `{`, `}`, DEL, every control character);
+ * 3. a `%` that does not start a well-formed `%XX` escape becomes `%25`; one
+ *    that does is kept, so an encoded value is not encoded twice.
  *
- * @internal Exported for the Fastify adapter; the destination is encoded by the
- *   adapter, never by the application's hook (docs/login-glue-binding.md).
+ * The result is pure ASCII. Express's `res.redirect` (`encodeurl`) differs
+ * from rule 3 for `%%41` and a truncated `%2`, and from rule 1 for adjacent
+ * lone surrogates (it throws), so both adapters call this first.
+ *
+ * @internal Exported for the framework adapters; the destination is encoded by
+ *   the adapter, never by the application's hook.
  */
 export function encodeRedirectLocation(destination: string): string {
   return destination
-    .replace(/(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uD800-\uDBFF]([^\uDC00-\uDFFF]|$)/g, '$1\uFFFD$2')
-    .replace(
-      /(?:[^\x21\x23-\x3B\x3D\x3F-\x5F\x61-\x7A\x7C\x7E]|%(?:[^0-9A-Fa-f]|[0-9A-Fa-f][^0-9A-Fa-f]|$))+/g,
-      encodeURI,
-    );
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '\uFFFD')
+    .replace(/[^\x21\x23-\x3B\x3D\x3F-\x5F\x61-\x7A\x7C\x7E]+|%(?![0-9A-Fa-f]{2})/g, encodeURI);
 }
 
 /** SHA-256 (lower-case hex) of the ASCII bytes of the cookie value as set (§12.8 rule 1 (a)). */

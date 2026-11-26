@@ -1,5 +1,7 @@
-// Pins for axiam#882 (cross-SDK; TypeScript is a "pin" SDK): the event consumer
-// must verify a genuine server-signed message whatever its string content, and
+// Tests for axiam#882 (cross-SDK): the event consumer verifies over the received
+// bytes (the body with its trailing `hmac_signature` member removed), never a
+// re-serialization, and hands the handler the value parsed from those same
+// bytes. It must verify a genuine server-signed message whatever its string content, and
 // must never hand the handler a parse that differs from what was verified.
 //
 // The bodies below are written as literal text, the way the server's serde_json
@@ -54,7 +56,7 @@ async function run(content: Buffer) {
   return { channel, handler };
 }
 
-describe('axiam#882 pin — verification is over the received bytes', () => {
+describe('axiam#882 — verification is over the received bytes', () => {
   it.each([
     ['<, > and &', 'docs:a&b</\\"c\\">'],
     ['non-ASCII (raw UTF-8)', 'é€日本'],
@@ -85,6 +87,42 @@ describe('axiam#882 pin — verification is over the received bytes', () => {
     expect(handler.mock.calls[0][0].action).toBe(
       Array.from({ length: 0x20 }, (_, c) => String.fromCharCode(c)).join('') + '\x7f',
     );
+  });
+
+  it.each([
+    ['a float written 1.0', '{"x":1.0,"y":2.50}'],
+    ['integer-like keys in ascending-unsorted order', '{"10":"a","9":"b","1":"c"}'],
+    ['an integer above 2^53', '{"big":18446744073709551615}'],
+    ['an exponent form', '{"n":1e2,"m":1E+2}'],
+  ])('a genuine serde_json-shaped metadata holding %s verifies (received bytes, not a re-serialization)', async (_label, metadata) => {
+    const canonical = `{"action":"read","metadata":${metadata},${head('n-5')}}`;
+    const { channel, handler } = await run(wire(canonical));
+    expect(channel.nacked).toEqual([]);
+    expect(channel.acked).toBe(1);
+    expect(handler).toHaveBeenCalledTimes(1);
+    // What the handler gets is parsed from the verified bytes.
+    expect(handler.mock.calls[0][0]).toEqual(JSON.parse(canonical));
+  });
+
+  it('a body that writes characters as \\u escapes (where JSON.stringify writes them raw) verifies', async () => {
+    const canonical = `{"action":"caf\\u00e9 \\u20ac \\u003c\\u003e\\u0026",${head('n-6')}}`;
+    const { channel, handler } = await run(wire(canonical));
+    expect(channel.nacked).toEqual([]);
+    expect(handler.mock.calls[0][0].action).toBe('café € <>&');
+  });
+
+  it('a duplicate key nested in an object or array is nacked too', async () => {
+    const canonical = `{"action":"read","metadata":{"k":[{"a":1,"a":2}]},${head('n-7')}}`;
+    const { channel, handler } = await run(wire(canonical));
+    expect(handler).not.toHaveBeenCalled();
+    expect(channel.nacked).toEqual([{ allUpTo: false, requeue: false }]);
+  });
+
+  it('a duplicate key spelled two ways (\\u0061 and a) is nacked', async () => {
+    const canonical = `{"a":1,"\\u0061":2,${head('n-8')}}`;
+    const { channel, handler } = await run(wire(canonical));
+    expect(handler).not.toHaveBeenCalled();
+    expect(channel.nacked).toEqual([{ allUpTo: false, requeue: false }]);
   });
 
   it('a body with a duplicate key is nacked without requeue and the handler never runs', async () => {

@@ -3,7 +3,7 @@
 // The SDK owns the full ack/nack loop. Every delivery is HMAC-verified
 // (CONTRACT.md §8) BEFORE the caller-supplied handler is ever invoked. On
 // any verification failure (signature mismatch, missing signature in the
-// default strict mode, or a body that fails to parse as JSON) the delivery
+// default strict mode, or a body that is not one well-formed JSON object without duplicate keys) the delivery
 // is nacked WITHOUT requeue and a security event is emitted — the event
 // never contains the received/expected HMAC value or the signing key. Only
 // a verified delivery reaches the handler, and only then is it acked.
@@ -12,10 +12,10 @@
 // HMAC verifies, the delivery is ADDITIONALLY rejected (same nack-without-
 // requeue path) when `key_version < 2`, `issued_at` falls outside the
 // ±skew freshness window, or `nonce` has already been seen. Because this
-// module verifies by re-serializing the parsed body (minus
-// `hmac_signature`) in insertion order (Pitfall 5), `nonce`/`issued_at` are
-// already covered by the HMAC bytes with no canonicalization change — only
-// the three validation gates below are new.
+// module verifies over the received bytes (the body minus its trailing
+// `hmac_signature` member; axiam#882), `nonce`/`issued_at` are already
+// covered by the HMAC bytes with no canonicalization change — only the three
+// validation gates below are new.
 //
 // This is the TS port of the already-tested Rust `verify_and_dispatch`/
 // `consume` (the Rust SDK's src/amqp/consumer.rs).
@@ -174,6 +174,47 @@ export interface ConsumeOptions {
   tls?: AmqpTlsOptions;
 }
 
+/** `,"hmac_signature":"<value>"}` at the very end of the body, nothing after it. */
+const TRAILING_SIGNATURE = /,"hmac_signature":"([^"\\]*)"\}$/;
+
+/**
+ * Whether any JSON object in `text` (already known to be well-formed JSON)
+ * repeats a key. Keys are compared after unescaping, so `"a"` and `"\u0061"`
+ * are the same key.
+ */
+function hasDuplicateKey(text: string): boolean {
+  const stack: Array<Set<string> | null> = [];
+  let i = 0;
+  const n = text.length;
+  while (i < n) {
+    const c = text[i];
+    if (c === '"') {
+      let j = i + 1;
+      while (j < n && text[j] !== '"') {
+        j += text[j] === '\\' ? 2 : 1;
+      }
+      const raw = text.slice(i, j + 1);
+      i = j + 1;
+      const top = stack[stack.length - 1];
+      if (top !== undefined && top !== null) {
+        let k = i;
+        while (k < n && /\s/.test(text[k])) k += 1;
+        if (text[k] === ':') {
+          const key = JSON.parse(raw) as string;
+          if (top.has(key)) return true;
+          top.add(key);
+        }
+      }
+      continue;
+    }
+    if (c === '{') stack.push(new Set());
+    else if (c === '[') stack.push(null);
+    else if (c === '}' || c === ']') stack.pop();
+    i += 1;
+  }
+  return false;
+}
+
 /**
  * Verify a single delivery's HMAC signature (CONTRACT.md §8 steps a-g) and,
  * only on success, invoke `handler` with the parsed body (hmac_signature
@@ -194,11 +235,23 @@ export async function verifyAndDispatch(
 ): Promise<void> {
   const { logger, strict = true } = options;
 
-  let body: Record<string, unknown>;
+  // CONTRACT.md §8 / axiam#882: verify over the RECEIVED bytes — the body with
+  // its trailing `,"hmac_signature":"<hex>"}` member removed — never over a
+  // re-serialization, which disagrees with serde_json on floats (`1.0`),
+  // integer-like keys (reordered) and large integers. The handler is given the
+  // value parsed from those same verified bytes, so what is verified and what
+  // is delivered cannot differ.
+  const text = msg.content.toString('utf8');
+  let whole: unknown;
   try {
-    body = JSON.parse(msg.content.toString('utf8')) as Record<string, unknown>;
+    whole = JSON.parse(text);
   } catch {
-    logger?.warn('axiam_sdk.security', 'AMQP message body failed JSON parse; nacking without requeue', {
+    whole = undefined;
+  }
+  if (typeof whole !== 'object' || whole === null || Array.isArray(whole) || hasDuplicateKey(text)) {
+    // Not JSON, trailing content, not an object, or a duplicate key (which
+    // different parsers read differently): nothing is verified or delivered.
+    logger?.warn('axiam_sdk.security', 'AMQP message body is not one well-formed JSON object; nacking without requeue', {
       exchange: msg.fields.exchange,
       routingKey: msg.fields.routingKey,
     });
@@ -207,9 +260,25 @@ export async function verifyAndDispatch(
     return;
   }
 
-  const sig = typeof body.hmac_signature === 'string' ? body.hmac_signature : undefined;
-  delete body.hmac_signature;
-  const canonical = Buffer.from(JSON.stringify(body), 'utf8');
+  const wholeObject = whole as Record<string, unknown>;
+  const sig = typeof wholeObject.hmac_signature === 'string' ? wholeObject.hmac_signature : undefined;
+  let canonical: Buffer;
+  let body: Record<string, unknown>;
+  const trailing = TRAILING_SIGNATURE.exec(msg.content.toString('latin1'));
+  if (trailing !== null && trailing[1] === sig) {
+    // latin1 maps one byte to one unit and the member is ASCII, so the match
+    // index is a byte index.
+    canonical = Buffer.concat([msg.content.subarray(0, trailing.index), Buffer.from('}', 'ascii')]);
+    body = JSON.parse(canonical.toString('utf8')) as Record<string, unknown>;
+  } else {
+    // No signature member, or one that is not the last member (a producer that
+    // orders members differently): the object without the member is
+    // re-serialized in insertion order, as before. The handler still gets that
+    // same object.
+    body = { ...wholeObject };
+    delete body.hmac_signature;
+    canonical = Buffer.from(JSON.stringify(body), 'utf8');
+  }
 
   // Strict mode (default, CONTRACT.md §8.3): a missing signature is treated
   // as a verification failure, not a pass-through. A present signature is
@@ -241,9 +310,8 @@ export async function verifyAndDispatch(
   }
 
   // NEW-4 (CONTRACT.md §8 v2, hard cutover): only reached once the HMAC has
-  // verified. `body` was re-serialized in insertion order to compute
-  // `canonical` above, so `nonce`/`issued_at` are already inside the bytes
-  // that were just verified — these are the three ADDITIONAL validation
+  // verified. `canonical` above is the received bytes, so `nonce`/`issued_at`
+  // are already inside the bytes that were just verified — these are the three ADDITIONAL validation
   // gates (key_version, freshness, replay), not re-verification.
   const skewMs = options.skewMs ?? DEFAULT_REPLAY_SKEW_MS;
   const nonceStore = options.nonceStore ?? new InMemoryNonceStore();

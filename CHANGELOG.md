@@ -119,9 +119,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tests: a server-shaped logout token (header exactly `{alg, typ: logout+jwt, kid}`, a two-key
   JWKS, the signing key second), the kid-less and unknown-`kid` refusals, and rules 10 and 11 off
   the logout and ID-token paths (`test/node/logoutServerShaped.test.ts`); the discard event on all
-  five reasons (`test/amqp/authzDiscardEvent.test.ts`); pins that the event consumer verifies a
-  genuine message holding `<`, `>`, `&`, non-ASCII and control-character escapes, and nacks a
-  duplicate key or trailing content without running the handler
+  five reasons (`test/amqp/authzDiscardEvent.test.ts`); the event consumer over received bytes
   (`test/amqp/consumerReceivedBytes.test.ts`, axiam#882).
 
 ### Removed
@@ -144,7 +142,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `writeHead` throw after `onSuccess` had run, answering a bare `500` without the clearing
   `Set-Cookie`; a latin1 character went out as a raw byte. The adapter now encodes as Express's
   `res.redirect` does (`encodeurl`), for `returnTo`, `successRedirect` and a CR/LF an
-  `allowReturnTo` predicate admitted.
+  `allowReturnTo` predicate admitted. Both adapters run the same
+  `encodeRedirectLocation` first, because `encodeurl` double-encodes `/%%41`, keeps a truncated
+  `%2` and throws on two adjacent lone surrogates.
+- **The AMQP event consumer verifies over the received bytes** (`verifyAndDispatch`, `consume`;
+  axiam#882). It re-serialized the parsed body, so a genuine serde_json body holding a float
+  `1.0`, integer-like keys or an integer above 2^53 was nacked. It now removes the trailing
+  `hmac_signature` member from the received bytes, verifies those, and hands the handler the value
+  parsed from the same bytes. A duplicate key anywhere, trailing content, or a body that is not
+  one JSON object is nacked without requeue, explicitly. A body whose signature member is not the
+  last member keeps the previous insertion-order re-serialization.
 - `MemoryOidcStateStore` is bounded: at most `OIDC_STATE_MAX_ENTRIES` (10 000) entries by
   default, oldest evicted first (new optional second constructor argument).
 - A non-finite ID-token clock skew (`NaN`, `±Infinity`) is refused with a `TypeError` —

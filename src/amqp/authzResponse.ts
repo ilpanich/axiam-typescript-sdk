@@ -194,7 +194,8 @@ export class AuthzResponseVerifier {
    *
    * @param delivery where the body was read from; the security event names
    *   its exchange and routing key (§8 rule 4). {@link settle} passes it.
-   *   Without it the event reports `''` and `options.replyQueue`.
+   *   Without it the event reports `''` and `options.replyQueue` (`''` when
+   *   that is not set either).
    */
   verify(body: Buffer, delivery?: AuthzResponseDelivery): AuthzResponseVerdict {
     // Byte offsets: latin1 maps each byte to one UTF-16 unit, and the
@@ -314,11 +315,13 @@ export class AuthzResponseVerifier {
    * from the body, no signature value, no nonce.
    */
   #eventContext(reason: AuthzResponseRejection, delivery: AuthzResponseDelivery | undefined): Record<string, unknown> {
-    const routingKey = delivery !== undefined ? delivery.routingKey : this.#replyQueue;
+    // Always five members (A.2); `''` when neither the delivery nor the
+    // verifier's `replyQueue` says where the body was read from.
+    const routingKey = delivery !== undefined ? delivery.routingKey : (this.#replyQueue ?? '');
     return {
       timestamp: new Date().toISOString(),
       exchange: delivery !== undefined ? delivery.exchange : '',
-      ...(routingKey !== undefined ? { routingKey } : {}),
+      routingKey,
       tenantId: this.#tenantConfigured,
       reason,
     };

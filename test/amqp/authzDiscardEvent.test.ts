@@ -178,3 +178,14 @@ describe('§8 discard event (A.2) — a verifier used without a delivery', () =>
     expect(context).toMatchObject({ exchange: '', routingKey: REPLY_QUEUE, tenantId: TENANT, reason: 'malformed' });
   });
 });
+
+describe('§8 discard event (A.2) — a verifier with neither a delivery nor a reply queue', () => {
+  it('still carries all five members, routingKey being the empty string', () => {
+    const logger = { warn: vi.fn() };
+    const v = new AuthzResponseVerifier({ subkey: new Sensitive(subkey(TENANT)), tenantId: TENANT, logger });
+    v.verify(Buffer.from('not json', 'utf8'));
+    const [, , context] = logger.warn.mock.calls[0] as [string, string, Event];
+    expect(Object.keys(context).sort()).toEqual(['exchange', 'reason', 'routingKey', 'tenantId', 'timestamp']);
+    expect(context.routingKey).toBe('');
+  });
+});
