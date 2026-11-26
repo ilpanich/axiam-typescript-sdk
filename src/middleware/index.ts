@@ -29,6 +29,7 @@ export {
   beginOidcLogin,
   completeOidcLogin,
   isSafeReturnTo,
+  oidcBindingClearCookie,
   oidcBindingCookieName,
   OIDC_BINDING_COOKIE_NAME,
   OIDC_BINDING_COOKIE_NAME_LOOPBACK,

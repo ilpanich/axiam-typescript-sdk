@@ -29,7 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `onSuccess` throws, both adapters append the clearing `Set-Cookie` before re-throwing, so the
   framework's error response carries it and the application's error handler still receives the
   original error. A direct caller of `completeOidcLogin` must do the same, because such errors
-  propagate unchanged.
+  propagate unchanged, with the exact `Set-Cookie` value the new public `oidcBindingClearCookie(redirectUri)`
+  returns (a hand-built one is ignored by the browser unless it repeats the name, `Path=/` and
+  `Secure` exactly).
 - **`onSuccess` receives the framework request** as a third argument (§12.8 rule 2), so a session
   can be created on the request that completed the sign-in. Existing two-argument callbacks keep
   working. `OidcLoginOptions` gains a type parameter for it (default `unknown`).
@@ -71,11 +73,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   broker-named queue (an empty or `axiam.`-prefixed name is refused), and resolves only with an
   answer that verifies under the tenant subkey and matches that request; forged or mismatched
   answers are nacked without requeue and the check keeps waiting until `timeoutMs` (default 10 s,
-  then `NetworkError`). `close()` releases every waiter with `AuthzRequesterClosedError`. Unsigned
-  answers are refused unless `acceptUnsignedResponses` is set (one rolling upgrade against a
-  pre-1.68 server). Also exported: `buildAuthzRequest`, `AUTHZ_REQUEST_QUEUE`,
+  then `NetworkError`). `close()` releases every waiter with `AuthzRequesterClosedError`. An
+  unsigned answer is discarded and logged; there is no option to accept one (see "Removed").
+  The requester requires an AXIAM server of 1.68 or later. Also exported: `buildAuthzRequest`, `AUTHZ_REQUEST_QUEUE`,
   `DEFAULT_AUTHZ_TIMEOUT_MS`. `connectAuthzRequester` listens for its connection's and
-  channel's `'error'` (logged through `logger` as `axiam_sdk.amqp`, message only, so a broker
+  channel's `'error'` (logged through `logger` as `axiam_sdk.amqp`, message only — never the URL's
+  credentials or a key; a socket error's message can name the broker host and port — so a broker
   restart or a missed heartbeat is not an uncaught exception that ends the process) and `'close'`
   (the requester closes: outstanding checks reject at once with `AuthzRequesterClosedError`).
   With `createAuthzRequester` the caller owns the channel and must do both. A `timeoutMs` that is
@@ -84,9 +87,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `AuthzResponseVerifier`: the verification step on its own — over the received bytes, never a
   re-serialization, with the tenant subkey, checking `tenant_id`, `correlation_id` and `nonce`
   against an outstanding request; `settle()` acks or nacks without requeue. Its security events
-  carry the timestamp, the tenant and, through `settle()` or the new optional second argument of
-  `verify(body, delivery)` (`AuthzResponseDelivery`), the delivery's exchange and routing key
-  (§8 rule 4), never a signature value. The four contract
+  carry the timestamp, the exchange, the routing key, the requester's own tenant and a `reason`
+  (`malformed`, `unsigned`, `signature`, `tenant`, `unknown_request`; CONTRACT §8 consumer
+  obligation 4, contract 1.69, #883), never a signature value or a nonce. The exchange and routing
+  key come from the delivery (`settle()`, or the optional second argument of
+  `verify(body, delivery)`, `AuthzResponseDelivery`); without one they are `''` and the new
+  `replyQueue` option. The four contract
   vectors are tests. `AuthzResponse` gains the optional `reason_code`, `tenant_id`, `nonce` and
   `hmac_signature` members.
 - `isSafeReturnTo`, `oidcBindingCookieName`, `OIDC_BINDING_COOKIE_NAME`,
@@ -105,8 +111,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   documentation and test updates of §34.11 (a)–(d) are not part of this release; the README's
   conformance statement says so.
 
+- `oidcBindingClearCookie(redirectUri)` (`axiam-sdk/middleware`), public: the clearing `Set-Cookie`
+  value a direct caller of `completeOidcLogin` must send when it throws (TYP-R3-2). It was an
+  internal helper; the changelog and the TSDoc asked integrators to rebuild it by hand.
+- **Contract 1.69 (§34.13)**: `CONTRACT.md` re-vendored byte for byte from AXIAM; the README's
+  conformance statement is now 1.69. No operation, REST, gRPC or AMQP schema changes.
+- Tests: a server-shaped logout token (header exactly `{alg, typ: logout+jwt, kid}`, a two-key
+  JWKS, the signing key second), the kid-less and unknown-`kid` refusals, and rules 10 and 11 off
+  the logout and ID-token paths (`test/node/logoutServerShaped.test.ts`); the discard event on all
+  five reasons (`test/amqp/authzDiscardEvent.test.ts`); pins that the event consumer verifies a
+  genuine message holding `<`, `>`, `&`, non-ASCII and control-character escapes, and nacks a
+  duplicate key or trailing content without running the handler
+  (`test/amqp/consumerReceivedBytes.test.ts`, axiam#882).
+
+### Removed
+
+- **The AMQP authz requester's unsigned-response opt-out** (`acceptUnsignedResponses` on
+  `AuthzRequesterOptions` and `AuthzResponseVerifierOptions`, and `AuthzDecision.unsigned` and the
+  verdict's `unsigned` flag; added earlier in 1.4.0 and never released): no AXIAM server sends an
+  unsigned response to a reply queue, so the option could admit only a forged response (CONTRACT
+  1.69 §8, axiam#881). The requester requires a 1.68 server; a server older than 1.68 answers only
+  on the shared queue the requester never reads, so every check times out whatever the option said.
+
 ### Fixed
 
+- **`verifyLogoutToken` refuses a kid-less or unknown-`kid` token as `unknown_kid`** (`AuthError`
+  with `reason: 'unknown_kid'`; CONTRACT §12.7.3 rule 1, contract 1.69, axiam#880). The key was
+  already selected by `kid`, so a genuine server logout token verifies; an unknown `kid` used to
+  surface `jose`'s own error rather than an `AuthError`.
+- **The Fastify login adapter percent-encodes the redirect `Location`** (TYP-R3-1,
+  `docs/login-glue-binding.md` Decision 7). A `returnTo` holding a non-ASCII character made
+  `writeHead` throw after `onSuccess` had run, answering a bare `500` without the clearing
+  `Set-Cookie`; a latin1 character went out as a raw byte. The adapter now encodes as Express's
+  `res.redirect` does (`encodeurl`), for `returnTo`, `successRedirect` and a CR/LF an
+  `allowReturnTo` predicate admitted.
 - `MemoryOidcStateStore` is bounded: at most `OIDC_STATE_MAX_ENTRIES` (10 000) entries by
   default, oldest evicted first (new optional second constructor argument).
 - A non-finite ID-token clock skew (`NaN`, `±Infinity`) is refused with a `TypeError` —

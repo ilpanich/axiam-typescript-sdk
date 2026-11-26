@@ -232,14 +232,44 @@ function setBindingCookie(redirectUri: string, value: string): string {
 }
 
 /**
- * The clearing `Set-Cookie` every callback response carries (§12.8 rule 1 (d)).
+ * The clearing `Set-Cookie` header value every callback response carries
+ * (§12.8 rule 1 (d)): the binding cookie's name for `redirectUri`, an empty
+ * value, `Max-Age=0`, and the same `Path=/`, `HttpOnly`, `SameSite=Lax` and
+ * (except on a plain-HTTP loopback `redirectUri`) `Secure` attributes it was
+ * set with, and no `Domain`. A browser honours a clear only when the name and
+ * those attributes repeat exactly, so a direct caller of {@link completeOidcLogin}
+ * must send this value rather than build one by hand.
  *
- * @internal Exported for the framework adapters, which send it themselves when
- *   {@link completeOidcLogin} throws (the store or `onSuccess` failed), so the
- *   error response clears the cookie too.
+ * The Express and Fastify adapters send it themselves when
+ * {@link completeOidcLogin} throws (the store or `onSuccess` failed), so the
+ * error response clears the cookie too.
  */
-export function clearBindingCookie(redirectUri: string): string {
+export function oidcBindingClearCookie(redirectUri: string): string {
   return `${oidcBindingCookieName(redirectUri)}=; ${bindingCookieAttributes(redirectUri)}; Max-Age=0`;
+}
+
+/**
+ * Percent-encode a redirect destination for use as a `Location` header value.
+ *
+ * `res.redirect` in Express does this (it runs the URL through `encodeurl`);
+ * `reply.header('location', ...)` in Fastify does not, and Node refuses a header
+ * value holding a character outside latin1, which would turn a genuine sign-in
+ * into a bare 500 that also loses the binding-clearing `Set-Cookie`. This is the
+ * same algorithm: an existing, well-formed `%XX` escape is kept (no double
+ * encoding), every other character outside the URL-safe set is encoded as UTF-8
+ * (a space, a non-ASCII character, CR and LF included), and a lone surrogate,
+ * which `encodeURI` would throw on, becomes U+FFFD. The result is pure ASCII.
+ *
+ * @internal Exported for the Fastify adapter; the destination is encoded by the
+ *   adapter, never by the application's hook (docs/login-glue-binding.md).
+ */
+export function encodeRedirectLocation(destination: string): string {
+  return destination
+    .replace(/(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uD800-\uDBFF]([^\uDC00-\uDFFF]|$)/g, '$1\uFFFD$2')
+    .replace(
+      /(?:[^\x21\x23-\x3B\x3D\x3F-\x5F\x61-\x7A\x7C\x7E]|%(?:[^0-9A-Fa-f]|[0-9A-Fa-f][^0-9A-Fa-f]|$))+/g,
+      encodeURI,
+    );
 }
 
 /** SHA-256 (lower-case hex) of the ASCII bytes of the cookie value as set (§12.8 rule 1 (a)). */
@@ -390,8 +420,9 @@ export async function beginOidcLogin<TRequest = unknown>(
  * `options.onSuccess` throws — propagate unchanged to the caller, so the
  * application's own error handling sees them. The state is already consumed
  * by then. The caller MUST still clear the binding cookie on the error
- * response it sends (rule 1 (d), "and any other error"); the Express and
- * Fastify adapters append it before re-throwing.
+ * response it sends (rule 1 (d), "and any other error"), with the
+ * `Set-Cookie` value {@link oidcBindingClearCookie} returns for the same
+ * `redirectUri`; the Express and Fastify adapters append it before re-throwing.
  *
  * @param context the presented binding cookie and the framework request. A
  *   caller that passes no `bindingCookie` has every callback refused (rule 1
@@ -402,7 +433,7 @@ export async function completeOidcLogin<TRequest = unknown>(
   query: OidcCallbackQuery,
   context: OidcCallbackContext<TRequest> = {},
 ): Promise<OidcLoginOutcome> {
-  const setCookie = clearBindingCookie(options.redirectUri);
+  const setCookie = oidcBindingClearCookie(options.redirectUri);
 
   if (query.error) {
     options.logger?.debug('axiam_sdk.oidc', 'idp returned an authorization error', { error: query.error });

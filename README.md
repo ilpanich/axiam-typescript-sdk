@@ -20,12 +20,15 @@ Official TypeScript/JavaScript client SDK for [AXIAM](https://github.com/ilpanic
 
 ## Contract conformance
 
-The vendored `CONTRACT.md` is **contract 1.68**. This SDK conforms to **contract 1.66** as listed
-here, **plus the contract 1.68 obligations of §34.12 (a)–(g)** — the table under "Contract 1.68"
-below says what each one does here. Of contract 1.67 (§34.11) it implements the additive
-`AuditLogEntry.organization_id` ((c)) and, through 1.68's §10.1 rules 10–12, the verifier half of
-(e); the documentation and test updates §34.11 (a)–(d) ask for are **not** done in this release,
-so it does not claim 1.67 or 1.68 in full. Contract 1.66: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
+The vendored `CONTRACT.md` is **contract 1.69**. This SDK conforms to **contract 1.66** as listed
+here, **plus the contract 1.68 obligations of §34.12 (a)–(g)** and **the contract 1.69 obligations
+of §34.13 (a)–(c)**: `verifyLogoutToken` selects the key by `kid` and refuses a kid-less token as
+`unknown_kid` (a), the AMQP authz requester has no unsigned-response opt-out and requires a 1.68
+server (b), and every requester discard logs the fixed event (c). The tables under "Contract
+1.68" below say what each §34.12 obligation does here. Of contract 1.67 (§34.11) it implements the
+additive `AuditLogEntry.organization_id` ((c)) and, through 1.68's §10.1 rules 10–12, the verifier
+half of (e); the documentation and test updates §34.11 (a)–(d) ask for are **not** done in this
+release, so it does not claim 1.67 in full. Contract 1.66: CONTRACT.md §1–§13 and §12.7, §14, §15, §17, §19,
 §20, §21, §22, §23, §24, §25, §26, §27 (with §27.6.2), §28, §28.12, §29, §30, §31, §32, §33, §36 and §37,
 with §32.7 and §33.2 signed (including §6.1 mTLS client certificates, the
 §10.1 minimum local-verification set, the §12 OIDC/SSO relying-party helpers, and the §13
@@ -45,7 +48,7 @@ Read the migration notes in the [CHANGELOG](./CHANGELOG.md#140---unreleased) bef
 | (c) unknown-`kid` re-fetch window (§12.4 rule 2) | No code change: `jose`'s `createRemoteJWKSet` with a 60 s cooldown. The rule's conformance test is carried (`test/node/jwksRefetchWindow.test.ts`) against the §10 verifier: with a warm cache, 50 tokens with 50 different unknown `kid`s in one window cost at most one JWKS fetch and are all rejected; with the mocked clock past the window and a rotated set, the new `kid` is accepted after one fetch. The §10 verifier is bound to the JWKS URI and reads no discovery document. |
 | (d) access-token kind (N14, §10.1 rules 10–12) | `verifyAccessToken` and `authenticateRequest` refuse a header `typ` other than `at+jwt` (case-insensitive, `application/` allowed), a `purpose` claim, and a header with no `kid` (no single-key fallback). A token from a server before 1.67 (`typ: JWT`) is refused. |
 | (e) roles (N15, §11.2 rule 11) | `AxiamIdentity.roles` is the token's `roles` claim only (`undefined` when absent, `[]` kept distinct); the new `AxiamIdentity.scopes` carries `scope`. `requireRole`/`requireRoleHook`/`@RequireRole` fail closed without a `roles` claim; `requireScope`/`requireScopeHook`/`@RequireScope` are added. **Request the `roles` scope** (and register it on the client) for `requireRole` to admit anyone. |
-| (f) signed `AuthzResponse` (N2, §8) | New `AuthzRequester` (`createAuthzRequester(channel, …)` / `connectAuthzRequester(amqpsUrl, …)`): publishes a signed `AuthzRequest` with fresh random `correlation_id` and `nonce` to `axiam.authz.request` on the default exchange, `reply_to` a private exclusive auto-delete broker-named queue (an empty or `axiam.`-prefixed name is refused), and resolves `check()` only with an answer `AuthzResponseVerifier` verifies over its received bytes (tenant subkey, own `tenant_id`, the request's `correlation_id` and `nonce`). Forged or mismatched answers are nacked without requeue and the check keeps waiting, until its timeout. Unsigned answers are refused unless `acceptUnsignedResponses` is set. A discarded answer's security event names the delivery's exchange and routing key (§8 rule 4). `connectAuthzRequester` handles its own connection's and channel's `'error'` (logged, never an uncaught exception) and `'close'` (the requester closes, releasing every waiter at once); with `createAuthzRequester` the caller owns both. The four contract vectors and the request vector are tests. |
+| (f) signed `AuthzResponse` (N2, §8) | New `AuthzRequester` (`createAuthzRequester(channel, …)` / `connectAuthzRequester(amqpsUrl, …)`): publishes a signed `AuthzRequest` with fresh random `correlation_id` and `nonce` to `axiam.authz.request` on the default exchange, `reply_to` a private exclusive auto-delete broker-named queue (an empty or `axiam.`-prefixed name is refused), and resolves `check()` only with an answer `AuthzResponseVerifier` verifies over its received bytes (tenant subkey, own `tenant_id`, the request's `correlation_id` and `nonce`). Forged or mismatched answers are nacked without requeue and the check keeps waiting, until its timeout. An unsigned answer is discarded (`unsigned`) and the check keeps waiting; there is no option to accept one (contract 1.69, #881). Every discard logs one warning with `timestamp`, `exchange`, `routingKey`, the requester's own `tenantId` and a `reason` (`malformed`, `unsigned`, `signature`, `tenant`, `unknown_request`), never a signature or a nonce (contract 1.69, #883). `connectAuthzRequester` handles its own connection's and channel's `'error'` (logged, never an uncaught exception) and `'close'` (the requester closes, releasing every waiter at once); with `createAuthzRequester` the caller owns both. The four contract vectors and the request vector are tests. |
 | (g) §3a for every cookie-accepting guard | No change: `axiamMiddleware` and `axiamPlugin` already apply it, and every §11 helper reads their identity. |
 | (h), (i) | Informative; no SDK change. |
 
@@ -719,8 +722,22 @@ answering in your place (§8 trust boundary). An answer that does not verify, na
 or matches no outstanding request is nacked without requeue and the check keeps waiting; with no
 verified answer it rejects with `NetworkError` at the timeout. A deny is a decision
 (`allowed: false`, `reasonCode`), not an error. `createAuthzRequester(channel, options)` takes an
-existing amqplib channel instead. Against a server older than 1.68 every answer is unsigned and
-refused; `acceptUnsignedResponses: true` admits them, with a warning, for one rolling upgrade.
+existing amqplib channel instead.
+
+The AMQP authorization requester requires an AXIAM server of 1.68 or later (contract 1.68). Such a
+server signs every authorization response with the tenant's AMQP subkey and answers on the
+requester's private `reply_to` queue. A server older than 1.68 ignores `reply_to` and answers,
+unsigned, only on the shared `axiam.authz.response` queue, which this requester never reads:
+against it every check times out. There is no option to accept unsigned responses (CONTRACT 1.69
+§8): no AXIAM server sends one to a reply queue, so an unsigned response can only have been
+published by someone else, and it is discarded and logged. During a rolling upgrade from a pre-1.68
+server, use REST or gRPC authorization until every replica runs 1.68 or later.
+
+Every discarded answer logs one warning on `axiam_sdk.security` carrying `timestamp`, `exchange`
+(`""` for the default exchange), `routingKey` (the requester's reply queue), `tenantId` (the
+requester's own tenant, never the one the answer claims) and `reason`; the event never carries a
+signature value, a `nonce` or any member read from the discarded body.
+
 `AuthzResponseVerifier` is the verification step on its own, for an application that publishes its
 requests itself. A broker confirm of the publish still says nothing about AXIAM having decided
 (§8, minimal profile).

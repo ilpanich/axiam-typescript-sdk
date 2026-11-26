@@ -250,7 +250,7 @@ describe('AuthzRequester.check end to end', () => {
     expect(r.pending).toBe(1);
 
     const good = ch.deliver(signed(genuine, subkey(TENANT)));
-    await expect(pending).resolves.toEqual({ allowed: true, reasonCode: 'allowed', unsigned: false });
+    await expect(pending).resolves.toEqual({ allowed: true, reasonCode: 'allowed' });
     expect(ch.acked).toEqual([good]);
     expect(r.pending).toBe(0);
 
@@ -265,7 +265,7 @@ describe('AuthzRequester.check end to end', () => {
     const r = await createAuthzRequester(ch, options());
     const pending = r.check({ subjectId: SUBJECT, action: 'documents:read', resourceId: RESOURCE });
     ch.deliver(signed(answerFor(ch.published[0], false), subkey(TENANT)));
-    await expect(pending).resolves.toEqual({ allowed: false, reasonCode: 'no_grant', unsigned: false });
+    await expect(pending).resolves.toEqual({ allowed: false, reasonCode: 'no_grant' });
     await r.close();
   });
 
@@ -346,13 +346,30 @@ describe('AuthzRequester.check end to end', () => {
     await r.close();
   });
 
-  describe('unsigned responses (server older than 1.68)', () => {
+  describe('unsigned responses (no opt-out, CONTRACT.md §8 contract 1.69; #881)', () => {
     const unsigned = (pub: Published) =>
       Buffer.from(`{"correlation_id":"${pub.options.correlationId}","allowed":true,"reason":"ok"}`, 'utf8');
 
-    it('are refused by default: the check keeps waiting', async () => {
+    it('a well-formed unsigned answer for an outstanding correlation_id is discarded as `unsigned`, logged, and the check keeps waiting', async () => {
       const ch = new FakeChannel();
-      const r = await createAuthzRequester(ch, options());
+      const logger = { warn: vi.fn() };
+      const r = await createAuthzRequester(ch, options({ logger }));
+      const pending = r.check({ subjectId: SUBJECT, action: 'a', resourceId: RESOURCE });
+      const msg = ch.deliver(unsigned(ch.published[0]));
+      expect(await settled(pending)).toBe(false);
+      expect(ch.nacked.map((n) => [n.msg, n.allUpTo, n.requeue])).toEqual([[msg, false, false]]);
+      expect(ch.acked).toHaveLength(0);
+      expect(r.pending).toBe(1);
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      const [, , context] = logger.warn.mock.calls[0] as [string, string, Record<string, unknown>];
+      expect(context.reason).toBe('unsigned');
+      await r.close();
+      await expect(pending).rejects.toBeInstanceOf(AuthzRequesterClosedError);
+    });
+
+    it('the option is gone: passing acceptUnsignedResponses changes nothing', async () => {
+      const ch = new FakeChannel();
+      const r = await createAuthzRequester(ch, options({ acceptUnsignedResponses: true }));
       const pending = r.check({ subjectId: SUBJECT, action: 'a', resourceId: RESOURCE });
       ch.deliver(unsigned(ch.published[0]));
       expect(await settled(pending)).toBe(false);
@@ -361,20 +378,9 @@ describe('AuthzRequester.check end to end', () => {
       await expect(pending).rejects.toBeInstanceOf(AuthzRequesterClosedError);
     });
 
-    it('are accepted with the opt-out, flagged unsigned and logged', async () => {
+    it('a signed but forged answer is refused', async () => {
       const ch = new FakeChannel();
-      const logger = { warn: vi.fn() };
-      const r = await createAuthzRequester(ch, options({ acceptUnsignedResponses: true, logger }));
-      const pending = r.check({ subjectId: SUBJECT, action: 'a', resourceId: RESOURCE });
-      ch.deliver(unsigned(ch.published[0]));
-      await expect(pending).resolves.toEqual({ allowed: true, reason: 'ok', unsigned: true });
-      expect(logger.warn).toHaveBeenCalled();
-      await r.close();
-    });
-
-    it('with the opt-out, a signed but forged answer is still refused', async () => {
-      const ch = new FakeChannel();
-      const r = await createAuthzRequester(ch, options({ acceptUnsignedResponses: true }));
+      const r = await createAuthzRequester(ch, options());
       const pending = r.check({ subjectId: SUBJECT, action: 'a', resourceId: RESOURCE });
       ch.deliver(signed(answerFor(ch.published[0]), subkey(OTHER_TENANT)));
       expect(await settled(pending)).toBe(false);

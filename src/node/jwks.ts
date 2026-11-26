@@ -510,8 +510,8 @@ export function createJwksVerifier(jwksUri: string): JwksVerifier {
       // BEFORE any key lookup. Rule 12: a token with no `kid` is refused here,
       // because jose's remote key set would otherwise select "the only key in
       // the set" for it — and AXIAM's purpose tokens (MFA challenge, MFA setup,
-      // WebAuthn state) and its logout token all carry no `kid` while being
-      // signed with the access-token key. Rule 10: a present `typ` must be
+      // WebAuthn state) carry no `kid` while being signed with the
+      // access-token key (the logout token carries one from contract 1.69). Rule 10: a present `typ` must be
       // `at+jwt`. Both are access-token-path rules only; `verifyIdToken` below
       // and the logout-token path apply their own.
       assertAccessTokenHeader(token);

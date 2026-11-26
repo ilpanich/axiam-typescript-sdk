@@ -36,8 +36,8 @@ import {
 } from './mcpCore.js';
 import {
   beginOidcLogin,
-  clearBindingCookie,
   completeOidcLogin,
+  oidcBindingClearCookie,
   oidcBindingCookieName,
   type OidcLoginOptions,
   type OidcLoginOutcome,
@@ -448,7 +448,7 @@ export function oidcLoginHandlers(options: OidcLoginOptions<Request>): {
       // The error response Express builds from `next(err)` keeps this header,
       // and the application's error handler still receives the error itself.
       if (!res.headersSent) {
-        res.append('Set-Cookie', clearBindingCookie(options.redirectUri));
+        res.append('Set-Cookie', oidcBindingClearCookie(options.redirectUri));
       }
       throw err;
     }

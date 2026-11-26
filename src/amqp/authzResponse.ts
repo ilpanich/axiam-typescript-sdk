@@ -45,17 +45,21 @@ export interface VerifiedAuthzResponse {
   reason?: string;
   /** Machine-readable reason (`allowed`, `no_grant`, `denied_by_rule`, `tenant_suspended`, or a code this SDK does not know, verbatim). */
   reason_code?: string;
-  /** The tenant the response answers for; equals the verifier's tenant. Absent only on an unsigned response admitted by the opt-out. */
-  tenant_id?: string;
-  /** Echo of the request's `nonce`. Absent only on an unsigned response admitted by the opt-out. */
-  nonce?: string;
+  /** The tenant the response answers for; equals the verifier's tenant. */
+  tenant_id: string;
+  /** Echo of the request's `nonce`. */
+  nonce: string;
 }
 
 /** Why a response was discarded. Never carries a signature value. */
 export type AuthzResponseRejection =
-  /** Not JSON, or missing / ill-typed `correlation_id`, `allowed`, `tenant_id`, `nonce` (rule 1). */
+  /**
+   * Not JSON, or missing / ill-typed `correlation_id`, `allowed`, `tenant_id`,
+   * `nonce`, or an `hmac_signature` member that does not end the body or is
+   * not 64 hex digits (rule 1).
+   */
   | 'malformed'
-  /** No trailing `hmac_signature` member, and the unsigned opt-out is off or does not apply. */
+  /** No `hmac_signature` member at all: no AXIAM server sends one to a reply queue (CONTRACT.md §8, contract 1.69). */
   | 'unsigned'
   /** The HMAC does not verify under this tenant's subkey (rule 2). */
   | 'signature'
@@ -71,8 +75,6 @@ export type AuthzResponseVerdict =
       accepted: true;
       /** The verified response. */
       response: VerifiedAuthzResponse;
-      /** `true` only when admitted unsigned by {@link AuthzResponseVerifierOptions.acceptUnsignedResponses}. */
-      unsigned: boolean;
     }
   | {
       /** The response was discarded: never an allow, and its request stays outstanding. */
@@ -92,23 +94,21 @@ export interface AuthzResponseVerifierOptions {
   /** The requester's own tenant; every accepted response names it. */
   tenantId: string;
   /**
-   * Accept responses unsigned (§8, "Against a server older than 1.68").
-   *
-   * **Off by default.** Set it only for one rolling upgrade against a server
-   * older than 1.68: a response that carries **no** `hmac_signature` member is
-   * then accepted on its `correlation_id` alone, with a warning logged. A
-   * response that carries a signature is verified whatever this says, and one
-   * that fails is still discarded.
+   * The requester's private reply queue (the `amq.gen-…` name it declared and
+   * sent as `reply_to`). The discard event's routing key when
+   * {@link AuthzResponseVerifier.verify} is called without a delivery: the
+   * transport cannot report one, and every answer the requester can receive
+   * arrives on this queue (§8 consumer obligation 4).
    */
-  acceptUnsignedResponses?: boolean;
+  replyQueue?: string;
   /** Receives security events. Never receives a signature value or the key. */
   logger?: ConsumeLogger;
 }
 
 /**
- * Where a response was read from, for the security event a discarded (or an
- * unsigned-admitted) response logs (CONTRACT.md §8 rule 4: timestamp,
- * exchange, routing key, tenant). {@link AuthzResponseVerifier.settle} takes
+ * Where a response was read from, for the security event a discarded response
+ * logs (CONTRACT.md §8 rule 4 and consumer obligation 4: timestamp, exchange,
+ * routing key, tenant, reason). {@link AuthzResponseVerifier.settle} takes
  * it from the delivery's `msg.fields`.
  */
 export interface AuthzResponseDelivery {
@@ -148,16 +148,18 @@ const isString = (value: unknown): value is string => typeof value === 'string';
 export class AuthzResponseVerifier {
   readonly #subkey: Sensitive<Buffer>;
   readonly #tenantId: string;
-  readonly #acceptUnsigned: boolean;
+  readonly #tenantConfigured: string;
+  readonly #replyQueue: string | undefined;
   readonly #logger: ConsumeLogger | undefined;
   /** correlation_id → nonce of each outstanding request. */
   readonly #outstanding = new Map<string, string>();
 
-  /** @param options the tenant, its subkey, and the (off by default) unsigned opt-out. */
+  /** @param options the tenant, its subkey, and the reply queue's name. */
   constructor(options: AuthzResponseVerifierOptions) {
     this.#subkey = options.subkey;
+    this.#tenantConfigured = options.tenantId;
     this.#tenantId = options.tenantId.toLowerCase();
-    this.#acceptUnsigned = options.acceptUnsignedResponses === true;
+    this.#replyQueue = options.replyQueue;
     this.#logger = options.logger;
   }
 
@@ -190,16 +192,16 @@ export class AuthzResponseVerifier {
    * is dropped. On any failure nothing is retired — the genuine answer may
    * still arrive — and a security event is logged without either signature.
    *
-   * @param delivery where the body was read from; when given, the security
-   *   event names its exchange and routing key (§8 rule 4).
-   *   {@link settle} passes it.
+   * @param delivery where the body was read from; the security event names
+   *   its exchange and routing key (§8 rule 4). {@link settle} passes it.
+   *   Without it the event reports `''` and `options.replyQueue`.
    */
   verify(body: Buffer, delivery?: AuthzResponseDelivery): AuthzResponseVerdict {
     // Byte offsets: latin1 maps each byte to one UTF-16 unit, and the
     // signature member is pure ASCII, so the match index is a byte index.
     const match = TRAILING_SIGNATURE.exec(body.toString('latin1'));
     if (!match) {
-      return this.#unsignedOrRefuse(body, delivery);
+      return this.#refuseUnsigned(body, delivery);
     }
 
     // Rule 2 — the canonical bytes are the received bytes with the trailing
@@ -246,7 +248,6 @@ export class AuthzResponseVerifier {
     this.#outstanding.delete(r.correlation_id);
     return {
       accepted: true,
-      unsigned: false,
       response: {
         correlation_id: r.correlation_id,
         allowed: r.allowed,
@@ -275,8 +276,14 @@ export class AuthzResponseVerifier {
     return verdict;
   }
 
-  /** No trailing signature: refused, unless the opt-out admits a body with no signature member at all. */
-  #unsignedOrRefuse(body: Buffer, delivery: AuthzResponseDelivery | undefined): AuthzResponseVerdict {
+  /**
+   * No `,"hmac_signature":"<64 hex>"}` at the end of the body. Refused either
+   * way (there is no opt-out, CONTRACT.md §8, contract 1.69): `unsigned` when
+   * the body is a JSON object with no `hmac_signature` member at all, and
+   * `malformed` otherwise (not JSON, not an object, or the member is present
+   * but does not end the body or is not 64 hex digits).
+   */
+  #refuseUnsigned(body: Buffer, delivery: AuthzResponseDelivery | undefined): AuthzResponseVerdict {
     let parsed: unknown;
     try {
       parsed = JSON.parse(body.toString('utf8'));
@@ -286,51 +293,34 @@ export class AuthzResponseVerifier {
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
       return this.#refuse('malformed', delivery);
     }
-    const r = parsed as Record<string, unknown>;
-    // A body that carries a signature anywhere but at the end is not
-    // "unsigned": it fails, whatever the opt-out says.
-    if (!this.#acceptUnsigned || Object.prototype.hasOwnProperty.call(r, 'hmac_signature')) {
-      return this.#refuse('unsigned', delivery);
-    }
-    if (!isString(r.correlation_id) || typeof r.allowed !== 'boolean') {
+    if (Object.prototype.hasOwnProperty.call(parsed, 'hmac_signature')) {
       return this.#refuse('malformed', delivery);
     }
-    if (!this.#outstanding.has(r.correlation_id)) {
-      return this.#refuse('unknown_request', delivery);
-    }
-    this.#outstanding.delete(r.correlation_id);
-    this.#logger?.warn(
-      'axiam_sdk.security',
-      'accepted an UNSIGNED AMQP authorization response (acceptUnsignedResponses is set; pre-1.68 server)',
-      this.#eventContext(delivery),
-    );
-    return {
-      accepted: true,
-      unsigned: true,
-      response: {
-        correlation_id: r.correlation_id,
-        allowed: r.allowed,
-        ...(isString(r.reason) ? { reason: r.reason } : {}),
-        ...(isString(r.reason_code) ? { reason_code: r.reason_code } : {}),
-      },
-    };
+    return this.#refuse('unsigned', delivery);
   }
 
   #refuse(reason: AuthzResponseRejection, delivery: AuthzResponseDelivery | undefined): AuthzResponseVerdict {
     this.#logger?.warn(
       'axiam_sdk.security',
       `AMQP authorization response discarded (${reason})`,
-      this.#eventContext(delivery),
+      this.#eventContext(reason, delivery),
     );
     return { accepted: false, reason };
   }
 
-  /** §8 rule 4: timestamp, exchange, routing key, tenant — never a signature value. */
-  #eventContext(delivery: AuthzResponseDelivery | undefined): Record<string, unknown> {
+  /**
+   * The §8 discard event (consumer obligation 4): exactly timestamp, exchange,
+   * routing key, the requester's OWN tenant and the reason code. Nothing read
+   * from the body, no signature value, no nonce.
+   */
+  #eventContext(reason: AuthzResponseRejection, delivery: AuthzResponseDelivery | undefined): Record<string, unknown> {
+    const routingKey = delivery !== undefined ? delivery.routingKey : this.#replyQueue;
     return {
       timestamp: new Date().toISOString(),
-      ...(delivery !== undefined ? { exchange: delivery.exchange, routingKey: delivery.routingKey } : {}),
-      tenantId: this.#tenantId,
+      exchange: delivery !== undefined ? delivery.exchange : '',
+      ...(routingKey !== undefined ? { routingKey } : {}),
+      tenantId: this.#tenantConfigured,
+      reason,
     };
   }
 }

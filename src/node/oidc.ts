@@ -2343,8 +2343,14 @@ export class OidcClient {
    * Every check exists because skipping it has a name:
    *
    * 1. **Signature**, through the same §12.4 JWKS verifier the ID-token path
-   *    uses — no second key-fetching path — with the same `kid`-required
-   *    discipline.
+   *    uses — no second key-fetching path. The key is selected **by `kid`**
+   *    (contract 1.69): the server signs every logout token with the header
+   *    `{"alg":"EdDSA","typ":"logout+jwt","kid":"<kid>"}`. A token with no
+   *    `kid` is refused as `unknown_kid` (no single-key fallback, no trying
+   *    every key), and an unknown `kid` causes at most one JWKS re-fetch per
+   *    cooldown window and is then refused as `unknown_kid`. §10.1 rules 10
+   *    and 11 (`typ` `at+jwt`, no `purpose`) apply to the access-token path
+   *    only, not here.
    * 2. **`iss`/`aud`**: a token minted for another RP is not accepted here.
    * 3. **`events` carries the back-channel-logout key.** This is what
    *    distinguishes a logout token from an ID token; skipping it means
@@ -2366,8 +2372,9 @@ export class OidcClient {
     const config = configuration ?? (await this.oidcDiscover());
     const { decodeProtectedHeader } = await import('jose');
 
-    // Same alg/kid discipline as §12.4 rules 1-2, applied before any key
-    // lookup: a token with no `kid` gets no "the only key" fallback.
+    // Same alg/kid discipline as §12.4 rules 1-2 (§12.7.3 rule 1), applied
+    // before any key lookup: a token with no `kid` gets no "the only key"
+    // fallback and is refused as `unknown_kid`.
     let header: { alg?: string; kid?: string };
     try {
       header = decodeProtectedHeader(token);
@@ -2378,12 +2385,22 @@ export class OidcClient {
       throw new AuthError(`logout token alg must be EdDSA, got ${String(header.alg)}`);
     }
     if (!header.kid) {
-      throw new AuthError('logout token carries no kid header');
+      throw new AuthError('logout token carries no kid header (unknown_kid)', 'unknown_kid');
     }
 
-    const claims = (await this.#verifierFor(config.jwks_uri).verifySignatureOnlyUnchecked(
-      token,
-    )) as unknown as LogoutTokenClaims;
+    let claims: LogoutTokenClaims;
+    try {
+      claims = (await this.#verifierFor(config.jwks_uri).verifySignatureOnlyUnchecked(
+        token,
+      )) as unknown as LogoutTokenClaims;
+    } catch (err) {
+      // jose has already re-fetched the JWKS at most once for this `kid`
+      // (cooldown window); an unmatched `kid` is then `unknown_kid`.
+      if (typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 'ERR_JWKS_NO_MATCHING_KEY') {
+        throw new AuthError('no JWKS key matches the logout token kid (unknown_kid)', 'unknown_kid');
+      }
+      throw err;
+    }
 
     if (claims.iss !== config.issuer) {
       throw new AuthError('logout token issuer does not match the discovery document');

@@ -34,8 +34,9 @@ import {
 } from './mcpCore.js';
 import {
   beginOidcLogin,
-  clearBindingCookie,
   completeOidcLogin,
+  encodeRedirectLocation,
+  oidcBindingClearCookie,
   oidcBindingCookieName,
   type OidcLoginOptions,
   type OidcLoginOutcome,
@@ -347,7 +348,9 @@ async function sendOidcOutcome(reply: FastifyReply, outcome: OidcLoginOutcome): 
   if (outcome.kind === 'redirect') {
     // 302 + Location, written directly rather than via @fastify/redirect — the
     // SDK adds no new dependency for a two-line response.
-    await reply.code(302).header('location', outcome.url).send();
+    // Fastify does not encode a header value (Express's res.redirect does), so the
+    // adapter does, whatever produced the URL (docs/login-glue-binding.md).
+    await reply.code(302).header('location', encodeRedirectLocation(outcome.url)).send();
     return;
   }
   if (outcome.kind === 'json') {
@@ -431,7 +434,7 @@ export const oidcLoginPlugin: (
         // Fastify's error handler keeps headers already set on the reply, and
         // the application's setErrorHandler still receives the error itself.
         if (!reply.sent) {
-          void reply.header('set-cookie', clearBindingCookie(options.redirectUri));
+          void reply.header('set-cookie', oidcBindingClearCookie(options.redirectUri));
         }
         throw err;
       }
