@@ -205,10 +205,14 @@ result. The reference implementation is `encodeRedirectLocation`, `src/middlewar
 2. **Existing escapes.** A `%` followed by two hex digits (either case) is a well-formed escape
    and is **kept as it is**, so an encoded value is not encoded twice (`/a%20b` stays `/a%20b`,
    `/%%41` becomes `/%25%41`). Any other `%` becomes `%25` (`/a%2` becomes `/a%252`).
-3. **Lone surrogates.** In a language whose strings are UTF-16, every lone (unpaired) surrogate,
-   however many are adjacent, is replaced by U+FFFD (encoded `%EF%BF%BD`) **before** encoding, and
-   the encoder MUST NOT throw on any input (`/\uD800\uD800` becomes `/%EF%BF%BD%EF%BF%BD`). A valid
-   pair is one character (`/😀` becomes `/%F0%9F%98%80`).
+3. **Input that is not valid Unicode.** Whatever the language's string model, every part of the
+   destination that is not valid Unicode is replaced by U+FFFD (encoded `%EF%BF%BD`) **before**
+   encoding, one replacement per invalid unit, and the encoder MUST NOT throw on any input. In a
+   byte-string language (PHP, C) that means each invalid UTF-8 sequence: `returnTo=%FF` arrives as
+   the single byte `0xFF` and becomes `%EF%BF%BD`. In a language whose strings are UTF-16 (JavaScript,
+   Java, C#) or hold code points (Python `str`) it means each unpaired surrogate, however many are
+   adjacent (`/\uD800\uD800` becomes `/%EF%BF%BD%EF%BF%BD`). A valid surrogate pair is one character
+   (`/😀` becomes `/%F0%9F%98%80`).
 4. **Result.** Pure ASCII: no byte below `0x21` and none above `0x7E`, so no space, CR or LF; a
    CR/LF in the destination cannot split the header or inject another one.
 
@@ -224,7 +228,9 @@ helper meets the four rules.
 Test it per adapter, against the real framework, not a response double (a double that records the
 `url` passed to a redirect helper hides this defect): `/a b` gives `/a%20b`; `/café` gives
 `/caf%C3%A9`; `/€` gives `/%E2%82%AC`; a lone surrogate gives `%EF%BF%BD`, and so do two adjacent
-ones (`/\uD800\uD800`, `/\uDC00\uDC00`) without an exception; `/a%20b` is unchanged; `/%%41` gives
+ones (`/\uD800\uD800`, `/\uDC00\uDC00`) without an exception, and so does a raw byte `0xFF` in a
+byte-string language (`returnTo=%2F%FF`, which arrives as `/` and the byte `0xFF`, gives
+`/%EF%BF%BD`); `/a%20b` is unchanged; `/%%41` gives
 `/%25%41`; `/a%2` gives `/a%252`;
 a CR/LF value admitted through `allowReturnTo` gives `%0D%0A` and injects no header; a non-ASCII
 `success_redirect` is encoded too. Each of these answers `302`, with the binding cookie cleared and
@@ -247,4 +253,4 @@ a CR/LF value admitted through `allowReturnTo` gives `%0D%0A` and injects no hea
 | `return_to` `https://evil.example/x`, `//evil.example/x`, `/\evil.example`, `/a\b`, `/a` + CR, `/a` + NUL, `/a` + DEL | dropped at login; stored directly, not followed |
 | `return_to` `/dashboard?tab=1` | stored and followed |
 | Predicate accepting `https://app.example/x` | that value followed; `https://evil.example/x` still not |
-| `return_to` holding a space, a non-ASCII character, a lone surrogate, an existing `%XX`; a CR/LF value admitted by `allowReturnTo`; a non-ASCII `success_redirect` (Decision 7) | `302`; `Location` is the percent-encoded form, pure ASCII, no injected header; cookie cleared; `onSuccess` called once |
+| `return_to` holding a space, a non-ASCII character, a lone surrogate or an invalid UTF-8 byte (`0xFF`), an existing `%XX`; a CR/LF value admitted by `allowReturnTo`; a non-ASCII `success_redirect` (Decision 7) | `302`; `Location` is the percent-encoded form, pure ASCII, no injected header; cookie cleared; `onSuccess` called once |

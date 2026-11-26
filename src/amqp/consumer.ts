@@ -265,19 +265,27 @@ export async function verifyAndDispatch(
   let canonical: Buffer;
   let body: Record<string, unknown>;
   const trailing = TRAILING_SIGNATURE.exec(msg.content.toString('latin1'));
-  if (trailing !== null && trailing[1] === sig) {
+  if (sig === undefined) {
+    // No signature member at all (only the lenient, unsigned path can accept
+    // this): the object is delivered as parsed; `canonical` is never compared.
+    body = { ...wholeObject };
+    delete body.hmac_signature; // a non-string member (null) is not a signature
+    canonical = Buffer.alloc(0);
+  } else if (trailing !== null && trailing[1] === sig) {
     // latin1 maps one byte to one unit and the member is ASCII, so the match
     // index is a byte index.
     canonical = Buffer.concat([msg.content.subarray(0, trailing.index), Buffer.from('}', 'ascii')]);
     body = JSON.parse(canonical.toString('utf8')) as Record<string, unknown>;
   } else {
-    // No signature member, or one that is not the last member (a producer that
-    // orders members differently): the object without the member is
-    // re-serialized in insertion order, as before. The handler still gets that
-    // same object.
-    body = { ...wholeObject };
-    delete body.hmac_signature;
-    canonical = Buffer.from(JSON.stringify(body), 'utf8');
+    // A signature that is not the trailing member (or not a string): there are
+    // no received bytes to verify, and re-serializing is what axiam#882 removes.
+    logger?.warn('axiam_sdk.security', 'AMQP hmac_signature is not the trailing member; nacking without requeue', {
+      exchange: msg.fields.exchange,
+      routingKey: msg.fields.routingKey,
+    });
+    // channel.nack(msg, /* allUpTo */ false, /* requeue */ false)
+    channel.nack(msg, false, false);
+    return;
   }
 
   // Strict mode (default, CONTRACT.md §8.3): a missing signature is treated

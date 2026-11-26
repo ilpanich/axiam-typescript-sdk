@@ -125,6 +125,16 @@ describe('axiam#882 — verification is over the received bytes', () => {
     expect(channel.nacked).toEqual([{ allUpTo: false, requeue: false }]);
   });
 
+  it('a correctly signed body whose hmac_signature is NOT the trailing member is nacked and the handler never runs', async () => {
+    const canonical = `{"action":"read",${head('n-9')}}`;
+    const sig = signPayload(KEY, Buffer.from(canonical, 'utf8'));
+    const moved = Buffer.from(`{"hmac_signature":"${sig}",${canonical.slice(1)}`, 'utf8');
+    const { channel, handler } = await run(moved);
+    expect(handler).not.toHaveBeenCalled();
+    expect(channel.acked).toBe(0);
+    expect(channel.nacked).toEqual([{ allUpTo: false, requeue: false }]);
+  });
+
   it('a body with a duplicate key is nacked without requeue and the handler never runs', async () => {
     const canonical = `{"action":"read","action":"admin",${head('n-3')}}`;
     const { channel, handler } = await run(wire(canonical));

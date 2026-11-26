@@ -150,8 +150,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `1.0`, integer-like keys or an integer above 2^53 was nacked. It now removes the trailing
   `hmac_signature` member from the received bytes, verifies those, and hands the handler the value
   parsed from the same bytes. A duplicate key anywhere, trailing content, or a body that is not
-  one JSON object is nacked without requeue, explicitly. A body whose signature member is not the
-  last member keeps the previous insertion-order re-serialization.
+  one JSON object is nacked without requeue, explicitly. A body whose `hmac_signature` is present
+  but not the trailing member is nacked (nothing is re-serialized).
 - `MemoryOidcStateStore` is bounded: at most `OIDC_STATE_MAX_ENTRIES` (10 000) entries by
   default, oldest evicted first (new optional second constructor argument).
 - A non-finite ID-token clock skew (`NaN`, `±Infinity`) is refused with a `TypeError` —
