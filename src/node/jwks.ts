@@ -323,6 +323,71 @@ function ttlFromResponse(res: Response): number {
   return Number.isFinite(ms) ? Math.min(ms, JWKS_MAX_TTL_MS) : JWKS_MAX_TTL_MS;
 }
 
+/**
+ * The TLS material the JWKS fetch presents, the same material the REST client
+ * uses (CONTRACT.md §6 `customCa`, §6.1 client identity): `ca` extends server
+ * trust, `cert`/`key` are the client identity. There is deliberately no
+ * verification switch; strict server verification stays at its default.
+ */
+export interface JwksTlsOptions {
+  /** PEM bundle trusted in addition to the default roots (§6). */
+  ca?: string;
+  /** PEM client-certificate chain (§6.1). */
+  cert?: string;
+  /** PEM private key for `cert` (§6.1). Secret: never logged or retained. */
+  key?: string;
+}
+
+/**
+ * `fetch` over `node:https` with explicit TLS material. Node's global `fetch`
+ * takes no CA or client identity (only a dispatcher from the separate `undici`
+ * package, which this SDK does not depend on), so a private-CA or mTLS
+ * deployment needs this path. It never follows a redirect (a `3xx` is returned
+ * as-is and refused by the caller) and honours `signal` for cancellation and
+ * the deadline.
+ */
+async function fetchWithTls(
+  url: string,
+  init: { headers: Record<string, string>; signal: AbortSignal },
+  tls: JwksTlsOptions,
+): Promise<Response> {
+  // `.default` is the live CommonJS module object (what instrumentation such as msw patches), not the ESM snapshot of its named exports.
+  const https = (await import('node:https')).default;
+  const { Readable } = await import('node:stream');
+  return new Promise<Response>((resolve, reject) => {
+    const req = https.request(
+      url,
+      {
+        method: 'GET',
+        headers: init.headers,
+        signal: init.signal,
+        agent: new https.Agent({
+          ...(tls.ca !== undefined ? { ca: tls.ca } : {}),
+          ...(tls.cert !== undefined ? { cert: tls.cert } : {}),
+          ...(tls.key !== undefined ? { key: tls.key } : {}),
+        }),
+      },
+      (res) => {
+        const status = res.statusCode ?? 0;
+        const headers = new Headers();
+        for (const [name, value] of Object.entries(res.headers)) {
+          if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(', ') : value);
+        }
+        const bodyless = status === 204 || status === 205 || status === 304;
+        if (bodyless) res.resume();
+        resolve(
+          new Response(bodyless ? null : (Readable.toWeb(res) as unknown as ReadableStream<Uint8Array>), {
+            status,
+            headers,
+          }),
+        );
+      },
+    );
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 type JoseModule = typeof import('jose');
 type KeyResolver = ReturnType<JoseModule['createLocalJWKSet']>;
 
@@ -353,6 +418,7 @@ class JwksCache {
   constructor(
     private readonly jwksUri: string,
     private readonly jose: JoseModule,
+    private readonly tls?: JwksTlsOptions,
   ) {}
 
   /** The key resolver handed to `jwtVerify`. */
@@ -409,11 +475,13 @@ class JwksCache {
 
   async #fetch(): Promise<void> {
     const conditional = this.#resolver !== undefined && this.#etag !== undefined;
-    const res = await fetch(this.jwksUri, {
-      redirect: 'manual',
-      signal: AbortSignal.timeout(TIMEOUT_DURATION_MS),
-      headers: { accept: 'application/json', ...(conditional ? { 'if-none-match': this.#etag as string } : {}) },
-    });
+    const headers = { accept: 'application/json', ...(conditional ? { 'if-none-match': this.#etag as string } : {}) };
+    const signal = AbortSignal.timeout(TIMEOUT_DURATION_MS);
+    // TLS material only matters for an https URL; the global `fetch` cannot carry it (#175).
+    const res =
+      this.tls !== undefined && this.jwksUri.startsWith('https:')
+        ? await fetchWithTls(this.jwksUri, { headers, signal }, this.tls)
+        : await fetch(this.jwksUri, { redirect: 'manual', signal, headers });
     if (res.status === 304 && conditional) {
       await res.body?.cancel().catch(() => undefined);
       this.#anchorMs = Date.now();
@@ -589,8 +657,8 @@ export interface JwksVerifier extends Verifier, IdTokenVerifier {}
  * `jwks_uri` the discovery document advertises instead of hardcoding
  * {@link JWKS_PATH} — §12.3 rule 6 requires reading the URI from the document.
  */
-export function createVerifier(baseUrl: string): JwksVerifier {
-  return createJwksVerifier(`${baseUrl}${JWKS_PATH}`);
+export function createVerifier(baseUrl: string, tlsOptions?: JwksTlsOptions): JwksVerifier {
+  return createJwksVerifier(`${baseUrl}${JWKS_PATH}`, tlsOptions);
 }
 
 /**
@@ -600,8 +668,12 @@ export function createVerifier(baseUrl: string): JwksVerifier {
  * Identical machinery to {@link createVerifier}: one lazily-resolved
  * key-set cache per verifier instance, shared by
  * `verifyAccessToken` and `verifyIdToken`.
+ *
+ * `tlsOptions` (Node only) is the {@link JwksTlsOptions} the key-set fetch
+ * presents — pass the client's `customCa` / client identity so a private-CA
+ * server's JWKS is reachable (#175). Omitted, the platform defaults apply.
  */
-export function createJwksVerifier(jwksUri: string): JwksVerifier {
+export function createJwksVerifier(jwksUri: string, tlsOptions?: JwksTlsOptions): JwksVerifier {
   // Lazily-resolved singleton so repeated verifyAccessToken() calls reuse
   // one cache instead of rebuilding it per call.
   //
@@ -614,7 +686,7 @@ export function createJwksVerifier(jwksUri: string): JwksVerifier {
 
   async function getJwks(): Promise<JwksCache['getKey']> {
     if (!jwksPromise) {
-      jwksPromise = import('jose').then((jose) => new JwksCache(jwksUri, jose));
+      jwksPromise = import('jose').then((jose) => new JwksCache(jwksUri, jose, tlsOptions));
     }
     return (await jwksPromise).getKey;
   }

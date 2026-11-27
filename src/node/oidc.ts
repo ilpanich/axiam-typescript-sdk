@@ -43,7 +43,7 @@ import { ValidationError } from '../management/errors.js';
 import { retryAfterMs, retryableNetworkError, statusIsRetryable } from '../rest/bareTransport.js';
 import { isOAuth2Endpoint } from '../rest/interceptors.js';
 import { withRetry } from '../rest/retry.js';
-import type { SharedSession } from '../rest/session.js';
+import { nodeTlsOptionsOf, type SharedSession } from '../rest/session.js';
 import { createJwksVerifier, type JwksVerifier } from './jwks.js';
 import { resolveClockSkewSec, type IdTokenClaims } from './oidcIdToken.js';
 import {
@@ -2938,7 +2938,7 @@ export class OidcClient {
     if (existing) {
       return existing;
     }
-    const verifier = createJwksVerifier(jwksUri);
+    const verifier = createJwksVerifier(jwksUri, nodeTlsOptionsOf(this.#session, jwksUri));
     this.#verifiers.set(jwksUri, verifier);
     return verifier;
   }

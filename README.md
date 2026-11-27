@@ -3063,6 +3063,8 @@ try {
   explicit accessor (CONTRACT.md §7).
 - Strict TLS verification is always on; the only server-trust escape hatch is the
   constructor's `customCa` option for self-signed development environments (CONTRACT.md §6).
+  The Node JWKS fetch behind `verifyAccessToken` / `verifyIdToken` honours it too, and presents
+  the client identity only to the client's own origin, never to a `jwks_uri` on another host.
 - Optional mutual TLS (mTLS): a PEM `clientCert`/`clientKey` client identity (Node only) is
   presented on both REST and gRPC without ever relaxing server verification (CONTRACT.md §6.1).
 - AMQP messages are HMAC-SHA256 verified before your handler ever sees them; verification

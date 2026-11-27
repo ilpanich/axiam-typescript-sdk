@@ -194,6 +194,7 @@ export class SharedSession {
     // rejects one without the other before this line is reached.
     this.presentsClientCertificate =
       options.clientCert !== undefined && options.clientKey !== undefined;
+    registerTlsOptions(this, options);
     // Seed the resolved UUIDs from any UUID-form config so the browser persona
     // (which cannot decode the httpOnly access token) can still build a valid
     // refresh body. The Node persona later overwrites these from the
@@ -418,6 +419,49 @@ function loadNodeBuiltin<T>(id: 'node:https' | 'node:http'): T {
  */
 function loadNodeHttps(): typeof import('node:https') {
   return loadNodeBuiltin<typeof import('node:https')>('node:https');
+}
+
+/**
+ * The TLS material each session was configured with, kept OUT of the session's
+ * own (public) fields because it holds the client private key (§6.1 rule 3 /
+ * §7). Read only through {@link nodeTlsOptionsOf}, by the Node JWKS verifiers.
+ */
+const sessionTlsOptions = new WeakMap<SharedSession, NodeTlsOptions>();
+
+function registerTlsOptions(session: SharedSession, options: AxiamClientOptions): void {
+  if (options.customCa === undefined && options.clientCert === undefined) return;
+  try {
+    const tls = resolveNodeTlsOptions(options);
+    if (tls !== undefined) sessionTlsOptions.set(session, tls);
+  } catch {
+    // Invalid material is rejected by `createSession` / `createNodeSession`,
+    // which validate before constructing; a hand-built session simply has none.
+  }
+}
+
+/**
+ * The TLS material `session` was configured with (`customCa`, §6.1 identity),
+ * for the JWKS fetch that must trust the same CA as its REST calls (#175).
+ * `undefined` when the session has none.
+ *
+ * The client identity (`cert`/`key`) is included ONLY when `targetUrl` has the
+ * same origin as the session's base URL (or none is given): a `jwks_uri` on
+ * another host (§12.3 rule 6) gets `customCa` trust alone, so the identity is
+ * never presented to a server the client was not configured to authenticate to.
+ *
+ * Not exported from the package barrel: the result holds the private key.
+ */
+export function nodeTlsOptionsOf(session: SharedSession, targetUrl?: string): NodeTlsOptions | undefined {
+  const tls = sessionTlsOptions.get(session);
+  if (tls === undefined || targetUrl === undefined) return tls;
+  let sameOrigin = false;
+  try {
+    sameOrigin = new URL(targetUrl).origin === new URL(session.baseUrl).origin;
+  } catch {
+    sameOrigin = false;
+  }
+  if (sameOrigin) return tls;
+  return tls.ca !== undefined ? { ca: tls.ca } : undefined;
 }
 
 export interface NodeTlsOptions {

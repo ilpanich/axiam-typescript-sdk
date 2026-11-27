@@ -174,6 +174,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The Node JWKS fetch honours `customCa` and the client identity** (#175). `createNodeSession`
+  and the OIDC client's ID-token and logout-token verification fetched the key set with the global
+  `fetch`, which carries neither, so against a private-CA server every `verifyAccessToken` /
+  `verifyIdToken` was refused ("the JSON Web Key Set is unavailable") while REST calls worked.
+  `createVerifier(baseUrl, tlsOptions?)` and `createJwksVerifier(jwksUri, tlsOptions?)` take an
+  optional `JwksTlsOptions` (`ca`, `cert`, `key`); when given, an `https:` key-set fetch goes
+  through `node:https` with it. Strict server verification is unchanged, redirects are still
+  refused, and the timeout and single-flight behaviour are unchanged. No new dependency.
 - **Byte-order mark and every other body, in the event consumer and the requester** (CONTRACT §8
   step 2a and "No body escapes the consumer", D-10). The first byte of a body must be `{`: a
   UTF-8 byte-order mark or whitespace before it is `malformed` and is never stripped. The
