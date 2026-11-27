@@ -174,6 +174,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`oidcRefresh` no longer hands one grant's token set to a caller holding a different refresh
+  token** (#177). The §12 `oidc_refresh` single-flight was one slot per client, so a call with token
+  B made while token A was refreshing joined A's flight and returned A's tokens, and B was never
+  sent. The flight is now keyed per refresh token (a SHA-256 digest of the token and the tenant,
+  never the raw token): callers presenting the same token still share one wire call (§9 rule 2), a
+  different token gets its own call and result, and a key's slot is removed once settled.
+  `AxiamClient.refresh()` is unchanged.
+
 - **The JWKS response body is capped, and the REST `customCa` adds to the trust store** (#176).
   Neither Node JWKS fetch path (the global `fetch`, and the `node:https` path used with TLS
   material) limited the body: a hostile endpoint could be buffered until the 5 s deadline. The body

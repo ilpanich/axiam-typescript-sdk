@@ -26,7 +26,7 @@
 //   * §12.4 signature verification            → node/jwks.ts's verifier;
 //   * §7/§12.5 redaction                      → core/sensitive.ts.
 
-import { randomBytes, timingSafeEqual, type KeyObject } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual, type KeyObject } from 'node:crypto';
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import {
   AuthError,
@@ -546,6 +546,18 @@ function exposeSecret(value: Sensitive<string> | string): string {
 }
 
 /** Pull the HTTP status off an axios-shaped error, if any. */
+/**
+ * The single-flight key of an `oidcRefresh` call: a SHA-256 digest of the resolved tenant UUID and the
+ * refresh token. The raw token is never a map key.
+ */
+function refreshFlightKey(refreshToken: Sensitive<string> | string, resolvedTenantId: string): string {
+  return createHash('sha256')
+    .update(resolvedTenantId.toLowerCase())
+    .update('\0')
+    .update(exposeSecret(refreshToken))
+    .digest('hex');
+}
+
 function axiosStatus(err: unknown): number | undefined {
   if (err && typeof err === 'object' && 'response' in err) {
     return (err as { response?: { status?: number } }).response?.status;
@@ -995,8 +1007,12 @@ export class OidcClient {
   /** The access token adopted by `loginClientCredentials({ adoptAsCredential: true })`, if any. */
   #adoptedCredential: Sensitive<string> | null = null;
   #adoptionInterceptorInstalled = false;
-  /** In-flight `oidcRefresh`, shared by concurrent callers (§9 rule 2). */
-  #pendingRefresh: Promise<OidcTokenSet> | null = null;
+  /**
+   * In-flight `oidcRefresh` calls, one per refresh token (§9 rule 2: a burst is the callers of ONE
+   * token). Keyed by {@link refreshFlightKey}, a SHA-256 digest, never the raw token. A key's slot is
+   * removed once its flight has settled.
+   */
+  readonly #pendingRefresh = new Map<string, Promise<OidcTokenSet>>();
 
   constructor(session: SharedSession, options: OidcClientOptions) {
     // A non-finite skew is a configuration fault: refuse it here, where the
@@ -1148,15 +1164,27 @@ export class OidcClient {
    * in a refresh-issued ID token.
    */
   oidcRefresh(params: OidcRefreshParams): Promise<OidcTokenSet> {
-    const existing = this.#pendingRefresh;
+    // Only a caller presenting the SAME refresh token (and tenant) joins; a different token gets its
+    // own wire call and its own result (§9 rules 2 and 6d).
+    // The tenant is the RESOLVED one (§12.3 rule 4: the explicit argument, else the client default), so
+    // an explicit tenant equal to the default and an omitted one share a flight: a second wire call
+    // with the same rotating token would be a replay. A tenant that cannot be resolved rejects as before.
+    let key: string;
+    try {
+      key = refreshFlightKey(params.refreshToken, this.#resolveTenantId(params.tenantId));
+    } catch (err) {
+      return Promise.reject(err);
+    }
+    const existing = this.#pendingRefresh.get(key);
     if (existing) {
       return existing;
     }
     const pending = this.#refreshUnderGuard(params);
-    this.#pendingRefresh = pending;
+    this.#pendingRefresh.set(key, pending); // published strictly before it can be vacated
     const clear = (): void => {
-      if (this.#pendingRefresh === pending) {
-        this.#pendingRefresh = null;
+      // Identity-checked: never vacate a different, still-live flight's slot.
+      if (this.#pendingRefresh.get(key) === pending) {
+        this.#pendingRefresh.delete(key);
       }
     };
     pending.then(clear, clear);

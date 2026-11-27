@@ -116,6 +116,94 @@ describe('oidcRefresh (§12.1, §9)', () => {
     }
   });
 
+  // CONTRACT.md §9 rule 2 / 6d (#177): the single-flight is keyed PER refresh token. A caller holding a
+  // different token is not part of the burst and must never receive another grant's token set.
+  it('gives a DIFFERENT refresh token its own wire call and its own token set (#177)', async () => {
+    const state = createMockState();
+    const presented: Array<string | null> = [];
+    server.use(
+      discoveryHandler(state),
+      http.post(TOKEN_ENDPOINT, async ({ request }) => {
+        const rt = new URLSearchParams(await request.text()).get('refresh_token');
+        presented.push(rt);
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        return HttpResponse.json(tokenResponse({ access_token: `access-for-${rt}` }));
+      }),
+    );
+    const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
+    await oidc.oidcDiscover();
+
+    const [a1, b, a2] = await Promise.all([
+      oidc.oidcRefresh({ refreshToken: 'token-A' }),
+      oidc.oidcRefresh({ refreshToken: new Sensitive('token-B') }),
+      oidc.oidcRefresh({ refreshToken: 'token-A' }), // same token: joins A
+    ]);
+
+    expect(a1.accessToken.expose()).toBe('access-for-token-A');
+    expect(b.accessToken.expose()).toBe('access-for-token-B');
+    expect(a2).toBe(a1);
+    expect([...presented].sort()).toEqual(['token-A', 'token-B']); // 2 wire calls, A once
+  });
+
+  it('same token, different resolved tenant → separate flights; default tenant explicit vs omitted → one flight (#177)', async () => {
+    const state = createMockState();
+    const presented: Array<string | null> = [];
+    const tenants: Array<string | null> = [];
+    server.use(
+      discoveryHandler(state),
+      http.post(TOKEN_ENDPOINT, async ({ request }) => {
+        presented.push(new URLSearchParams(await request.text()).get('refresh_token'));
+        tenants.push(new URL(request.url).searchParams.get('tenant_id'));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return HttpResponse.json(tokenResponse());
+      }),
+    );
+    const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
+    await oidc.oidcDiscover();
+    await Promise.all([
+      oidc.oidcRefresh({ refreshToken: 'secret-rt', tenantId: TENANT_ID }),
+      oidc.oidcRefresh({ refreshToken: 'secret-rt' }), // the client default (TENANT_ID)
+      oidc.oidcRefresh({ refreshToken: 'secret-rt', scope: 'openid' }), // scope is not part of the key
+    ]);
+    expect(presented).toEqual(['secret-rt']); // one wire call
+    presented.length = 0;
+    await Promise.all([
+      oidc.oidcRefresh({ refreshToken: 'secret-rt', tenantId: TENANT_ID }),
+      oidc.oidcRefresh({ refreshToken: 'secret-rt', tenantId: '00000000-0000-4000-8000-000000000099' }),
+    ]);
+    expect(presented).toEqual(['secret-rt', 'secret-rt']); // other tenant: its own call
+    expect(tenants).toContain('00000000-0000-4000-8000-000000000099');
+    // The same tenant in upper and lower case is one tenant: one flight, one wire call.
+    presented.length = 0;
+    const hex = 'abcdefab-cdef-4abc-8def-abcdefabcdef';
+    await Promise.all([
+      oidc.oidcRefresh({ refreshToken: 'secret-rt', tenantId: hex }),
+      oidc.oidcRefresh({ refreshToken: 'secret-rt', tenantId: hex.toUpperCase() }),
+    ]);
+    expect(presented).toEqual(['secret-rt']);
+  });
+
+  it('vacates the slot once settled, and no raw token reaches an error (#177)', async () => {
+    const state = createMockState();
+    const presented: Array<string | null> = [];
+    server.use(
+      discoveryHandler(state),
+      http.post(TOKEN_ENDPOINT, async ({ request }) => {
+        presented.push(new URLSearchParams(await request.text()).get('refresh_token'));
+        return HttpResponse.json(tokenResponse());
+      }),
+    );
+    const { oidc } = createClient({ clientSecret: CLIENT_SECRET });
+    await oidc.oidcRefresh({ refreshToken: 'secret-rt', tenantId: TENANT_ID });
+    // After full vacate the same token starts a fresh wire call.
+    await oidc.oidcRefresh({ refreshToken: 'secret-rt', tenantId: TENANT_ID });
+    expect(presented).toHaveLength(2);
+    // No raw token reaches an error message.
+    server.use(http.post(TOKEN_ENDPOINT, () => HttpResponse.json({ error: 'invalid_grant' }, { status: 400 })));
+    const err = await oidc.oidcRefresh({ refreshToken: 'secret-rt' }).catch((e: unknown) => e);
+    expect(String((err as Error).message)).not.toContain('secret-rt');
+  });
+
   // Contract 1.65 §9 ("A replayed refresh token ends the session"): the 1.65 port
   // CONFIRMS the existing single-flight rules against `invalid_grant`. With the
   // default `revoke_session` a second presentation of a rotated token costs the
