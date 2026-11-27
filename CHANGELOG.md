@@ -176,7 +176,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A body that starts with a UTF-8 byte-order mark, or whose cut canonical bytes do not parse,
   is nacked without requeue by the event consumer instead of throwing out of `verifyAndDispatch`
   (which, called unawaited from `consume()`, was an unhandled rejection a publisher could use to
-  crash the process); `consume()` also catches any rejection and nacks. The requester checks an
+  crash the process); `consume()` also catches any rejection and nacks; the event consumer nacks before it logs, and an integrator logger that throws cannot leave a delivery unacked. The requester checks an
   ill-typed `reason`/`reason_code` after the HMAC, so a wrong signature is `signature`.
 - `MemoryOidcStateStore` is bounded: at most `OIDC_STATE_MAX_ENTRIES` (10 000) entries by
   default, oldest evicted first (new optional second constructor argument).

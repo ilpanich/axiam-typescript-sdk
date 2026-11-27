@@ -132,6 +132,68 @@ describe('consume() wiring', () => {
     expect(channel.nack).not.toHaveBeenCalled();
   });
 
+  it('a rejection inside verification is nacked once without requeue and logs exactly timestamp, exchange, routingKey', async () => {
+    const handler = vi.fn().mockResolvedValue(undefined);
+    const logger = { warn: vi.fn() };
+    const nonceStore = {
+      checkAndRecord: () => {
+        throw new Error('store down');
+      },
+    };
+    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, { nonceStore, logger });
+    await channel.deliver(signedDelivery());
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(channel.ack).not.toHaveBeenCalled();
+    expect(channel.nack).toHaveBeenCalledTimes(1);
+    expect(channel.nack.mock.calls[0].slice(1)).toEqual([false, false]);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    const [, , context] = logger.warn.mock.calls[0] as [string, string, Record<string, unknown>];
+    expect(Object.keys(context).sort()).toEqual(['exchange', 'routingKey', 'timestamp']);
+  });
+
+  it('a logger whose warn throws neither leaves the delivery unacked nor raises an unhandled rejection', async () => {
+    const logger = {
+      warn: () => {
+        throw new Error('logger down');
+      },
+    };
+    const nonceStore = {
+      checkAndRecord: () => {
+        throw new Error('store down');
+      },
+    };
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), vi.fn(), { nonceStore, logger });
+    await channel.deliver(signedDelivery());
+    await new Promise((r) => setTimeout(r, 10));
+    process.off('unhandledRejection', unhandled);
+
+    expect(unhandled).not.toHaveBeenCalled();
+    expect(channel.nack).toHaveBeenCalledTimes(1);
+    expect(channel.ack).not.toHaveBeenCalled();
+  });
+
+  it('a throwing logger on a refused body still nacks it and does not reject', async () => {
+    const logger = {
+      warn: () => {
+        throw new Error('logger down');
+      },
+    };
+    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), vi.fn(), { logger });
+    const bad = signedDelivery();
+    bad.content = Buffer.from('not json', 'utf8');
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    await channel.deliver(bad);
+    await new Promise((r) => setTimeout(r, 10));
+    process.off('unhandledRejection', unhandled);
+    expect(unhandled).not.toHaveBeenCalled();
+    expect(channel.nack).toHaveBeenCalledTimes(1);
+  });
+
   it('shares one nonce store across deliveries so a replayed nonce is nacked', async () => {
     const handler = vi.fn().mockResolvedValue(undefined);
     await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, {

@@ -277,13 +277,18 @@ export async function verifyAndDispatch(
   // value decoded from those same verified bytes, so what is verified and what
   // is delivered cannot differ.
   const refuse = (message: string): void => {
-    logger?.warn('axiam_sdk.security', message, {
-      timestamp: new Date().toISOString(),
-      exchange: msg.fields.exchange,
-      routingKey: msg.fields.routingKey,
-    });
+    // Nack first: a logger that throws must not leave the delivery unacked.
     // channel.nack(msg, /* allUpTo */ false, /* requeue */ false)
     channel.nack(msg, false, false);
+    try {
+      logger?.warn('axiam_sdk.security', message, {
+        timestamp: new Date().toISOString(),
+        exchange: msg.fields.exchange,
+        routingKey: msg.fields.routingKey,
+      });
+    } catch {
+      // an integrator logger's failure is not the delivery's problem
+    }
   };
 
   // 2a: one JSON object, nothing after the closing `}` (not even whitespace),
@@ -448,16 +453,21 @@ export async function consume(
     if (!msg) return;
     verifyAndDispatch(channel, msg, signingKey.expose(), handler, sharedOptions).catch(() => {
       // Never an unhandled rejection (it would take the process down and the
-      // unacked delivery would come back): nack without requeue; log no body content.
-      sharedOptions.logger?.warn('axiam_sdk.security', 'AMQP delivery handling failed; nacking without requeue', {
-        timestamp: new Date().toISOString(),
-        exchange: msg.fields.exchange,
-        routingKey: msg.fields.routingKey,
-      });
+      // unacked delivery would come back): nack without requeue first, then
+      // log without body content; neither step may throw out of here.
       try {
         channel.nack(msg, false, false);
       } catch {
         // channel already closed
+      }
+      try {
+        sharedOptions.logger?.warn('axiam_sdk.security', 'AMQP delivery handling failed; nacking without requeue', {
+          timestamp: new Date().toISOString(),
+          exchange: msg.fields.exchange,
+          routingKey: msg.fields.routingKey,
+        });
+      } catch {
+        // an integrator logger's failure is not the delivery's problem
       }
     });
   });
