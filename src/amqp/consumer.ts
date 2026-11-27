@@ -2,8 +2,8 @@
 //
 // The SDK owns the full ack/nack loop. Every delivery is HMAC-verified
 // (CONTRACT.md §8) BEFORE the caller-supplied handler is ever invoked. On
-// any verification failure (signature mismatch, missing signature in the
-// default strict mode, or a body that is not one well-formed JSON object without duplicate keys) the delivery
+// any verification failure (signature mismatch, a missing signature — there is no
+// lenient mode, CONTRACT.md §8 rule 3 — a body outside the signed layout, or a body that is not one well-formed JSON object without duplicate keys) the delivery
 // is nacked WITHOUT requeue and a security event is emitted — the event
 // never contains the received/expected HMAC value or the signing key. Only
 // a verified delivery reaches the handler, and only then is it acked.
@@ -142,13 +142,6 @@ export interface ConsumeLogger {
 export interface ConsumeOptions {
   logger?: ConsumeLogger;
   /**
-   * Strict mode (default true, CONTRACT.md §8.3): a message with no
-   * `hmac_signature` is treated as a verification failure (nack-no-requeue),
-   * not a pass-through. Lenient mode (false) is a temporary rolling-
-   * deployment measure only — strict MUST remain the default.
-   */
-  strict?: boolean;
-  /**
    * Freshness skew window for `issued_at` validation (NEW-4), in
    * milliseconds. Defaults to {@link DEFAULT_REPLAY_SKEW_MS} (5 minutes),
    * matching the server default (CONTRACT.md §8 v2).
@@ -174,8 +167,50 @@ export interface ConsumeOptions {
   tls?: AmqpTlsOptions;
 }
 
-/** `,"hmac_signature":"<value>"}` at the very end of the body, nothing after it. */
-const TRAILING_SIGNATURE = /,"hmac_signature":"([^"\\]*)"\}$/;
+/** `,"hmac_signature":"<64 hex>"}` at the very end of the body, nothing after it (CONTRACT.md §8 step 2b). */
+const TRAILING_SIGNATURE = /,"hmac_signature":"([0-9a-fA-F]{64})"\}$/;
+
+/**
+ * The signed members of the two event types this consumer accepts, in
+ * declaration order (CONTRACT.md §8 "Exact signed field order"); a name ending
+ * in `?` is optional. Step 2c: the canonical bytes' top-level names MUST be
+ * exactly one of these lists, each optional member present in its place or
+ * absent, nothing else — every tenant-subkey-signed shape shares the key, so
+ * without this a signed `AuthzResponse` or a cache-invalidation message would
+ * pass as an event.
+ */
+const SIGNED_LAYOUTS: readonly (readonly string[])[] = [
+  // AuthzRequest
+  ['correlation_id', 'tenant_id', 'subject_id', 'action', 'resource_id', 'scope?', 'key_version', 'nonce', 'issued_at'],
+  // AuditEventMessage
+  [
+    'tenant_id',
+    'actor_id',
+    'actor_type',
+    'action',
+    'resource_id?',
+    'outcome',
+    'ip_address?',
+    'metadata?',
+    'key_version',
+    'nonce',
+    'issued_at',
+  ],
+];
+
+/** Whether `names` (top-level member names, in wire order) fit one declared layout exactly. */
+function matchesSignedLayout(names: readonly string[]): boolean {
+  return SIGNED_LAYOUTS.some((layout) => {
+    let i = 0;
+    for (const declared of layout) {
+      const optional = declared.endsWith('?');
+      const name = optional ? declared.slice(0, -1) : declared;
+      if (i < names.length && names[i] === name) i += 1;
+      else if (!optional) return false;
+    }
+    return i === names.length;
+  });
+}
 
 /**
  * Whether any JSON object in `text` (already known to be well-formed JSON)
@@ -233,72 +268,74 @@ export async function verifyAndDispatch(
   handler: (event: Record<string, unknown>) => Promise<void>,
   options: ConsumeOptions = {},
 ): Promise<void> {
-  const { logger, strict = true } = options;
+  const { logger } = options;
 
-  // CONTRACT.md §8 / axiam#882: verify over the RECEIVED bytes — the body with
-  // its trailing `,"hmac_signature":"<hex>"}` member removed — never over a
+  // CONTRACT.md §8 step 2 / axiam#882: verify over the RECEIVED bytes — the body
+  // with its trailing `,"hmac_signature":"<hex>"}` member removed — never over a
   // re-serialization, which disagrees with serde_json on floats (`1.0`),
   // integer-like keys (reordered) and large integers. The handler is given the
-  // value parsed from those same verified bytes, so what is verified and what
+  // value decoded from those same verified bytes, so what is verified and what
   // is delivered cannot differ.
-  const text = msg.content.toString('utf8');
+  const refuse = (message: string): void => {
+    logger?.warn('axiam_sdk.security', message, {
+      timestamp: new Date().toISOString(),
+      exchange: msg.fields.exchange,
+      routingKey: msg.fields.routingKey,
+    });
+    // channel.nack(msg, /* allUpTo */ false, /* requeue */ false)
+    channel.nack(msg, false, false);
+  };
+
+  // 2a: one JSON object, nothing after the closing `}` (not even whitespace),
+  // no repeated member at any depth. Invalid UTF-8 is refused rather than
+  // decoded to U+FFFD, which would make the handler's value differ from the bytes.
+  let text: string;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(msg.content);
+  } catch {
+    refuse('AMQP message body is not one well-formed JSON object; nacking without requeue');
+    return;
+  }
   let whole: unknown;
   try {
     whole = JSON.parse(text);
   } catch {
     whole = undefined;
   }
-  if (typeof whole !== 'object' || whole === null || Array.isArray(whole) || hasDuplicateKey(text)) {
-    // Not JSON, trailing content, not an object, or a duplicate key (which
-    // different parsers read differently): nothing is verified or delivered.
-    logger?.warn('axiam_sdk.security', 'AMQP message body is not one well-formed JSON object; nacking without requeue', {
-      exchange: msg.fields.exchange,
-      routingKey: msg.fields.routingKey,
-    });
-    // channel.nack(msg, /* allUpTo */ false, /* requeue */ false)
-    channel.nack(msg, false, false);
+  if (
+    typeof whole !== 'object' ||
+    whole === null ||
+    Array.isArray(whole) ||
+    !text.startsWith('{') ||
+    !text.endsWith('}') ||
+    hasDuplicateKey(text)
+  ) {
+    refuse('AMQP message body is not one well-formed JSON object; nacking without requeue');
     return;
   }
 
-  const wholeObject = whole as Record<string, unknown>;
-  const sig = typeof wholeObject.hmac_signature === 'string' ? wholeObject.hmac_signature : undefined;
-  let canonical: Buffer;
-  let body: Record<string, unknown>;
+  // 2b: the body must END in the signature member; missing, null, non-string,
+  // not-last and trailing content are refused, never repaired (and an unsigned
+  // message is always refused: §8 rule 3, there is no lenient mode).
   const trailing = TRAILING_SIGNATURE.exec(msg.content.toString('latin1'));
-  if (sig === undefined) {
-    // No signature member at all (only the lenient, unsigned path can accept
-    // this): the object is delivered as parsed; `canonical` is never compared.
-    body = { ...wholeObject };
-    delete body.hmac_signature; // a non-string member (null) is not a signature
-    canonical = Buffer.alloc(0);
-  } else if (trailing !== null && trailing[1] === sig) {
-    // latin1 maps one byte to one unit and the member is ASCII, so the match
-    // index is a byte index.
-    canonical = Buffer.concat([msg.content.subarray(0, trailing.index), Buffer.from('}', 'ascii')]);
-    body = JSON.parse(canonical.toString('utf8')) as Record<string, unknown>;
-  } else {
-    // A signature that is not the trailing member (or not a string): there are
-    // no received bytes to verify, and re-serializing is what axiam#882 removes.
-    logger?.warn('axiam_sdk.security', 'AMQP hmac_signature is not the trailing member; nacking without requeue', {
-      exchange: msg.fields.exchange,
-      routingKey: msg.fields.routingKey,
-    });
-    // channel.nack(msg, /* allUpTo */ false, /* requeue */ false)
-    channel.nack(msg, false, false);
+  const sig = (whole as Record<string, unknown>).hmac_signature;
+  if (trailing === null || sig !== trailing[1]) {
+    refuse('AMQP message has no trailing hmac_signature member; nacking without requeue');
+    return;
+  }
+  // latin1 maps one byte to one unit and the member is ASCII, so the match
+  // index is a byte index.
+  const canonical = Buffer.concat([msg.content.subarray(0, trailing.index), Buffer.from('}', 'ascii')]);
+  const body = JSON.parse(canonical.toString('utf8')) as Record<string, unknown>;
+
+  // 2c: layout check over the canonical bytes' top-level names, exactly.
+  if (!matchesSignedLayout(Object.keys(body))) {
+    refuse('AMQP message is not an AuthzRequest or AuditEventMessage layout; nacking without requeue');
     return;
   }
 
-  // Strict mode (default, CONTRACT.md §8.3): a missing signature is treated
-  // as a verification failure, not a pass-through. A present signature is
-  // always verified regardless of strict/lenient mode; lenient mode only
-  // changes the outcome for a MISSING signature (temporary rolling-
-  // deployment measure — strict MUST remain the default).
-  let verified: boolean;
-  if (sig !== undefined) {
-    verified = verifyPayload(signingKey, canonical, sig);
-  } else {
-    verified = !strict;
-  }
+  // 2d-2e: HMAC over the canonical bytes, compared in constant time.
+  const verified = verifyPayload(signingKey, canonical, trailing[1]);
 
   if (!verified) {
     // Security event (§8.4): timestamp, exchange, routing key, and tenant

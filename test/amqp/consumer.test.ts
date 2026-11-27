@@ -28,10 +28,9 @@ function makeMessage(content: Buffer, exchange = 'axiam.authz.request', routingK
 
 /**
  * Builds a v2 (NEW-4, `key_version = 2`) signed body: correlation_id,
- * action, key_version, nonce, issued_at, hmac_signature — declaration
- * order doesn't matter for these ad hoc test bodies (unlike the real DTOs)
- * since the HMAC is computed over whatever order `JSON.stringify` produces
- * here and verified the same way; `overrides` lets replay/freshness/
+ * action, key_version, nonce, issued_at, hmac_signature — AuthzRequest
+ * declaration order (the consumer's layout check, CONTRACT.md §8 step 2c,
+ * demands it); `overrides` lets replay/freshness/
  * version tests build an otherwise-valid-but-deliberately-bad body.
  */
 function makeSignedBody(overrides: Record<string, unknown> = {}): {
@@ -40,7 +39,10 @@ function makeSignedBody(overrides: Record<string, unknown> = {}): {
 } {
   const body: Record<string, unknown> = {
     correlation_id: '00000000-0000-0000-0000-000000000000',
+    tenant_id: '11111111-1111-1111-1111-111111111111',
+    subject_id: '33333333-3333-3333-3333-333333333333',
     action: 'read',
+    resource_id: '44444444-4444-4444-4444-444444444444',
     key_version: 2,
     nonce: randomUUID(),
     issued_at: new Date().toISOString(),
@@ -176,27 +178,27 @@ describe('amqp/consumer verifyAndDispatch', () => {
     expect(channel.nackCalls[0]).toEqual({ msg, allUpTo: false, requeue: false });
   });
 
-  it('lenient mode (strict:false): missing signature passes through to handler and is acked', async () => {
-    // Still v2-valid (key_version/nonce/issued_at present) — lenient mode
-    // only changes the outcome for a MISSING signature; it is not a bypass
-    // of the NEW-4 replay-protection gates (CONTRACT.md §8 v2, hard cutover).
+  it('there is no lenient mode: an unsigned message is nacked even when a strict:false option is passed (CONTRACT.md §8 rule 3)', async () => {
     const body = {
       correlation_id: '00000000-0000-0000-0000-000000000000',
+      tenant_id: '11111111-1111-1111-1111-111111111111',
+      subject_id: '33333333-3333-3333-3333-333333333333',
       action: 'read',
+      resource_id: '44444444-4444-4444-4444-444444444444',
       key_version: 2,
       nonce: randomUUID(),
       issued_at: new Date().toISOString(),
     };
-    const data = Buffer.from(JSON.stringify(body), 'utf8');
-    const msg = makeMessage(data);
+    const msg = makeMessage(Buffer.from(JSON.stringify(body), 'utf8'));
     const channel = new RecordingChannel();
     const handler = vi.fn(async () => {});
 
-    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, { strict: false });
+    // The option no longer exists; a JS caller (or a stale config) still passing it changes nothing.
+    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, { strict: false } as never);
 
-    expect(handler).toHaveBeenCalledTimes(1);
-    expect(channel.acked).toHaveLength(1);
-    expect(channel.nackCalls).toHaveLength(0);
+    expect(handler).not.toHaveBeenCalled();
+    expect(channel.acked).toHaveLength(0);
+    expect(channel.nackCalls).toEqual([{ msg, allUpTo: false, requeue: false }]);
   });
 
   it('every failure path (mismatch, missing, parse-fail) records requeue===false exactly', async () => {

@@ -208,8 +208,10 @@ result. The reference implementation is `encodeRedirectLocation`, `src/middlewar
 3. **Input that is not valid Unicode.** Whatever the language's string model, every part of the
    destination that is not valid Unicode is replaced by U+FFFD (encoded `%EF%BF%BD`) **before**
    encoding, one replacement per invalid unit, and the encoder MUST NOT throw on any input. In a
-   byte-string language (PHP, C) that means each invalid UTF-8 sequence: `returnTo=%FF` arrives as
-   the single byte `0xFF` and becomes `%EF%BF%BD`. In a language whose strings are UTF-16 (JavaScript,
+   byte-string language (PHP, C) that means one U+FFFD per **maximal subpart** of an ill-formed
+   UTF-8 sequence (the Unicode / WHATWG substitution): `\xE2\x82` is one, `\xF0\x9F\x98` is one,
+   `\xFF` is one, `\xC0\x80` is two and `\xED\xA0\x80` is three. `returnTo=%FF` arrives as the
+   single byte `0xFF` and becomes `%EF%BF%BD`. In a language whose strings are UTF-16 (JavaScript,
    Java, C#) or hold code points (Python `str`) it means each unpaired surrogate, however many are
    adjacent (`/\uD800\uD800` becomes `/%EF%BF%BD%EF%BF%BD`). A valid surrogate pair is one character
    (`/😀` becomes `/%F0%9F%98%80`).

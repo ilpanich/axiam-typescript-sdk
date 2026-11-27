@@ -20,18 +20,17 @@ function message(body: string): ConsumeMessage {
   } as unknown as ConsumeMessage;
 }
 
-async function delivered(body: string, strict = true): Promise<boolean> {
+async function delivered(body: string): Promise<boolean> {
   const channel = { consume: vi.fn(), ack: vi.fn(), nack: vi.fn() };
   const handler = vi.fn(async () => {});
-  await verifyAndDispatch(channel, message(body), SUBKEY, handler, { strict });
+  await verifyAndDispatch(channel, message(body), SUBKEY, handler);
   return handler.mock.calls.length > 0;
 }
 
 describe('N2 pin — consume() never delivers an AuthzResponse', () => {
-  it('a forged unsigned allow (1.67 shape) is not delivered, strict or lenient', async () => {
+  it('a forged unsigned allow (1.67 shape) is not delivered', async () => {
     const forged = '{"correlation_id":"22222222-2222-2222-2222-222222222222","allowed":true}';
     expect(await delivered(forged)).toBe(false);
-    expect(await delivered(forged, false)).toBe(false);
   });
 
   it('the genuine signed vector 1 is not delivered either (no replay fields)', async () => {

@@ -198,23 +198,33 @@ export class AuthzResponseVerifier {
    *   that is not set either).
    */
   verify(body: Buffer, delivery?: AuthzResponseDelivery): AuthzResponseVerdict {
+    // Normative order (CONTRACT.md §8 consumer obligation 4): (1) not one JSON
+    // object -> malformed; (2) no hmac_signature member -> unsigned, whatever
+    // else is missing; (3) a bad signature member, or a missing / ill-typed
+    // allowed, tenant_id, nonce or correlation_id -> malformed, BEFORE the
+    // HMAC; (4) the HMAC fails -> signature; then tenant and unknown_request.
+    let whole: unknown;
+    try {
+      whole = JSON.parse(body.toString('utf8'));
+    } catch {
+      return this.#refuse('malformed', delivery);
+    }
+    if (typeof whole !== 'object' || whole === null || Array.isArray(whole)) {
+      return this.#refuse('malformed', delivery);
+    }
+    if (!Object.prototype.hasOwnProperty.call(whole, 'hmac_signature')) {
+      return this.#refuse('unsigned', delivery);
+    }
     // Byte offsets: latin1 maps each byte to one UTF-16 unit, and the
     // signature member is pure ASCII, so the match index is a byte index.
     const match = TRAILING_SIGNATURE.exec(body.toString('latin1'));
     if (!match) {
-      return this.#refuseUnsigned(body, delivery);
+      return this.#refuse('malformed', delivery);
     }
 
-    // Rule 2 — the canonical bytes are the received bytes with the trailing
-    // member removed: everything before it, then the closing brace.
+    // The canonical bytes are the received bytes with the trailing member
+    // removed: everything before it, then the closing brace.
     const canonical = Buffer.concat([body.subarray(0, match.index), Buffer.from('}', 'ascii')]);
-    const expected = createHmac('sha256', this.#subkey.expose()).update(canonical).digest();
-    const received = Buffer.from(match[1], 'hex');
-    if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
-      return this.#refuse('signature', delivery);
-    }
-
-    // Rule 1 on the VERIFIED bytes, which are also what is delivered.
     let parsed: unknown;
     try {
       parsed = JSON.parse(canonical.toString('utf8'));
@@ -235,6 +245,12 @@ export class AuthzResponseVerifier {
       Object.prototype.hasOwnProperty.call(r, 'hmac_signature')
     ) {
       return this.#refuse('malformed', delivery);
+    }
+
+    const expected = createHmac('sha256', this.#subkey.expose()).update(canonical).digest();
+    const received = Buffer.from(match[1], 'hex');
+    if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
+      return this.#refuse('signature', delivery);
     }
 
     // Rule 3 — the binding.
@@ -275,29 +291,6 @@ export class AuthzResponseVerifier {
       channel.nack(msg, false, false);
     }
     return verdict;
-  }
-
-  /**
-   * No `,"hmac_signature":"<64 hex>"}` at the end of the body. Refused either
-   * way (there is no opt-out, CONTRACT.md §8, contract 1.69): `unsigned` when
-   * the body is a JSON object with no `hmac_signature` member at all, and
-   * `malformed` otherwise (not JSON, not an object, or the member is present
-   * but does not end the body or is not 64 hex digits).
-   */
-  #refuseUnsigned(body: Buffer, delivery: AuthzResponseDelivery | undefined): AuthzResponseVerdict {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(body.toString('utf8'));
-    } catch {
-      return this.#refuse('malformed', delivery);
-    }
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      return this.#refuse('malformed', delivery);
-    }
-    if (Object.prototype.hasOwnProperty.call(parsed, 'hmac_signature')) {
-      return this.#refuse('malformed', delivery);
-    }
-    return this.#refuse('unsigned', delivery);
   }
 
   #refuse(reason: AuthzResponseRejection, delivery: AuthzResponseDelivery | undefined): AuthzResponseVerdict {

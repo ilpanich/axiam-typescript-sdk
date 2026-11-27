@@ -58,7 +58,10 @@ function makeFakeChannel(): FakeChannel {
 function signedDelivery(): ConsumeMessage {
   const body: Record<string, unknown> = {
     correlation_id: '00000000-0000-0000-0000-000000000000',
+    tenant_id: '11111111-1111-1111-1111-111111111111',
+    subject_id: '33333333-3333-3333-3333-333333333333',
     action: 'read',
+    resource_id: '44444444-4444-4444-4444-444444444444',
     key_version: 2,
     nonce: randomUUID(),
     issued_at: new Date().toISOString(),

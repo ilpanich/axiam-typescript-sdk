@@ -687,6 +687,10 @@ await consume(
     // Only a verified event ever reaches this closure — HMAC-SHA256
     // signature checked and stripped by the SDK before your handler runs
     // (CONTRACT.md §8). Verification failures are nacked-without-requeue.
+    // Verified over the received bytes: the body must end in the
+    // `hmac_signature` member and have exactly the AuthzRequest or
+    // AuditEventMessage members in order (§8 step 2). An unsigned message is
+    // always refused; there is no lenient mode.
     console.log('verified audit event:', event);
   },
   // Optional. The PEM bundle for a privately issued broker certificate — the

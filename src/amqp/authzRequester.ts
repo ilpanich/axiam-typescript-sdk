@@ -359,6 +359,12 @@ export class AuthzRequester {
     }
     // Acks an accepted answer, nacks (no requeue) and logs anything else; on
     // acceptance the verifier has already retired the request.
+    if (this.#closed) {
+      // After Close an answer is not decoded or dispatched: nacked without
+      // requeue, no discard event (CONTRACT.md §8 consumer obligation 4).
+      this.#channel.nack(msg, false, false);
+      return;
+    }
     const verdict = this.#verifier.settle(this.#channel, msg);
     if (!verdict.accepted) {
       return;

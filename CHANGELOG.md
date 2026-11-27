@@ -130,6 +130,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unsigned response to a reply queue, so the option could admit only a forged response (CONTRACT
   1.69 §8, axiam#881). The requester requires a 1.68 server; a server older than 1.68 answers only
   on the shared queue the requester never reads, so every check times out whatever the option said.
+- **`ConsumeOptions.strict`, the lenient (accept-unsigned) mode of the AMQP event consumer**
+  (`verifyAndDispatch`, `consume`; present since 1.0, never released for 1.4.0): an unsigned
+  `AuthzRequest` or `AuditEventMessage` is always nacked without requeue, with no option to accept
+  one (CONTRACT 1.69 §8 rule 3). A JavaScript caller still passing `strict` has it ignored.
 
 ### Fixed
 
@@ -152,6 +156,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parsed from the same bytes. A duplicate key anywhere, trailing content, or a body that is not
   one JSON object is nacked without requeue, explicitly. A body whose `hmac_signature` is present
   but not the trailing member is nacked (nothing is re-serialized).
+- **The event consumer enforces CONTRACT 1.69 §8 step 2b-2c exactly.** The body must end in
+  `,"hmac_signature":"<64 hex>"}` with nothing after the `}` (whitespace included) and be valid
+  UTF-8; the canonical bytes' top-level member names must be exactly the `AuthzRequest` or the
+  `AuditEventMessage` members in declaration order (optional ones present in place or absent,
+  nothing else), so a validly signed `AuthzResponse`, reactor message or cache-invalidation
+  broadcast under the same tenant subkey is nacked instead of dispatched. Tests feed the
+  server's `wire_json` reference vectors (`test/amqp/consumerLayout.test.ts`).
+- **The AMQP authz requester discards in the normative reason order** (CONTRACT 1.69 §8
+  consumer obligation 4; `AuthzResponseVerifier`, `AuthzRequester`). A body with a bad signature
+  member, or a missing or ill-typed `allowed`/`tenant_id`/`nonce`/`correlation_id`, is `malformed`
+  before the HMAC is computed; it was reported as `signature` when its signature was also wrong.
+  An answer delivered after `close()` is no longer decoded: it is nacked without requeue and logs
+  no event (it was logged as `unknown_request`). The `AuthzRequest` the requester publishes is
+  pinned byte for byte to the reference vector's `wire_json`
+  (`test/amqp/authzReasonOrder.test.ts`).
 - `MemoryOidcStateStore` is bounded: at most `OIDC_STATE_MAX_ENTRIES` (10 000) entries by
   default, oldest evicted first (new optional second constructor argument).
 - A non-finite ID-token clock skew (`NaN`, `±Infinity`) is refused with a `TypeError` —
