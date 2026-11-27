@@ -10,9 +10,10 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createServer as createTlsServer, type Server as TlsServer } from 'node:tls';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
-import { createJwksVerifier, createVerifier, JWKS_PATH } from '../../src/node/jwks.js';
+import { createJwksVerifier, createVerifier, JWKS_PATH, withDefaultRoots } from '../../src/node/jwks.js';
 import { createNodeSession } from '../../src/node/session.js';
 import { nodeTlsOptionsOf, createSession } from '../../src/rest/session.js';
 
@@ -168,5 +169,121 @@ describe('#175 — JWKS fetch honours customCa and the client identity', () => {
     expect(nodeTlsOptionsOf(withCa)).toEqual({ ca: pki.caCert });
     const plain = createSession({ baseUrl: openUrl, tenantSlug: 'acme' });
     expect(nodeTlsOptionsOf(plain)).toBeUndefined();
+  });
+
+  // ---- review follow-ups -------------------------------------------------
+
+  const listen = (s: { listen: (p: number, h: string, cb: () => void) => unknown; address: () => unknown }): Promise<number> =>
+    new Promise((r) => s.listen(0, '127.0.0.1', () => r((s.address() as AddressInfo).port)));
+
+  /** A raw TLS server writing `reply` verbatim to every connection; counts live sockets. */
+  async function rawServer(reply: string): Promise<{ url: string; server: TlsServer; live: () => number }> {
+    let live = 0;
+    const server = createTlsServer({ key: pki.serverKey, cert: pki.serverCert }, (sock) => {
+      live += 1;
+      sock.on('close', () => (live -= 1));
+      sock.on('error', () => undefined);
+      sock.on('data', () => sock.write(reply));
+    });
+    server.on('tlsClientError', () => undefined);
+    const port = await listen(server as never);
+    return { url: `https://127.0.0.1:${port}`, server, live: () => live };
+  }
+
+  it('an abnormal status (999) is rejected promptly, throws nothing uncaught, and a later fetch works', async () => {
+    const raw = await rawServer('HTTP/1.1 999 Nope\r\nContent-Length: 0\r\n\r\n');
+    try {
+      const started = Date.now();
+      const verifier = createVerifier(raw.url, { ca: pki.caCert });
+      await expect(verifier.verifyAccessToken(token, { expectedTenantId: 't-1' })).rejects.toThrow();
+      expect(Date.now() - started).toBeLessThan(4000);
+      // A fresh verifier (own cache, own cooldown) is unaffected.
+      const ok = createVerifier(openUrl, { ca: pki.caCert });
+      await expect(ok.verifyAccessToken(token, { expectedTenantId: 't-1' })).resolves.toMatchObject({ sub: 'user-1' });
+    } finally {
+      await new Promise((r) => raw.server.close(r));
+    }
+  });
+
+  it('a 302 is not followed and the verification is refused', async () => {
+    const before = hits.open;
+    const redirector = createServer({ key: pki.serverKey, cert: pki.serverCert }, (_req, res) => {
+      res.statusCode = 302;
+      res.setHeader('location', `${openUrl}${JWKS_PATH}`);
+      res.end();
+    });
+    const port = await listen(redirector);
+    try {
+      const verifier = createVerifier(`https://127.0.0.1:${port}`, { ca: pki.caCert });
+      await expect(verifier.verifyAccessToken(token, { expectedTenantId: 't-1' })).rejects.toThrow();
+      expect(hits.open).toBe(before);
+    } finally {
+      await new Promise((r) => redirector.close(r));
+    }
+  });
+
+  it('a stalled body fails at the SDK deadline and leaves no socket open', async () => {
+    const raw = await rawServer('HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1000\r\n\r\n{"keys":[');
+    try {
+      const started = Date.now();
+      const verifier = createVerifier(raw.url, { ca: pki.caCert });
+      await expect(verifier.verifyAccessToken(token, { expectedTenantId: 't-1' })).rejects.toThrow();
+      const took = Date.now() - started;
+      expect(took).toBeGreaterThanOrEqual(4000);
+      expect(took).toBeLessThan(8000);
+      await new Promise((r) => setTimeout(r, 200));
+      expect(raw.live()).toBe(0);
+    } finally {
+      await new Promise((r) => raw.server.close(r));
+    }
+  }, 15000);
+
+  it('a 304 to a conditional request keeps the held keys', async () => {
+    const seen: Array<string | undefined> = [];
+    const { publicKey, privateKey } = await generateKeyPair('EdDSA', { crv: 'Ed25519' });
+    const jwk = await exportJWK(publicKey);
+    jwk.kid = 'k304';
+    jwk.alg = 'EdDSA';
+    const tok = await new SignJWT({ tenant_id: 't-1' })
+      .setProtectedHeader({ alg: 'EdDSA', kid: 'k304' })
+      .setSubject('user-304')
+      .setIssuer('axiam')
+      .setExpirationTime('1h')
+      .sign(privateKey);
+    const srv = createServer({ key: pki.serverKey, cert: pki.serverCert }, (req, res) => {
+      const inm = req.headers['if-none-match'];
+      seen.push(inm as string | undefined);
+      res.setHeader('etag', '"v1"');
+      res.setHeader('cache-control', 'max-age=1');
+      if (inm === '"v1"') {
+        res.statusCode = 304;
+        res.end();
+        return;
+      }
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ keys: [jwk] }));
+    });
+    const port = await listen(srv);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const verifier = createVerifier(`https://127.0.0.1:${port}`, { ca: pki.caCert });
+      await expect(verifier.verifyAccessToken(tok, { expectedTenantId: 't-1' })).resolves.toMatchObject({ sub: 'user-304' });
+      vi.setSystemTime(Date.now() + 61_000);
+      await expect(verifier.verifyAccessToken(tok, { expectedTenantId: 't-1' })).resolves.toMatchObject({ sub: 'user-304' });
+      // The refresh is not awaited by a verification that still holds usable keys.
+      await vi.waitFor(() => expect(seen).toContain('"v1"'));
+    } finally {
+      vi.useRealTimers();
+      await new Promise((r) => srv.close(r));
+    }
+  });
+
+  it('customCa is added to the default roots, not substituted for them', async () => {
+    const tlsMod = await import('node:tls');
+    const list = withDefaultRoots(pki.caCert) as string[];
+    expect(list).toContain(pki.caCert);
+    const defaults = tlsMod.getCACertificates?.('default') ?? tlsMod.rootCertificates;
+    for (const c of defaults) expect(list).toContain(c);
+    expect(list.length).toBeGreaterThan(50);
   });
 });

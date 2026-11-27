@@ -339,12 +339,36 @@ export interface JwksTlsOptions {
 }
 
 /**
+ * The trust list for a JWKS fetch: Node's `ca` option REPLACES the trust store,
+ * so `customCa` (CONTRACT.md §6: an additional anchor) is appended to the
+ * default roots (including `NODE_EXTRA_CA_CERTS`, where Node exposes them)
+ * instead of standing alone. JWKS path only; the REST agent is unchanged.
+ *
+ * @internal
+ */
+export function withDefaultRoots(customCa: string | string[]): string[] {
+  const tlsMod = (process as { getBuiltinModule?: (id: string) => unknown }).getBuiltinModule?.('node:tls') as
+    | typeof import('node:tls')
+    | undefined;
+  let defaults: string[] = [];
+  if (tlsMod !== undefined) {
+    try {
+      defaults = [...(tlsMod.getCACertificates?.('default') ?? tlsMod.rootCertificates)];
+    } catch {
+      defaults = [...tlsMod.rootCertificates];
+    }
+  }
+  return [...defaults, ...(Array.isArray(customCa) ? customCa : [customCa])];
+}
+
+/**
  * `fetch` over `node:https` with explicit TLS material. Node's global `fetch`
  * takes no CA or client identity (only a dispatcher from the separate `undici`
  * package, which this SDK does not depend on), so a private-CA or mTLS
- * deployment needs this path. It never follows a redirect (a `3xx` is returned
- * as-is and refused by the caller) and honours `signal` for cancellation and
- * the deadline.
+ * deployment needs this path. It never follows a redirect and honours `signal`
+ * for cancellation and the deadline. Only `200` and `304` are answered; any
+ * other status destroys the response and rejects at once. The returned promise
+ * settles exactly once on every path.
  */
 async function fetchWithTls(
   url: string,
@@ -355,35 +379,54 @@ async function fetchWithTls(
   const https = (await import('node:https')).default;
   const { Readable } = await import('node:stream');
   return new Promise<Response>((resolve, reject) => {
+    let settled = false;
+    const settle = (fn: () => void): void => {
+      if (settled) return;
+      settled = true;
+      fn();
+    };
+    const agent = new https.Agent({
+      ...(tls.ca !== undefined ? { ca: withDefaultRoots(tls.ca) } : {}),
+      ...(tls.cert !== undefined ? { cert: tls.cert } : {}),
+      ...(tls.key !== undefined ? { key: tls.key } : {}),
+    });
+    const fail = (): void => {
+      agent.destroy();
+      settle(() => reject(new Error('unexpected JWKS status')));
+    };
     const req = https.request(
       url,
-      {
-        method: 'GET',
-        headers: init.headers,
-        signal: init.signal,
-        agent: new https.Agent({
-          ...(tls.ca !== undefined ? { ca: tls.ca } : {}),
-          ...(tls.cert !== undefined ? { cert: tls.cert } : {}),
-          ...(tls.key !== undefined ? { key: tls.key } : {}),
-        }),
-      },
+      { method: 'GET', headers: init.headers, signal: init.signal, agent },
       (res) => {
-        const status = res.statusCode ?? 0;
-        const headers = new Headers();
-        for (const [name, value] of Object.entries(res.headers)) {
-          if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(', ') : value);
+        try {
+          const status = res.statusCode ?? 0;
+          if (status !== 200 && status !== 304) {
+            res.destroy();
+            fail();
+            return;
+          }
+          const headers = new Headers();
+          for (const [name, value] of Object.entries(res.headers)) {
+            if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(', ') : value);
+          }
+          if (status === 304) res.resume();
+          const body = status === 304 ? null : (Readable.toWeb(res) as unknown as ReadableStream<Uint8Array>);
+          res.on('close', () => agent.destroy());
+          settle(() => resolve(new Response(body, { status, headers })));
+        } catch {
+          res.destroy();
+          fail();
         }
-        const bodyless = status === 204 || status === 205 || status === 304;
-        if (bodyless) res.resume();
-        resolve(
-          new Response(bodyless ? null : (Readable.toWeb(res) as unknown as ReadableStream<Uint8Array>), {
-            status,
-            headers,
-          }),
-        );
       },
     );
-    req.on('error', reject);
+    req.on('error', (err) => {
+      agent.destroy();
+      settle(() => reject(err));
+    });
+    req.on('close', () => {
+      // Closed before any response was delivered: nothing else will settle us.
+      if (!settled) fail();
+    });
     req.end();
   });
 }
@@ -414,12 +457,16 @@ class JwksCache {
   #ttlMs = JWKS_MAX_TTL_MS;
   #lastAttemptMs: number | undefined;
   #inflight: Promise<void> | undefined;
+  /** Held privately: it may carry the client key, and must not be an enumerable property. */
+  readonly #tls: JwksTlsOptions | undefined;
 
   constructor(
     private readonly jwksUri: string,
     private readonly jose: JoseModule,
-    private readonly tls?: JwksTlsOptions,
-  ) {}
+    tls?: JwksTlsOptions,
+  ) {
+    this.#tls = tls;
+  }
 
   /** The key resolver handed to `jwtVerify`. */
   readonly getKey = async (
@@ -479,8 +526,8 @@ class JwksCache {
     const signal = AbortSignal.timeout(TIMEOUT_DURATION_MS);
     // TLS material only matters for an https URL; the global `fetch` cannot carry it (#175).
     const res =
-      this.tls !== undefined && this.jwksUri.startsWith('https:')
-        ? await fetchWithTls(this.jwksUri, { headers, signal }, this.tls)
+      this.#tls !== undefined && new URL(this.jwksUri).protocol === 'https:'
+        ? await fetchWithTls(this.jwksUri, { headers, signal }, this.#tls)
         : await fetch(this.jwksUri, { redirect: 'manual', signal, headers });
     if (res.status === 304 && conditional) {
       await res.body?.cancel().catch(() => undefined);
@@ -672,6 +719,9 @@ export function createVerifier(baseUrl: string, tlsOptions?: JwksTlsOptions): Jw
  * `tlsOptions` (Node only) is the {@link JwksTlsOptions} the key-set fetch
  * presents — pass the client's `customCa` / client identity so a private-CA
  * server's JWKS is reachable (#175). Omitted, the platform defaults apply.
+ * A client identity (`cert`/`key`) given here is presented to WHATEVER origin
+ * `jwksUri` names; the SDK's own callers withhold it from a `jwks_uri` on a
+ * different origin than the client's base URL, a direct caller must do the same.
  */
 export function createJwksVerifier(jwksUri: string, tlsOptions?: JwksTlsOptions): JwksVerifier {
   // Lazily-resolved singleton so repeated verifyAccessToken() calls reuse
