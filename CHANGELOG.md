@@ -178,8 +178,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   token** (#177). The §12 `oidc_refresh` single-flight was one slot per client, so a call with token
   B made while token A was refreshing joined A's flight and returned A's tokens, and B was never
   sent. The flight is now keyed per refresh token (a SHA-256 digest of the token and the tenant,
-  never the raw token): callers presenting the same token still share one wire call (§9 rule 2), a
-  different token gets its own call and result, and a key's slot is removed once settled.
+  never the raw token), with the tenant resolved and lower-cased once for both the key and the wire
+  request: callers presenting the same token still share one wire call (§9 rule 2), a different
+  token gets its own call and result, and a key's slot is removed once settled. The wire call no
+  longer runs under the session-wide refresh guard, so flights of different tokens run concurrently
+  and neither wait for nor fail one another or the §1 cookie-session refresh (before, 17 of 20
+  concurrent distinct-token calls failed with "could not acquire the single-flight refresh guard").
   `AxiamClient.refresh()` is unchanged.
 
 - **The JWKS response body is capped, and the REST `customCa` adds to the trust store** (#176).
@@ -192,6 +196,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   OpenSSL's store under `--use-openssl-ca`), so with `customCa` set a call to any other publicly
   trusted host failed. The agent now uses a secure context that keeps that store and adds the CA
   (CONTRACT.md §6), with the client identity unchanged; verification and hostname checks stay on.
+  Because that context is built at construction, an unparsable client certificate or key now fails
+  at client construction (when `customCa` and a client identity are both set) rather than at the
+  first connection.
 
 - **The Node JWKS fetch honours `customCa` and the client identity** (#175). `createNodeSession`
   and the OIDC client's ID-token and logout-token verification fetched the key set with the global

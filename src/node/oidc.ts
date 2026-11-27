@@ -22,7 +22,7 @@
 // Everything else is reuse, not reimplementation (§12 forbids forking):
 //   * transport + §2 error mapping + §3 CSRF + §4 cookie jar + §5 tenant
 //     header + §6 TLS  → the SharedSession/NodeSession axios instance;
-//   * §9 single-flight refresh                → session.refreshGuard;
+//   * §9 single-flight refresh                → session.refreshGuard (§1 refresh); oidcRefresh: per-token map;
 //   * §12.4 signature verification            → node/jwks.ts's verifier;
 //   * §7/§12.5 redaction                      → core/sensitive.ts.
 
@@ -545,7 +545,6 @@ function exposeSecret(value: Sensitive<string> | string): string {
   return typeof value === 'string' ? value : value.expose();
 }
 
-/** Pull the HTTP status off an axios-shaped error, if any. */
 /**
  * The single-flight key of an `oidcRefresh` call: a SHA-256 digest of the resolved tenant UUID and the
  * refresh token. The raw token is never a map key.
@@ -558,6 +557,7 @@ function refreshFlightKey(refreshToken: Sensitive<string> | string, resolvedTena
     .digest('hex');
 }
 
+/** Pull the HTTP status off an axios-shaped error, if any. */
 function axiosStatus(err: unknown): number | undefined {
   if (err && typeof err === 'object' && 'response' in err) {
     return (err as { response?: { status?: number } }).response?.status;
@@ -1014,6 +1014,11 @@ export class OidcClient {
    */
   readonly #pendingRefresh = new Map<string, Promise<OidcTokenSet>>();
 
+  /** @internal Test hook: the number of occupied single-flight slots. */
+  _pendingRefreshSlots(): number {
+    return this.#pendingRefresh.size;
+  }
+
   constructor(session: SharedSession, options: OidcClientOptions) {
     // A non-finite skew is a configuration fault: refuse it here, where the
     // error names the option, rather than at the first token it would have
@@ -1147,17 +1152,19 @@ export class OidcClient {
 
   /**
    * `POST /oauth2/token` with `grant_type=refresh_token` (§12.1) — refresh an
-   * {@link OidcTokenSet}, under the §9 single-flight refresh guard.
+   * {@link OidcTokenSet}, single-flight per refresh token (§9).
    *
    * @remarks
    * This is a **distinct operation** from `AxiamClient.refresh()`, which drives
    * the cookie/opaque-token session path at `POST /api/v1/auth/refresh`. The
    * two are never merged or aliased and neither falls back to the other
-   * (§12.1). They do share the session's §9 guard, so at most one refresh of
-   * either kind is ever in flight for a session.
+   * (§12.1), and they do not share a lock: the single-flight here is keyed per
+   * refresh token, so refreshes of different tokens run concurrently.
    *
-   * Concurrent `oidcRefresh` calls collapse into one HTTP request and all
-   * receive the same token set — §9 rule 2's result sharing.
+   * Concurrent `oidcRefresh` calls presenting the SAME refresh token (and
+   * tenant) collapse into one HTTP request and all receive the same token set
+   * — §9 rule 2's result sharing. A different token gets its own request and
+   * its own result.
    *
    * An `id_token` in the response is validated against §12.4 rules 1–5 and 7;
    * rule 6 (nonce) is skipped, since OIDC Core §12.2 does not require a nonce
@@ -1169,9 +1176,13 @@ export class OidcClient {
     // The tenant is the RESOLVED one (§12.3 rule 4: the explicit argument, else the client default), so
     // an explicit tenant equal to the default and an omitted one share a flight: a second wire call
     // with the same rotating token would be a replay. A tenant that cannot be resolved rejects as before.
+    // Resolved and canonicalised (lower-case) ONCE; that one value keys the flight AND goes on the wire,
+    // so a change of the client's defaults in between cannot give the key one tenant and the request another.
+    let tenantId: string;
     let key: string;
     try {
-      key = refreshFlightKey(params.refreshToken, this.#resolveTenantId(params.tenantId));
+      tenantId = this.#resolveTenantId(params.tenantId).toLowerCase();
+      key = refreshFlightKey(params.refreshToken, tenantId);
     } catch (err) {
       return Promise.reject(err);
     }
@@ -1179,7 +1190,7 @@ export class OidcClient {
     if (existing) {
       return existing;
     }
-    const pending = this.#refreshUnderGuard(params);
+    const pending = this.#refreshFlight({ ...params, tenantId });
     this.#pendingRefresh.set(key, pending); // published strictly before it can be vacated
     const clear = (): void => {
       // Identity-checked: never vacate a different, still-live flight's slot.
@@ -2486,17 +2497,13 @@ export class OidcClient {
   // -------------------------------------------------------------------------
 
   /**
-   * Run one `refresh_token` grant under the session's §9 single-flight guard.
-   *
-   * The guard's callback signature returns `void`, so the token set is
-   * published through a local variable. When the callback does NOT run, the
-   * guard was already busy with a *different* refresh (the §1 cookie-session
-   * path, which cannot produce an `OidcTokenSet`); rather than return a stale
-   * or wrong result we simply try again now that the other refresh has
-   * settled. Bounded, so a pathologically busy guard fails loudly instead of
-   * spinning.
+   * One `oidcRefresh` wire call: the unit the per-token single-flight map shares. It deliberately holds
+   * NO session-wide lock across the call (§9 rules 5 and 7, contract clarification): flights of
+   * different refresh tokens run independently and concurrently, and the §1 cookie-session refresh
+   * (the session's own `refreshGuard`) neither waits for nor fails them. The per-key map in
+   * {@link OidcClient.oidcRefresh} is the guard; a refresh token namespace is not the session cookie's.
    */
-  async #refreshUnderGuard(params: OidcRefreshParams): Promise<OidcTokenSet> {
+  async #refreshFlight(params: OidcRefreshParams & { tenantId: string }): Promise<OidcTokenSet> {
     const configuration = params.configuration ?? (await this.oidcDiscover());
     const form = new URLSearchParams();
     form.set('grant_type', 'refresh_token');
@@ -2506,21 +2513,9 @@ export class OidcClient {
     if (params.scope !== undefined) {
       form.set('scope', params.scope);
     }
-
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      let refreshed: OidcTokenSet | undefined;
-      await this.#session.refreshGuard(async () => {
-        const wire = await this.#postToken(configuration, form, params.tenantId);
-        // No nonce: rule 6 does not apply to a refresh-issued ID token.
-        refreshed = await this.#toTokenSet(wire, configuration, undefined);
-      });
-      if (refreshed) {
-        return refreshed;
-      }
-    }
-    throw new AuthError(
-      'oidcRefresh could not acquire the single-flight refresh guard (CONTRACT.md §9); another refresh kept it busy.',
-    );
+    const wire = await this.#postToken(configuration, form, params.tenantId);
+    // No nonce: rule 6 does not apply to a refresh-issued ID token.
+    return this.#toTokenSet(wire, configuration, undefined);
   }
 
   // -------------------------------------------------------------------------
