@@ -445,8 +445,13 @@ export async function verifyAndDispatch(
     return;
   }
 
-  // (5) the verified bytes decode into the configured type.
-  if (!decodesAs(spec.kinds, body)) {
+  // (5) the verified bytes decode into the configured type. `key_version` is a `u8`: only an
+  // integer literal decodes (`2.0` and `2e0` parse to 2 in JavaScript but not in serde), and the
+  // last three members are fixed, so its raw token is read from the end of the canonical bytes.
+  const keyVersionToken = /,"key_version":([^,]*),"nonce":"[^"]*","issued_at":"[^"]*"\}$/.exec(
+    canonical.toString('utf8'),
+  );
+  if (keyVersionToken === null || !/^\d+$/.test(keyVersionToken[1]) || !decodesAs(spec.kinds, body)) {
     refuse('malformed');
     return;
   }
@@ -472,10 +477,13 @@ export async function verifyAndDispatch(
       // channel already closed
     }
     try {
+      // The error's NAME only: its message is application text and may hold body content.
       logger?.warn('axiam_sdk.security', 'AMQP handler threw; nacking without requeue', {
+        timestamp: new Date().toISOString(),
         exchange: msg.fields.exchange,
         routingKey: msg.fields.routingKey,
-        error: err instanceof Error ? err.message : String(err),
+        tenantId: options.tenantId,
+        error: err instanceof Error ? err.name : 'non-Error',
       });
     } catch {
       // an integrator logger's failure is not the delivery's problem
@@ -483,7 +491,11 @@ export async function verifyAndDispatch(
     return;
   }
 
-  channel.ack(msg);
+  try {
+    channel.ack(msg);
+  } catch {
+    // The message was verified and processed; a closed channel is not a discard.
+  }
 }
 
 /**

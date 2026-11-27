@@ -247,4 +247,51 @@ describe('D-10 no body escapes the consumer', () => {
       }
     }
   });
+
+  it('the handler-threw event names timestamp, exchange, routingKey, tenantId and the error NAME only', async () => {
+    const { events, channel } = setup('AuthzRequest');
+    const handler = vi.fn(async () => {
+      throw new TypeError('secret body text 55555555-5555-5555-5555-555555555555');
+    });
+    const opts = {
+      tenantId: CONFIGURED_TENANT,
+      eventType: 'AuthzRequest',
+      nonceStore: new InMemoryNonceStore(),
+      logger: { warn: (e: string, m: string, c?: Record<string, unknown>) => void events.push({ event: e, message: m, context: c ?? {} }) },
+    } as ConsumeOptions;
+    await verifyAndDispatch(channel, message(vectors.authz_request.wire_json), SUBKEY, handler, opts);
+    expect(channel.nacked).toEqual(NACK);
+    expect(events).toHaveLength(1);
+    expect(Object.keys(events[0].context).sort()).toEqual(['error', 'exchange', 'routingKey', 'tenantId', 'timestamp']);
+    expect(events[0].context).toMatchObject({ error: 'TypeError', tenantId: CONFIGURED_TENANT });
+    expect(JSON.stringify(events)).not.toContain('secret body text');
+  });
+
+  it('an ack that throws after a successful handler is not logged as a malformed discard', async () => {
+    const events: Event[] = [];
+    const channel = new Channel();
+    channel.ack = () => {
+      throw new Error('channel closed');
+    };
+    const handler = vi.fn(async () => {});
+    await expect(
+      verifyAndDispatch(channel, message(vectors.authz_request.wire_json), SUBKEY, handler, {
+        tenantId: CONFIGURED_TENANT,
+        eventType: 'AuthzRequest',
+        nonceStore: new InMemoryNonceStore(),
+        logger: { warn: (e, m, c) => void events.push({ event: e, message: m, context: c ?? {} }) },
+      }),
+    ).resolves.toBeUndefined();
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(events).toEqual([]);
+  });
+
+  it.each(['2.0', '2e0', '2.5'])('key_version written %s is not a u8 literal: malformed', async (lit) => {
+    const { events, run, handler } = setup('AuthzRequest');
+    const canonical = vectors.authz_request.canonical_signed_json.replace('"key_version":2', `"key_version":${lit}`);
+    expect(canonical).not.toBe(vectors.authz_request.canonical_signed_json);
+    await run(sign(canonical));
+    expect(handler).not.toHaveBeenCalled();
+    expect(events.map((e) => e.context.reason)).toEqual(['malformed']);
+  });
 });

@@ -42,6 +42,7 @@ describe('§12.4 rule 2 — bounded stale-if-error (conformance)', () => {
   });
   afterAll(() => server.close());
 
+  const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 40)); // a usable held set does not wait for its refresh
   const at = (secondsAfterT0: number): void => void vi.setSystemTime(T0 + secondsAfterT0 * 1000);
 
   async function setup(failure: () => Response = () => HttpResponse.error() as unknown as Response) {
@@ -61,7 +62,13 @@ describe('§12.4 rule 2 — bounded stale-if-error (conformance)', () => {
     const verifier = createVerifier(BASE_URL);
     const heldToken = await token(held.privateKey, 'kid-held');
     const strangerToken = await token(stranger.privateKey, 'kid-stranger');
-    const ok = (t: string) => verifier.verifyAccessToken(t, { expectedTenantId: TENANT });
+    const ok = async (t: string) => {
+      try {
+        return await verifier.verifyAccessToken(t, { expectedTenantId: TENANT });
+      } finally {
+        await settle();
+      }
+    };
     expect((await ok(heldToken)).sub).toBe('user-stale'); // fills the cache at t0
     expect(state.fetches).toBe(1);
     return { state, ok, heldToken, strangerToken };
@@ -89,7 +96,7 @@ describe('§12.4 rule 2 — bounded stale-if-error (conformance)', () => {
     expect(state.fetches).toBe(3);
 
     at(TTL + 301);
-    await expect(ok(heldToken)).rejects.toThrow(); // past TTL + 300 s of the last SUCCESSFUL fetch
+    await expect(ok(heldToken)).rejects.toThrow(/unavailable/); // past TTL + 300 s of the last SUCCESSFUL fetch
 
     // the server serves the set again; past the window, one fetch and the held kid is accepted
     state.mode = 'ok';
@@ -146,23 +153,24 @@ describe('§12.4 rule 2 — bounded stale-if-error (conformance)', () => {
     );
     const verifier = createVerifier(BASE_URL);
     const t = await token(held.privateKey, 'kid-held');
-    await verifier.verifyAccessToken(t, { expectedTenantId: TENANT });
+    const v = async () => { await verifier.verifyAccessToken(t, { expectedTenantId: TENANT }); await settle(); };
+    await v();
     at(TTL - 1);
-    await verifier.verifyAccessToken(t, { expectedTenantId: TENANT });
+    await v();
     expect(fetches).toBe(1); // within the TTL: no fetch
     at(TTL + 1);
-    await verifier.verifyAccessToken(t, { expectedTenantId: TENANT });
+    await v();
     expect(fetches).toBe(2); // 3600 s advertised, 300 s honoured
 
     maxAge = 100; // a smaller one is honoured
     at(TTL + 1 + TTL + 1); // 301 s after the second fetch
-    await verifier.verifyAccessToken(t, { expectedTenantId: TENANT });
+    await v();
     expect(fetches).toBe(3); // refreshed; this response advertised max-age=100
     at(TTL + 1 + TTL + 1 + 99);
-    await verifier.verifyAccessToken(t, { expectedTenantId: TENANT });
+    await v();
     expect(fetches).toBe(3); // 99 s: still within the 100 s advertised
     at(TTL + 1 + TTL + 1 + 101);
-    await verifier.verifyAccessToken(t, { expectedTenantId: TENANT });
+    await v();
     expect(fetches).toBe(4); // 101 s: past it
   });
 
@@ -190,15 +198,16 @@ describe('§12.4 rule 2 — bounded stale-if-error (conformance)', () => {
     );
     const verifier = createVerifier(BASE_URL);
     const t = await token(held.privateKey, 'kid-held');
-    await verifier.verifyAccessToken(t, { expectedTenantId: TENANT });
+    const v = async () => { await verifier.verifyAccessToken(t, { expectedTenantId: TENANT }); await settle(); };
+    await v();
     at(TTL + 1);
-    await verifier.verifyAccessToken(t, { expectedTenantId: TENANT });
+    await v();
     expect(seen).toEqual([null, null]); // 300-byte ETag never stored
     etag = '"ok"';
     at(2 * TTL + 100);
-    await verifier.verifyAccessToken(t, { expectedTenantId: TENANT });
+    await v();
     at(2 * TTL + 100 - 200); // clock moved backwards: negative age, refresh due
-    await verifier.verifyAccessToken(t, { expectedTenantId: TENANT });
+    await v();
     expect(seen.length).toBe(4);
     expect(seen[3]).toBe('"ok"');
   });
@@ -214,9 +223,28 @@ describe('§12.4 rule 2 — bounded stale-if-error (conformance)', () => {
     // a fresh verifier served only an RSA JWK: the set is adopted (success), the kid is simply unknown
     body = { keys: [{ kty: 'RSA', kid: 'rsa', n: 'AQAB', e: 'AQAB' }] };
     const v2 = createVerifier(BASE_URL);
-    await expect(v2.verifyAccessToken(await token(stranger.privateKey, 'kid-stranger'), { expectedTenantId: TENANT })).rejects.toThrow();
+    // adopted: the refusal is the no-matching-key one, not the generic "unavailable"
+    await expect(v2.verifyAccessToken(await token(stranger.privateKey, 'kid-stranger'), { expectedTenantId: TENANT })).rejects.toMatchObject({ code: 'ERR_JWKS_NO_MATCHING_KEY' });
     body = { keys: [held.jwk] };
     at(30); // inside the window: the RSA-only answer was a success, not a failure that reopens fetching
-    await expect(v2.verifyAccessToken(await token(held.privateKey, 'kid-held'), { expectedTenantId: TENANT })).rejects.toThrow();
+    await expect(v2.verifyAccessToken(await token(held.privateKey, 'kid-held'), { expectedTenantId: TENANT })).rejects.toMatchObject({ code: 'ERR_JWKS_NO_MATCHING_KEY' });
+  });
+
+  it('a clock stepped back: refresh due, and held keys are not trusted while the age is negative', async () => {
+    const { state, ok, heldToken } = await setup();
+    state.mode = 'fail';
+    at(-120);
+    await expect(ok(heldToken)).rejects.toThrow(/unavailable/);
+  });
+
+  it('a usable held set never waits for an in-flight refresh that hangs', async () => {
+    const { state, ok, heldToken } = await setup();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    server.use(http.get(`${BASE_URL}${JWKS_PATH}`, async () => { state.fetches += 1; await gate; return new HttpResponse('x', { status: 500 }); }));
+    at(TTL + 1);
+    const outcome = await Promise.race([ok(heldToken).then(() => 'accepted'), new Promise((r) => setTimeout(() => r('waited'), 1500))]);
+    release();
+    expect(outcome).toBe('accepted');
   });
 });

@@ -2394,8 +2394,8 @@ export class OidcClient {
         token,
       )) as unknown as LogoutTokenClaims;
     } catch (err) {
-      // jose has already re-fetched the JWKS at most once for this `kid`
-      // (cooldown window); an unmatched `kid` is then `unknown_kid`.
+      // The JWKS cache has already refreshed at most once for this `kid` (one
+      // attempt per cooldown window); an unmatched `kid` is then `unknown_kid`.
       if (typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 'ERR_JWKS_NO_MATCHING_KEY') {
         throw new AuthError('no JWKS key matches the logout token kid (unknown_kid)', 'unknown_kid');
       }

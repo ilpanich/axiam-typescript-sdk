@@ -359,16 +359,23 @@ class JwksCache {
   readonly getKey = async (
     ...args: Parameters<KeyResolver>
   ): Promise<Awaited<ReturnType<KeyResolver>>> => {
-    // A refresh is due when nothing is held, or the held set is past its TTL.
-    const nowMs = Date.now();
-    // A clock that moved backwards (negative age) never makes the set fresh.
-    if (this.#resolver === undefined || nowMs < this.#anchorMs || nowMs >= this.#anchorMs + this.#ttlMs) {
-      await this.#refreshIfAllowed();
-    }
+    // Held keys are not trusted while the age is negative (a clock stepped back) nor past the bound.
     const usable = (): KeyResolver | undefined =>
-      this.#resolver !== undefined && Date.now() < this.#anchorMs + this.#ttlMs + JWKS_MAX_STALE_MS
+      this.#resolver !== undefined &&
+      Date.now() >= this.#anchorMs &&
+      Date.now() < this.#anchorMs + this.#ttlMs + JWKS_MAX_STALE_MS
         ? this.#resolver
         : undefined;
+
+    // A refresh is due when nothing is held, the held set is past its TTL, or the clock
+    // moved backwards (negative age: never fresh). A verification whose held set is still
+    // usable does not wait for it; one with nothing usable waits for the (single-flight,
+    // self-bounded) fetch.
+    const nowMs = Date.now();
+    if (this.#resolver === undefined || nowMs < this.#anchorMs || nowMs >= this.#anchorMs + this.#ttlMs) {
+      const refresh = this.#refreshIfAllowed();
+      if (usable() === undefined) await refresh;
+    }
 
     const held = usable();
     if (held === undefined) {
@@ -408,11 +415,15 @@ class JwksCache {
       headers: { accept: 'application/json', ...(conditional ? { 'if-none-match': this.#etag as string } : {}) },
     });
     if (res.status === 304 && conditional) {
+      await res.body?.cancel().catch(() => undefined);
       this.#anchorMs = Date.now();
       this.#ttlMs = ttlFromResponse(res);
       return;
     }
-    if (res.status !== 200) throw new Error('unexpected JWKS status');
+    if (res.status !== 200) {
+      await res.body?.cancel().catch(() => undefined); // release the connection
+      throw new Error('unexpected JWKS status');
+    }
     const doc = (await res.json()) as { keys?: unknown };
     const isJwk = (k: unknown): boolean =>
       typeof k === 'object' && k !== null && !Array.isArray(k) && typeof (k as { kty?: unknown }).kty === 'string';
