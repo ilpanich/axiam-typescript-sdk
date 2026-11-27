@@ -6,11 +6,14 @@
 //
 // Endpoint: `{baseUrl}/oauth2/jwks` — organization-wide, NOT tenant-scoped,
 // serving exactly one EdDSA (Ed25519) key in the common case
-// (RESEARCH.md Area 3, mirrors the Rust SDK's src/token/jwks.rs). `jose`'s
-// `createRemoteJWKSet` handles fetch + cache + refetch-on-unknown-kid
-// natively; we use its single-cooldown model rather than porting the Rust
-// SDK's two-timer (TTL + forced-refetch) design (RESEARCH.md Area 3 explicit
-// recommendation).
+// (RESEARCH.md Area 3, mirrors the Rust SDK's src/token/jwks.rs). The key
+// set is held by {@link JwksCache}, which implements CONTRACT.md §12.4 rule 2
+// itself (contract 1.69, D-10): a single cooldown window for refreshes
+// (unknown `kid` included), stale-if-error bounded at TTL + 300 s after the
+// last SUCCESSFUL fetch, and an empty key set treated as a failed fetch.
+// `jose` still does the key matching (`createLocalJWKSet`) and the
+// verification; it no longer fetches, because its remote key set cannot keep
+// serving a held key past a failed refresh.
 //
 // Pitfall 1 (jose is ESM-only): `jose` 5+/6.x ships no CJS entry condition,
 // so a tsup CJS build's transpiled `require('jose')` would throw
@@ -307,6 +310,128 @@ export const JWKS_PATH = '/oauth2/jwks';
 
 const COOLDOWN_DURATION_MS = 60_000;
 const TIMEOUT_DURATION_MS = 5_000;
+/** Default and maximum lifetime of a fetched key set (CONTRACT.md §12.4 rule 2, contract 1.69; D-10). */
+const JWKS_MAX_TTL_MS = 300_000;
+/** How long past its TTL a held set keeps verifying while every refresh fails (contract 1.69; D-10). */
+const JWKS_MAX_STALE_MS = 300_000;
+
+/** The lifetime the response advertises, clamped to {@link JWKS_MAX_TTL_MS}; the default when it advertises none. An advertised value is clamped silently. */
+function ttlFromResponse(res: Response): number {
+  const m = /(?:^|[\s,])max-age=(\d+)/i.exec(res.headers.get('cache-control') ?? '');
+  if (m === null) return JWKS_MAX_TTL_MS;
+  const ms = Number(m[1]) * 1000;
+  return Number.isFinite(ms) ? Math.min(ms, JWKS_MAX_TTL_MS) : JWKS_MAX_TTL_MS;
+}
+
+type JoseModule = typeof import('jose');
+type KeyResolver = ReturnType<JoseModule['createLocalJWKSet']>;
+
+/**
+ * The verifier's key-set cache (CONTRACT.md §12.4 rule 2, contract 1.69).
+ *
+ * - **Age** is measured from the last *successful* fetch (a `200` with at least
+ *   one key, or a `304` to a conditional request); a failed refresh — transport
+ *   error, any other status, a non-JWKS body, an EMPTY key set — never replaces
+ *   the held keys and never moves that anchor.
+ * - **TTL** is the response's `Cache-Control: max-age`, 300 s when it has none,
+ *   and at most 300 s.
+ * - **Stale-if-error**: held keys verify until exactly TTL + 300 s after the
+ *   anchor; from then on every token is refused until a fetch succeeds.
+ * - **One window for every refresh** (TTL-due and unknown-`kid` alike): at most
+ *   one attempt per {@link COOLDOWN_DURATION_MS}, a failed attempt counted. An
+ *   unknown-`kid` refresh that fails refuses that token and changes nothing else.
+ * - Concurrent callers share one in-flight fetch.
+ */
+class JwksCache {
+  #resolver: KeyResolver | undefined;
+  #etag: string | undefined;
+  #anchorMs = 0;
+  #ttlMs = JWKS_MAX_TTL_MS;
+  #lastAttemptMs: number | undefined;
+  #inflight: Promise<void> | undefined;
+
+  constructor(
+    private readonly jwksUri: string,
+    private readonly jose: JoseModule,
+  ) {}
+
+  /** The key resolver handed to `jwtVerify`. */
+  readonly getKey = async (
+    ...args: Parameters<KeyResolver>
+  ): Promise<Awaited<ReturnType<KeyResolver>>> => {
+    // A refresh is due when nothing is held, or the held set is past its TTL.
+    const nowMs = Date.now();
+    // A clock that moved backwards (negative age) never makes the set fresh.
+    if (this.#resolver === undefined || nowMs < this.#anchorMs || nowMs >= this.#anchorMs + this.#ttlMs) {
+      await this.#refreshIfAllowed();
+    }
+    const usable = (): KeyResolver | undefined =>
+      this.#resolver !== undefined && Date.now() < this.#anchorMs + this.#ttlMs + JWKS_MAX_STALE_MS
+        ? this.#resolver
+        : undefined;
+
+    const held = usable();
+    if (held === undefined) {
+      throw new this.jose.errors.JOSEError('the JSON Web Key Set is unavailable');
+    }
+    try {
+      return await held(...args);
+    } catch (err) {
+      if (!(err instanceof this.jose.errors.JWKSNoMatchingKey)) throw err;
+      // Unknown kid: a refresh like any other, in the same window.
+      await this.#refreshIfAllowed();
+      const refreshed = usable();
+      if (refreshed === undefined) throw err;
+      return refreshed(...args);
+    }
+  };
+
+  async #refreshIfAllowed(): Promise<void> {
+    if (this.#inflight !== undefined) return this.#inflight;
+    const now = Date.now();
+    const sinceLast = this.#lastAttemptMs === undefined ? Infinity : now - this.#lastAttemptMs;
+    if (sinceLast >= 0 && sinceLast < COOLDOWN_DURATION_MS) return; // (a backwards clock never blocks)
+    this.#lastAttemptMs = now; // a failed attempt counts toward the window
+    this.#inflight = this.#fetch()
+      .catch(() => undefined) // a failed refresh changes nothing
+      .finally(() => {
+        this.#inflight = undefined;
+      });
+    return this.#inflight;
+  }
+
+  async #fetch(): Promise<void> {
+    const conditional = this.#resolver !== undefined && this.#etag !== undefined;
+    const res = await fetch(this.jwksUri, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(TIMEOUT_DURATION_MS),
+      headers: { accept: 'application/json', ...(conditional ? { 'if-none-match': this.#etag as string } : {}) },
+    });
+    if (res.status === 304 && conditional) {
+      this.#anchorMs = Date.now();
+      this.#ttlMs = ttlFromResponse(res);
+      return;
+    }
+    if (res.status !== 200) throw new Error('unexpected JWKS status');
+    const doc = (await res.json()) as { keys?: unknown };
+    const isJwk = (k: unknown): boolean =>
+      typeof k === 'object' && k !== null && !Array.isArray(k) && typeof (k as { kty?: unknown }).kty === 'string';
+    if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.keys) || !doc.keys.some(isJwk)) {
+      throw new Error('not a JWKS document with a key');
+    }
+    // Entries are taken one by one: a JWK object with a string `kty` counts even if jose cannot
+    // use it (it is skipped at lookup); anything else is dropped rather than refusing the set.
+    const usable = (doc.keys as unknown[]).filter(isJwk);
+    const resolver = this.jose.createLocalJWKSet({ keys: usable } as Parameters<JoseModule['createLocalJWKSet']>[0]);
+    this.#resolver = resolver;
+    const etag = res.headers.get('etag');
+    // An ETag with a control character or over 256 bytes is never stored or echoed.
+    this.#etag =
+      etag !== null && Buffer.byteLength(etag) <= 256 && !/[\x00-\x1f\x7f]/.test(etag) ? etag : undefined;
+    this.#anchorMs = Date.now();
+    this.#ttlMs = ttlFromResponse(res);
+  }
+}
 
 /**
  * Clock-skew leeway applied to the `exp` and `nbf` checks (CONTRACT.md §10.1
@@ -446,8 +571,8 @@ export interface JwksVerifier extends Verifier, IdTokenVerifier {}
  * Build a verifier bound to `{baseUrl}/oauth2/jwks`.
  *
  * `jose` is loaded lazily via dynamic `import()` (Pitfall 1 — CJS-safe); the
- * remote JWKS itself is also fetched/cached lazily by `jose`, not eagerly
- * here.
+ * remote JWKS itself is fetched/cached lazily by {@link JwksCache}, not
+ * eagerly here.
  *
  * For the relying-party (§12) flow use {@link createJwksVerifier} with the
  * `jwks_uri` the discovery document advertises instead of hardcoding
@@ -462,40 +587,25 @@ export function createVerifier(baseUrl: string): JwksVerifier {
  * value taken from the OIDC discovery document (CONTRACT.md §12.3 rule 6).
  *
  * Identical machinery to {@link createVerifier}: one lazily-resolved
- * `createRemoteJWKSet` singleton per verifier instance, shared by
+ * key-set cache per verifier instance, shared by
  * `verifyAccessToken` and `verifyIdToken`.
  */
 export function createJwksVerifier(jwksUri: string): JwksVerifier {
   // Lazily-resolved singleton so repeated verifyAccessToken() calls reuse
-  // the same createRemoteJWKSet cache instead of rebuilding it per call.
+  // one cache instead of rebuilding it per call.
   //
-  // D-08/D-09 (single-flight, PERF-03): a concurrent invalid-`kid` burst
-  // against a cold cache must collapse to exactly ONE network fetch. Proven
-  // (not just assumed) by `test/node/jwks.test.ts`'s "collapses N concurrent
-  // verifyAccessToken calls ... to exactly one JWKS fetch" test, which mocks
-  // global `fetch` with a call counter and fires 8 concurrent calls: jose's
-  // `createRemoteJWKSet` (see jose's `RemoteJWKSet.reload()`,
-  // `this.#pendingFetch ||= fetchJwks(...).then(...)`) ALREADY holds its own
-  // internal lazy-promise-singleton around the underlying fetch, so
-  // concurrent callers reaching a cold/unknown-kid getter share the same
-  // in-flight fetch promise natively — no additional `inFlightFetch` guard
-  // is added here (it would be redundant). If a future `jose` upgrade
-  // removes that internal guarantee, the burst test above will start
-  // failing and an explicit guard (mirroring `jwksPromise`'s shape) must be
-  // added at that point.
-  let jwksPromise: Promise<ReturnType<typeof import('jose').createRemoteJWKSet>> | null = null;
+  // D-08/D-09 (single-flight, PERF-03): a concurrent burst against a cold
+  // cache, or of unknown `kid`s, collapses to ONE network fetch: `JwksCache`
+  // shares its in-flight fetch between callers and allows one attempt per
+  // cooldown window. Proven by `test/node/jwks.test.ts`'s "collapses N
+  // concurrent verifyAccessToken calls ... to exactly one JWKS fetch" test.
+  let jwksPromise: Promise<JwksCache> | null = null;
 
-  async function getJwks() {
+  async function getJwks(): Promise<JwksCache['getKey']> {
     if (!jwksPromise) {
-      // eslint-disable-next-line @typescript-eslint/consistent-type-imports
-      jwksPromise = import('jose').then(({ createRemoteJWKSet }) =>
-        createRemoteJWKSet(new URL(jwksUri), {
-          cooldownDuration: COOLDOWN_DURATION_MS,
-          timeoutDuration: TIMEOUT_DURATION_MS,
-        }),
-      );
+      jwksPromise = import('jose').then((jose) => new JwksCache(jwksUri, jose));
     }
-    return jwksPromise;
+    return (await jwksPromise).getKey;
   }
 
   return {
@@ -790,9 +900,9 @@ function mapJoseVerifyError(err: unknown): AuthError {
   const code = typeof err === 'object' && err !== null && 'code' in err ? String((err as { code: unknown }).code) : '';
   switch (code) {
     case 'ERR_JWKS_NO_MATCHING_KEY':
-      // jose has already performed its single re-fetch-then-fail dance here
-      // (createRemoteJWKSet reloads once per cooldown window on an unmatched
-      // kid) — exactly the §12.4 rule 2 / §10 policy.
+      // `JwksCache` has already performed its single re-fetch-then-fail step
+      // here (one refresh per cooldown window on an unmatched kid) — exactly
+      // the §12.4 rule 2 / §10 policy.
       return idTokenAuthError('unknown_kid', 'no JWKS key matches the token kid');
     case 'ERR_JWT_EXPIRED':
       return idTokenAuthError('token_expired', 'exp is in the past');

@@ -45,7 +45,7 @@ Read the migration notes in the [CHANGELOG](./CHANGELOG.md#140---unreleased) bef
 |---|---|
 | (a) login glue binds the callback to the browser (C7, §12.8 rules 1, 2, 4) | `oidcLoginHandlers` (Express) and `oidcLoginPlugin` (Fastify) set `__Host-axiam_oidc_bind` at login (`axiam_oidc_bind` without `Secure` only for a plain-HTTP loopback `redirectUri`), store its SHA-256 as `OidcStateEntry.bindingDigest`, and at the callback consume the state **first**, then compare in constant time; a missing or different cookie is the uniform `401` with no code exchange and no `onSuccess`. Every callback response clears the cookie, including the error response the framework sends when the state store or `onSuccess` throws (the error itself still reaches the application's error handler). `onSuccess` receives the framework request as a third argument. The framework-neutral `completeOidcLogin` takes the presented cookie in a new `context` argument and refuses every callback without one. Design: [`docs/login-glue-binding.md`](./docs/login-glue-binding.md). |
 | (b) `returnTo` (C6, §12.8 rules 3, 4) | Followed only as a same-origin relative path (`isSafeReturnTo`), checked when stored and again before the redirect; otherwise dropped. `allowReturnTo` widens it. |
-| (c) unknown-`kid` re-fetch window (§12.4 rule 2) | No code change: `jose`'s `createRemoteJWKSet` with a 60 s cooldown. The rule's conformance test is carried (`test/node/jwksRefetchWindow.test.ts`) against the §10 verifier: with a warm cache, 50 tokens with 50 different unknown `kid`s in one window cost at most one JWKS fetch and are all rejected; with the mocked clock past the window and a rotated set, the new `kid` is accepted after one fetch. The §10 verifier is bound to the JWKS URI and reads no discovery document. |
+| (c) unknown-`kid` re-fetch window (§12.4 rule 2) | One 60 s window for every refresh, implemented by the verifier's own key-set cache (contract 1.69: TTL at most 300 s, bounded stale-if-error, see `test/node/jwksStaleIfError.test.ts`). The rule's conformance test is carried (`test/node/jwksRefetchWindow.test.ts`) against the §10 verifier: with a warm cache, 50 tokens with 50 different unknown `kid`s in one window cost at most one JWKS fetch and are all rejected; with the mocked clock past the window and a rotated set, the new `kid` is accepted after one fetch. The §10 verifier is bound to the JWKS URI and reads no discovery document. |
 | (d) access-token kind (N14, §10.1 rules 10–12) | `verifyAccessToken` and `authenticateRequest` refuse a header `typ` other than `at+jwt` (case-insensitive, `application/` allowed), a `purpose` claim, and a header with no `kid` (no single-key fallback). A token from a server before 1.67 (`typ: JWT`) is refused. |
 | (e) roles (N15, §11.2 rule 11) | `AxiamIdentity.roles` is the token's `roles` claim only (`undefined` when absent, `[]` kept distinct); the new `AxiamIdentity.scopes` carries `scope`. `requireRole`/`requireRoleHook`/`@RequireRole` fail closed without a `roles` claim; `requireScope`/`requireScopeHook`/`@RequireScope` are added. **Request the `roles` scope** (and register it on the client) for `requireRole` to admit anyone. |
 | (f) signed `AuthzResponse` (N2, §8) | New `AuthzRequester` (`createAuthzRequester(channel, …)` / `connectAuthzRequester(amqpsUrl, …)`): publishes a signed `AuthzRequest` with fresh random `correlation_id` and `nonce` to `axiam.authz.request` on the default exchange, `reply_to` a private exclusive auto-delete broker-named queue (an empty or `axiam.`-prefixed name is refused), and resolves `check()` only with an answer `AuthzResponseVerifier` verifies over its received bytes (tenant subkey, own `tenant_id`, the request's `correlation_id` and `nonce`). Forged or mismatched answers are nacked without requeue and the check keeps waiting, until its timeout. An unsigned answer is discarded (`unsigned`) and the check keeps waiting; there is no option to accept one (contract 1.69, #881). Every discard logs one warning with `timestamp`, `exchange`, `routingKey`, the requester's own `tenantId` and a `reason` (`malformed`, `unsigned`, `signature`, `tenant`, `unknown_request`), never a signature or a nonce (contract 1.69, #883). `connectAuthzRequester` handles its own connection's and channel's `'error'` (logged, never an uncaught exception) and `'close'` (the requester closes, releasing every waiter at once); with `createAuthzRequester` the caller owns both. The four contract vectors and the request vector are tests. |
@@ -687,16 +687,24 @@ await consume(
     // Only a verified event ever reaches this closure — HMAC-SHA256
     // signature checked and stripped by the SDK before your handler runs
     // (CONTRACT.md §8). Verification failures are nacked-without-requeue.
-    // Verified over the received bytes: the body must end in the
-    // `hmac_signature` member and have exactly the AuthzRequest or
-    // AuditEventMessage members in order (§8 step 2). An unsigned message is
-    // always refused; there is no lenient mode.
+    // Verified over the received bytes: the body must start with `{`, end in
+    // the `hmac_signature` member and have exactly the configured type's
+    // members in order (§8 step 2; a byte-order mark is refused, never
+    // stripped). An unsigned message is always refused; there is no lenient mode.
     console.log('verified audit event:', event);
   },
-  // Optional. The PEM bundle for a privately issued broker certificate — the
-  // common in-cluster case (§8b rule 2), and the only TLS knob this SDK has.
-  { tls: { caCert: readFileSync('/etc/axiam/broker-ca.pem', 'utf8') } },
+  {
+    tenantId,                         // this consumer's OWN tenant: named in every discard event
+    eventType: 'AuditEventMessage',   // the ONE type consumed; any other layout is `malformed`
+    // Optional. The PEM bundle for a privately issued broker certificate — the
+    // common in-cluster case (§8b rule 2), and the only TLS knob this SDK has.
+    tls: { caCert: readFileSync('/etc/axiam/broker-ca.pem', 'utf8') },
+  },
 );
+// Every discard (nack without requeue) logs ONE warning event with exactly `timestamp`, `exchange`,
+// `routingKey`, `tenantId` and `reason` (`malformed` | `unsigned` | `signature` | `key_version` |
+// `stale` | `replay`) — never a signature, a nonce, a key or the body. To consume both event types,
+// run two consumers, each typed.
 ```
 
 #### Authorization over AMQP — `AuthzRequester` (contract 1.68, §8)

@@ -357,24 +357,30 @@ export class AuthzRequester {
       void this.close();
       return;
     }
-    // Acks an accepted answer, nacks (no requeue) and logs anything else; on
-    // acceptance the verifier has already retired the request.
-    if (this.#closed) {
-      // After Close an answer is not decoded or dispatched: nacked without
-      // requeue, no discard event (CONTRACT.md §8 consumer obligation 4).
-      this.#channel.nack(msg, false, false);
-      return;
+    // No body escapes the delivery loop (CONTRACT.md §8, contract 1.69, D-10): whatever
+    // the bytes, nothing thrown here may reach the channel's dispatcher.
+    try {
+      // Acks an accepted answer, nacks (no requeue) and logs anything else; on
+      // acceptance the verifier has already retired the request.
+      if (this.#closed) {
+        // After Close an answer is not decoded or dispatched: nacked without
+        // requeue, no discard event (CONTRACT.md §8 consumer obligation 4).
+        this.#channel.nack(msg, false, false);
+        return;
+      }
+      const verdict = this.#verifier.settle(this.#channel, msg);
+      if (!verdict.accepted) {
+        return;
+      }
+      const pending = this.#pending.get(verdict.response.correlation_id);
+      pending?.resolve({
+        allowed: verdict.response.allowed,
+        ...(verdict.response.reason !== undefined ? { reason: verdict.response.reason } : {}),
+        ...(verdict.response.reason_code !== undefined ? { reasonCode: verdict.response.reason_code } : {}),
+      });
+    } catch {
+      // a closed channel or a failing resolver is not the delivery's problem
     }
-    const verdict = this.#verifier.settle(this.#channel, msg);
-    if (!verdict.accepted) {
-      return;
-    }
-    const pending = this.#pending.get(verdict.response.correlation_id);
-    pending?.resolve({
-      allowed: verdict.response.allowed,
-      ...(verdict.response.reason !== undefined ? { reason: verdict.response.reason } : {}),
-      ...(verdict.response.reason_code !== undefined ? { reasonCode: verdict.response.reason_code } : {}),
-    });
   }
 }
 

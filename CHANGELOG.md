@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed (behaviour — read before upgrading)
 
+- **The AMQP event consumer is typed and takes its own tenant** (`consume`, `verifyAndDispatch`;
+  CONTRACT 1.69 §8 step 2c and protocol rule 4, owner decisions D-8 and D-9; axiam#883) —
+  **breaking TypeScript change inside the unreleased 1.4.0**: `ConsumeOptions` gains the required
+  `eventType` (`'AuthzRequest'` or `'AuditEventMessage'`, the ONE type the consumer accepts) and
+  `tenantId` (the consumer's own tenant, whose subkey `signingKey` is), and `options` is no longer
+  optional. A body with the layout of any other signed type (the other event type, a signed
+  `AuthzResponse`, a reactor message) is nacked without requeue as `malformed` before the HMAC is
+  computed, never handed to the handler; the check never picks a type from the body. An
+  application consuming both types runs two consumers. A missing or invalid option throws a
+  `TypeError` at `consume()` before any socket opens. *Migration:* pass
+  `{ tenantId, eventType, ... }` as the fifth argument.
+- **Every discard by the event consumer logs one fixed warning event** (D-8): `timestamp`,
+  `exchange`, `routingKey`, `tenantId` (the configured tenant, never one read from the body) and
+  `reason` (`malformed`, `unsigned`, `signature`, `key_version`, `stale`, `replay`), in the
+  normative order of §8 rule 4: not one JSON object starting with `{` → `malformed`; no
+  `hmac_signature` member → `unsigned`; duplicate member, bad signature member or foreign layout →
+  `malformed`; HMAC → `signature`; a verified body that does not decode into the type (wrong JSON
+  type, `issued_at` not RFC 3339, `nonce` not a UUID, `key_version` not a byte) → `malformed`;
+  then `key_version`, `stale`, `replay`. The nonce is recorded only after every gate passed.
+  Before, the event named no tenant or reason, the HMAC and v2 failures carried the body's
+  `tenant_id`, and the layout and parse failures logged a message only. No signature, nonce, key
+  or body reaches a log.
+- **JWKS stale-if-error is bounded, and the cache TTL is at most 300 s** (CONTRACT §12.4 rule 2,
+  contract 1.69, D-10). The verifier no longer uses `jose`'s remote key set (10-minute cache,
+  and a failed refresh made every token fail) but its own cache: the TTL is the response's
+  `Cache-Control: max-age`, 300 s without one, clamped to 300 s; a failed refresh (transport
+  error, any other status, a body that is not a JWKS, an empty `{"keys":[]}`) keeps the held keys
+  and does not move the age; a `304` to the conditional request (`If-None-Match`) counts as a
+  success; held keys verify until exactly TTL + 300 s after the last successful fetch and every
+  token is then refused until a fetch succeeds. An unknown-`kid` refresh is a refresh like any
+  other, in the one 60 s window, and a failing one never extends the stale window.
 - **"Login with AXIAM" binds the callback to the browser that started it (C7, CONTRACT.md
   §12.8 rules 1–2).** `oidcLoginHandlers` (Express) and `oidcLoginPlugin` (Fastify) now set an
   `__Host-axiam_oidc_bind` cookie (`HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=600`;
@@ -139,6 +170,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Byte-order mark and every other body, in the event consumer and the requester** (CONTRACT §8
+  step 2a and "No body escapes the consumer", D-10). The first byte of a body must be `{`: a
+  UTF-8 byte-order mark or whitespace before it is `malformed` and is never stripped. The
+  requester accepted a body with leading whitespace (signed over it); it no longer does. A closed
+  channel or a throwing logger can no longer let an exception out of either delivery loop.
 - **`verifyLogoutToken` refuses a kid-less or unknown-`kid` token as `unknown_kid`** (`AuthError`
   with `reason: 'unknown_kid'`; CONTRACT §12.7.3 rule 1, contract 1.69, axiam#880). The key was
   already selected by `kid`, so a genuine server logout token verifies; an unknown `kid` used to

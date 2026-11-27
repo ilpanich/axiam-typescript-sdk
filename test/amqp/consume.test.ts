@@ -19,6 +19,7 @@ const { signPayload } = await import('../../src/amqp/hmac.js');
 const { Sensitive } = await import('../../src/core/index.js');
 
 const SIGNING_KEY = Buffer.from('consume-test-key', 'utf8');
+const OPTS = { tenantId: '99999999-9999-9999-9999-999999999999', eventType: 'AuthzRequest' } as const;
 
 // Shape-only PEM fixtures for the §8b tests below. Nothing here is parsed by a
 // TLS stack — amqplib is mocked — so these only need to satisfy the SDK's own
@@ -97,7 +98,7 @@ afterEach(() => {
 describe('consume() wiring', () => {
   it('connects, declares the queue durable, and registers a consumer', async () => {
     const handler = vi.fn().mockResolvedValue(undefined);
-    await consume('amqps://broker.test', 'axiam.authz.request', new Sensitive(SIGNING_KEY), handler);
+    await consume('amqps://broker.test', 'axiam.authz.request', new Sensitive(SIGNING_KEY), handler, OPTS);
 
     expect(connectMock).toHaveBeenCalledWith('amqps://broker.test', undefined);
     expect(connection.createChannel).toHaveBeenCalledOnce();
@@ -111,7 +112,7 @@ describe('consume() wiring', () => {
       handled.push(event);
     });
 
-    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler);
+    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, OPTS);
     await channel.deliver(signedDelivery());
 
     expect(handler).toHaveBeenCalledOnce();
@@ -124,7 +125,7 @@ describe('consume() wiring', () => {
 
   it('ignores a null delivery (consumer cancellation) without ack/nack', async () => {
     const handler = vi.fn();
-    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler);
+    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, OPTS);
     await channel.deliver(null);
 
     expect(handler).not.toHaveBeenCalled();
@@ -132,7 +133,7 @@ describe('consume() wiring', () => {
     expect(channel.nack).not.toHaveBeenCalled();
   });
 
-  it('a rejection inside verification is nacked once without requeue and logs exactly timestamp, exchange, routingKey', async () => {
+  it('a rejection inside verification is nacked once without requeue and logs exactly timestamp, exchange, routingKey, tenantId, reason', async () => {
     const handler = vi.fn().mockResolvedValue(undefined);
     const logger = { warn: vi.fn() };
     const nonceStore = {
@@ -140,7 +141,7 @@ describe('consume() wiring', () => {
         throw new Error('store down');
       },
     };
-    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, { nonceStore, logger });
+    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, { ...OPTS, nonceStore, logger });
     await channel.deliver(signedDelivery());
     await new Promise((r) => setTimeout(r, 0));
 
@@ -150,7 +151,29 @@ describe('consume() wiring', () => {
     expect(channel.nack.mock.calls[0].slice(1)).toEqual([false, false]);
     expect(logger.warn).toHaveBeenCalledTimes(1);
     const [, , context] = logger.warn.mock.calls[0] as [string, string, Record<string, unknown>];
-    expect(Object.keys(context).sort()).toEqual(['exchange', 'routingKey', 'timestamp']);
+    expect(Object.keys(context).sort()).toEqual(['exchange', 'reason', 'routingKey', 'tenantId', 'timestamp']);
+    expect(context.tenantId).toBe(OPTS.tenantId);
+  });
+
+  it('a BOM-prefixed delivery is nacked as malformed, nothing escapes, and the next delivery is still processed (D-10)', async () => {
+    const handler = vi.fn().mockResolvedValue(undefined);
+    const logger = { warn: vi.fn() };
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, { ...OPTS, logger });
+    const good = signedDelivery();
+    const bom = signedDelivery();
+    bom.content = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), good.content]);
+    await channel.deliver(bom);
+    await channel.deliver(good);
+    await new Promise((r) => setTimeout(r, 10));
+    process.off('unhandledRejection', unhandled);
+
+    expect(unhandled).not.toHaveBeenCalled();
+    expect(channel.nack).toHaveBeenCalledTimes(1);
+    expect((logger.warn.mock.calls[0] as [string, string, Record<string, unknown>])[2].reason).toBe('malformed');
+    expect(handler).toHaveBeenCalledOnce();
+    expect(channel.ack).toHaveBeenCalledOnce();
   });
 
   it('a logger whose warn throws neither leaves the delivery unacked nor raises an unhandled rejection', async () => {
@@ -166,7 +189,7 @@ describe('consume() wiring', () => {
     };
     const unhandled = vi.fn();
     process.on('unhandledRejection', unhandled);
-    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), vi.fn(), { nonceStore, logger });
+    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), vi.fn(), { ...OPTS, nonceStore, logger });
     await channel.deliver(signedDelivery());
     await new Promise((r) => setTimeout(r, 10));
     process.off('unhandledRejection', unhandled);
@@ -182,7 +205,7 @@ describe('consume() wiring', () => {
         throw new Error('logger down');
       },
     };
-    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), vi.fn(), { logger });
+    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), vi.fn(), { ...OPTS, logger });
     const bad = signedDelivery();
     bad.content = Buffer.from('not json', 'utf8');
     const unhandled = vi.fn();
@@ -197,6 +220,7 @@ describe('consume() wiring', () => {
   it('shares one nonce store across deliveries so a replayed nonce is nacked', async () => {
     const handler = vi.fn().mockResolvedValue(undefined);
     await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, {
+      ...OPTS,
       nonceStore: new InMemoryNonceStore(),
     });
 
@@ -223,7 +247,7 @@ describe('consume() transport security (§8b)', () => {
   it('refuses a plaintext amqp:// URL before opening a socket', async () => {
     const handler = vi.fn();
     await expect(
-      consume('amqp://broker.test:5672', 'q', new Sensitive(SIGNING_KEY), handler),
+      consume('amqp://broker.test:5672', 'q', new Sensitive(SIGNING_KEY), handler, OPTS),
     ).rejects.toThrow(/amqps:\/\//);
     expect(connectMock).not.toHaveBeenCalled();
   });
@@ -232,7 +256,7 @@ describe('consume() transport security (§8b)', () => {
     const handler = vi.fn();
     for (const url of ['http://broker.test', 'amqpsomething://broker.test', 'broker.test']) {
       await expect(
-        consume(url, 'q', new Sensitive(SIGNING_KEY), handler),
+        consume(url, 'q', new Sensitive(SIGNING_KEY), handler, OPTS),
       ).rejects.toThrow(/amqps:\/\//);
     }
     expect(connectMock).not.toHaveBeenCalled();
@@ -240,22 +264,20 @@ describe('consume() transport security (§8b)', () => {
 
   it('accepts AMQPS:// case-insensitively — an operator who wrote it meant TLS', async () => {
     const handler = vi.fn();
-    await consume('AMQPS://broker.test', 'q', new Sensitive(SIGNING_KEY), handler);
+    await consume('AMQPS://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, OPTS);
     expect(connectMock).toHaveBeenCalledOnce();
   });
 
   it('passes a supplied CA bundle through as tls socket options (rule 2)', async () => {
     const handler = vi.fn();
-    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, {
-      tls: { caCert: CA_PEM },
+    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, { ...OPTS, tls: { caCert: CA_PEM },
     });
     expect(connectMock).toHaveBeenCalledWith('amqps://broker.test', { ca: CA_PEM });
   });
 
   it('never sends rejectUnauthorized — there is no verification-skip path (rule 4)', async () => {
     const handler = vi.fn();
-    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, {
-      tls: { caCert: CA_PEM, clientCert: CLIENT_CERT_PEM, clientKey: CLIENT_KEY_PEM },
+    await consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, { ...OPTS, tls: { caCert: CA_PEM, clientCert: CLIENT_CERT_PEM, clientKey: CLIENT_KEY_PEM },
     });
     const [, socketOptions] = connectMock.mock.calls[0];
     expect(socketOptions).not.toHaveProperty('rejectUnauthorized');
@@ -265,13 +287,11 @@ describe('consume() transport security (§8b)', () => {
   it('rejects half a client identity before dialling (rule 3)', async () => {
     const handler = vi.fn();
     await expect(
-      consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, {
-        tls: { clientCert: CLIENT_CERT_PEM },
+      consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, { ...OPTS, tls: { clientCert: CLIENT_CERT_PEM },
       }),
     ).rejects.toThrow(/together/);
     await expect(
-      consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, {
-        tls: { clientKey: CLIENT_KEY_PEM },
+      consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, { ...OPTS, tls: { clientKey: CLIENT_KEY_PEM },
       }),
     ).rejects.toThrow(/together/);
     expect(connectMock).not.toHaveBeenCalled();
@@ -280,8 +300,7 @@ describe('consume() transport security (§8b)', () => {
   it('rejects a caCert that is not PEM', async () => {
     const handler = vi.fn();
     await expect(
-      consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, {
-        tls: { caCert: '/etc/ssl/certs/broker-ca.pem' },
+      consume('amqps://broker.test', 'q', new Sensitive(SIGNING_KEY), handler, { ...OPTS, tls: { caCert: '/etc/ssl/certs/broker-ca.pem' },
       }),
     ).rejects.toThrow(/PEM/);
     expect(connectMock).not.toHaveBeenCalled();

@@ -37,7 +37,15 @@ async function main(): Promise<void> {
       // already checked the HMAC signature and stripped it from `event`.
       console.log('verified audit event:', event);
     },
-    caCert ? { tls: { caCert } } : {},
+    {
+      // This consumer's OWN tenant (the tenant whose subkey `signingKey` is):
+      // named in every discard event, never read from a message body.
+      tenantId: process.env.AXIAM_TENANT_ID ?? '',
+      // The ONE type this queue carries. A body with any other signed layout
+      // is refused as `malformed`; consuming both types takes two consumers.
+      eventType: 'AuditEventMessage',
+      ...(caCert ? { tls: { caCert } } : {}),
+    },
   );
 
   console.log(`Consuming from ${queue} — every delivery is HMAC-verified before this handler runs`);

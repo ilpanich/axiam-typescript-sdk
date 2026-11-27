@@ -14,6 +14,7 @@ const vectors = JSON.parse(readFileSync(new URL('../../testdata/v2_reference_vec
   authz_request: { message: Record<string, string>; wire_json: string };
 };
 const SUBKEY = Buffer.from(vectors.hkdf.derived_subkey_hex, 'hex');
+const OPTS = { tenantId: '99999999-9999-9999-9999-999999999999', eventType: 'AuthzRequest' } as const;
 const TENANT = '11111111-1111-1111-1111-111111111111';
 const OTHER = '99999999-9999-9999-9999-999999999999';
 const CID = '22222222-2222-2222-2222-222222222222';
@@ -139,7 +140,7 @@ describe('review round 1', () => {
     const channel = { consume: vi.fn(), ack: vi.fn(), nack: (_m: unknown, a: boolean, r: boolean) => nacks.push([a, r]) };
     const handler = vi.fn(async () => {});
     const msg = { content: body, fields: { exchange: '', routingKey: 'k' }, properties: {} } as unknown as ConsumeMessage;
-    await expect(verifyAndDispatch(channel, msg, SUBKEY, handler)).resolves.toBeUndefined();
+    await expect(verifyAndDispatch(channel, msg, SUBKEY, handler, OPTS)).resolves.toBeUndefined();
     expect(handler).not.toHaveBeenCalled();
     expect(nacks).toEqual([[false, false]]);
   });

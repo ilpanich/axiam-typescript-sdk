@@ -44,11 +44,13 @@ function message(content: Buffer | string): ConsumeMessage {
   } as unknown as ConsumeMessage;
 }
 
-async function run(content: Buffer | string, key: Buffer = SUBKEY) {
+async function run(content: Buffer | string, key: Buffer = SUBKEY, eventType: 'AuthzRequest' | 'AuditEventMessage' = 'AuditEventMessage') {
   const channel = new Channel();
   const handler = vi.fn(async (_event: Record<string, unknown>) => {});
   // The vectors are dated 2026-07-10; a wide skew keeps this test about the wire, not the clock.
   await verifyAndDispatch(channel, message(content), key, handler, {
+    tenantId: '99999999-9999-9999-9999-999999999999',
+    eventType,
     skewMs: Number.MAX_SAFE_INTEGER,
     nonceStore: new InMemoryNonceStore(),
   });
@@ -65,7 +67,7 @@ describe('§8 step 2 — reference vectors', () => {
   it.each(['authz_request', 'audit_event'] as const)('%s: wire_json cuts to canonical_signed_json, verifies, passes the layout and dispatches', async (name) => {
     const v = vectors[name];
     expect(v.wire_json).toBe(`${v.canonical_signed_json.slice(0, -1)},"hmac_signature":"${v.hmac_signature_hex}"}`);
-    const { channel, handler } = await run(v.wire_json);
+    const { channel, handler } = await run(v.wire_json, SUBKEY, name === 'authz_request' ? 'AuthzRequest' : 'AuditEventMessage');
     expect(channel.nacked).toEqual([]);
     expect(channel.acked).toBe(1);
     expect(handler).toHaveBeenCalledTimes(1);

@@ -9,6 +9,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ConsumeMessage } from 'amqplib';
 import { verifyAndDispatch } from '../../src/amqp/consumer.js';
+const OPTS = { tenantId: '99999999-9999-9999-9999-999999999999', eventType: 'AuthzRequest' } as const;
 
 const SUBKEY = Buffer.from('919e125ec83799c1e113a27707cac5008a2608d0557e00dfe1b3a316abed4b89', 'hex');
 
@@ -23,7 +24,7 @@ function message(body: string): ConsumeMessage {
 async function delivered(body: string): Promise<boolean> {
   const channel = { consume: vi.fn(), ack: vi.fn(), nack: vi.fn() };
   const handler = vi.fn(async () => {});
-  await verifyAndDispatch(channel, message(body), SUBKEY, handler);
+  await verifyAndDispatch(channel, message(body), SUBKEY, handler, OPTS);
   return handler.mock.calls.length > 0;
 }
 

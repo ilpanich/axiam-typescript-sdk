@@ -11,6 +11,7 @@ import {
 } from '../../src/amqp/consumer.js';
 
 const SIGNING_KEY = Buffer.from('consumer-test-signing-key', 'utf8');
+const OPTS = { tenantId: '99999999-9999-9999-9999-999999999999', eventType: 'AuthzRequest' } as const;
 
 function makeMessage(content: Buffer, exchange = 'axiam.authz.request', routingKey = 'authz'): ConsumeMessage {
   return {
@@ -98,7 +99,7 @@ describe('amqp/consumer verifyAndDispatch', () => {
       expect(event.action).toBe('read');
     });
 
-    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler);
+    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, OPTS);
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(channel.acked).toHaveLength(1);
@@ -114,7 +115,7 @@ describe('amqp/consumer verifyAndDispatch', () => {
     const handler = vi.fn(async () => {});
     const { logger, events } = makeRecordingLogger();
 
-    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, { logger });
+    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, { ...OPTS, logger });
 
     expect(handler).not.toHaveBeenCalled();
     expect(channel.acked).toHaveLength(0);
@@ -141,7 +142,7 @@ describe('amqp/consumer verifyAndDispatch', () => {
     const handler = vi.fn(async () => {});
     const { logger } = makeRecordingLogger();
 
-    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, { logger });
+    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, { ...OPTS, logger });
 
     expect(handler).not.toHaveBeenCalled();
     expect(channel.acked).toHaveLength(0);
@@ -154,7 +155,7 @@ describe('amqp/consumer verifyAndDispatch', () => {
     const channel = new RecordingChannel();
     const handler = vi.fn(async () => {});
 
-    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler);
+    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, OPTS);
 
     expect(handler).not.toHaveBeenCalled();
     expect(channel.acked).toHaveLength(0);
@@ -170,7 +171,7 @@ describe('amqp/consumer verifyAndDispatch', () => {
       throw new Error('handler crashed');
     });
 
-    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler);
+    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, OPTS);
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(channel.acked).toHaveLength(0);
@@ -194,7 +195,7 @@ describe('amqp/consumer verifyAndDispatch', () => {
     const handler = vi.fn(async () => {});
 
     // The option no longer exists; a JS caller (or a stale config) still passing it changes nothing.
-    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, { strict: false } as never);
+    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, { ...OPTS, strict: false } as never);
 
     expect(handler).not.toHaveBeenCalled();
     expect(channel.acked).toHaveLength(0);
@@ -208,18 +209,18 @@ describe('amqp/consumer verifyAndDispatch', () => {
     // mismatch
     const { body } = makeSignedBody();
     const tampered = { ...body, hmac_signature: '1'.repeat(64) };
-    await verifyAndDispatch(channel, makeMessage(Buffer.from(JSON.stringify(tampered), 'utf8')), SIGNING_KEY, handler);
+    await verifyAndDispatch(channel, makeMessage(Buffer.from(JSON.stringify(tampered), 'utf8')), SIGNING_KEY, handler, OPTS);
 
     // missing
     await verifyAndDispatch(
       channel,
       makeMessage(Buffer.from(JSON.stringify({ action: 'read' }), 'utf8')),
       SIGNING_KEY,
-      handler,
+      handler, OPTS,
     );
 
     // parse-fail
-    await verifyAndDispatch(channel, makeMessage(Buffer.from('{{{', 'utf8')), SIGNING_KEY, handler);
+    await verifyAndDispatch(channel, makeMessage(Buffer.from('{{{', 'utf8')), SIGNING_KEY, handler, OPTS);
 
     expect(channel.nackCalls).toHaveLength(3);
     for (const call of channel.nackCalls) {
@@ -237,7 +238,7 @@ describe('amqp/consumer verifyAndDispatch NEW-4 replay protection (CONTRACT.md Â
     const handler = vi.fn(async () => {});
     const { logger, events } = makeRecordingLogger();
 
-    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, { logger });
+    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, { ...OPTS, logger });
 
     expect(handler).not.toHaveBeenCalled();
     expect(channel.acked).toHaveLength(0);
@@ -252,7 +253,7 @@ describe('amqp/consumer verifyAndDispatch NEW-4 replay protection (CONTRACT.md Â
     const channel = new RecordingChannel();
     const handler = vi.fn(async () => {});
 
-    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler);
+    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, OPTS);
 
     expect(handler).not.toHaveBeenCalled();
     expect(channel.acked).toHaveLength(0);
@@ -268,13 +269,13 @@ describe('amqp/consumer verifyAndDispatch NEW-4 replay protection (CONTRACT.md Â
     const handler = vi.fn(async () => {});
     const { logger, events } = makeRecordingLogger();
 
-    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, { logger });
+    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, { ...OPTS, logger });
 
     expect(handler).not.toHaveBeenCalled();
     expect(channel.acked).toHaveLength(0);
     expect(channel.nackCalls).toHaveLength(1);
     expect(channel.nackCalls[0]).toEqual({ msg, allUpTo: false, requeue: false });
-    expect(events.some((e) => e.message.includes('issued_at'))).toBe(true);
+    expect(events.map((e) => e.context?.reason)).toEqual(['stale']);
   });
 
   it('future issued_at (outside skew) is also rejected as stale', async () => {
@@ -284,7 +285,7 @@ describe('amqp/consumer verifyAndDispatch NEW-4 replay protection (CONTRACT.md Â
     const channel = new RecordingChannel();
     const handler = vi.fn(async () => {});
 
-    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler);
+    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, OPTS);
 
     expect(handler).not.toHaveBeenCalled();
     expect(channel.nackCalls[0]).toEqual({ msg, allUpTo: false, requeue: false });
@@ -298,7 +299,7 @@ describe('amqp/consumer verifyAndDispatch NEW-4 replay protection (CONTRACT.md Â
     const channel = new RecordingChannel();
     const handler = vi.fn(async () => {});
 
-    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, { skewMs });
+    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, { ...OPTS, skewMs });
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(channel.acked).toHaveLength(1);
@@ -313,7 +314,7 @@ describe('amqp/consumer verifyAndDispatch NEW-4 replay protection (CONTRACT.md Â
     const { logger, events } = makeRecordingLogger();
 
     const first = makeSignedBody({ nonce });
-    await verifyAndDispatch(channel, makeMessage(first.data), SIGNING_KEY, handler, { nonceStore });
+    await verifyAndDispatch(channel, makeMessage(first.data), SIGNING_KEY, handler, { ...OPTS, nonceStore });
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(channel.acked).toHaveLength(1);
@@ -324,13 +325,13 @@ describe('amqp/consumer verifyAndDispatch NEW-4 replay protection (CONTRACT.md Â
     // nonce itself is what's deduped.
     const replay = makeSignedBody({ nonce });
     const replayMsg = makeMessage(replay.data);
-    await verifyAndDispatch(channel, replayMsg, SIGNING_KEY, handler, { logger, nonceStore });
+    await verifyAndDispatch(channel, replayMsg, SIGNING_KEY, handler, { ...OPTS, logger, nonceStore });
 
     expect(handler).toHaveBeenCalledTimes(1); // still 1 â€” handler NOT invoked again
     expect(channel.acked).toHaveLength(1);
     expect(channel.nackCalls).toHaveLength(1);
     expect(channel.nackCalls[0]).toEqual({ msg: replayMsg, allUpTo: false, requeue: false });
-    expect(events.some((e) => e.message.includes('nonce'))).toBe(true);
+    expect(events.map((e) => e.context?.reason)).toEqual(['replay']);
   });
 
   it('two distinct nonces from the same store are both accepted (no false-positive dedup)', async () => {
@@ -340,8 +341,8 @@ describe('amqp/consumer verifyAndDispatch NEW-4 replay protection (CONTRACT.md Â
 
     const a = makeSignedBody({ nonce: randomUUID() });
     const b = makeSignedBody({ nonce: randomUUID() });
-    await verifyAndDispatch(channel, makeMessage(a.data), SIGNING_KEY, handler, { nonceStore });
-    await verifyAndDispatch(channel, makeMessage(b.data), SIGNING_KEY, handler, { nonceStore });
+    await verifyAndDispatch(channel, makeMessage(a.data), SIGNING_KEY, handler, { ...OPTS, nonceStore });
+    await verifyAndDispatch(channel, makeMessage(b.data), SIGNING_KEY, handler, { ...OPTS, nonceStore });
 
     expect(handler).toHaveBeenCalledTimes(2);
     expect(channel.acked).toHaveLength(2);
@@ -358,8 +359,8 @@ describe('amqp/consumer verifyAndDispatch NEW-4 replay protection (CONTRACT.md Â
 
     const first = makeSignedBody({ nonce });
     const second = makeSignedBody({ nonce });
-    await verifyAndDispatch(channel, makeMessage(first.data), SIGNING_KEY, handler);
-    await verifyAndDispatch(channel, makeMessage(second.data), SIGNING_KEY, handler);
+    await verifyAndDispatch(channel, makeMessage(first.data), SIGNING_KEY, handler, OPTS);
+    await verifyAndDispatch(channel, makeMessage(second.data), SIGNING_KEY, handler, OPTS);
 
     expect(handler).toHaveBeenCalledTimes(2);
     expect(channel.nackCalls).toHaveLength(0);
@@ -376,7 +377,7 @@ describe('amqp/consumer verifyAndDispatch NEW-4 replay protection (CONTRACT.md Â
       expect(typeof event.issued_at).toBe('string');
     });
 
-    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler);
+    await verifyAndDispatch(channel, msg, SIGNING_KEY, handler, OPTS);
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(channel.acked).toHaveLength(1);

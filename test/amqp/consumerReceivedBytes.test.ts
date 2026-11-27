@@ -64,7 +64,11 @@ function wire(canonical: string, tail = ''): Buffer {
 async function run(content: Buffer) {
   const channel = new Channel();
   const handler = vi.fn(async (_event: Record<string, unknown>) => {});
-  await verifyAndDispatch(channel, message(content), KEY, handler, { nonceStore: new InMemoryNonceStore() });
+  await verifyAndDispatch(channel, message(content), KEY, handler, {
+    tenantId: '99999999-9999-9999-9999-999999999999',
+    eventType: 'AuditEventMessage',
+    nonceStore: new InMemoryNonceStore(),
+  });
   return { channel, handler };
 }
 
@@ -75,7 +79,7 @@ describe('axiam#882 — verification is over the received bytes', () => {
     ['a control character the server writes as \\u001f', 'a\\u001fb'],
     ['the short escapes', 'a\\n\\t\\"\\\\b'],
   ])('a genuine message whose action holds %s verifies and is delivered', async (_label, action) => {
-    const canonical = audit('n-1', action);
+    const canonical = audit('aaaaaaaa-aaaa-aaaa-aaaa-000000000001', action);
     const { channel, handler } = await run(wire(canonical));
     expect(channel.nacked).toEqual([]);
     expect(channel.acked).toBe(1);
@@ -92,7 +96,7 @@ describe('axiam#882 — verification is over the received bytes', () => {
       escaped += short[c] ?? `\\u${c.toString(16).padStart(4, '0')}`;
     }
     // DEL (0x7f) is written raw by serde_json and by JSON.stringify alike.
-    const canonical = audit('n-2', `${escaped}\x7f`);
+    const canonical = audit('aaaaaaaa-aaaa-aaaa-aaaa-000000000002', `${escaped}\x7f`);
     const { channel, handler } = await run(wire(canonical));
     expect(channel.nacked).toEqual([]);
     expect(handler).toHaveBeenCalledTimes(1);
@@ -107,7 +111,7 @@ describe('axiam#882 — verification is over the received bytes', () => {
     ['an integer above 2^53', '{"big":18446744073709551615}'],
     ['an exponent form', '{"n":1e2,"m":1E+2}'],
   ])('a genuine serde_json-shaped metadata holding %s verifies (received bytes, not a re-serialization)', async (_label, metadata) => {
-    const canonical = audit('n-5', 'read', metadata);
+    const canonical = audit('aaaaaaaa-aaaa-aaaa-aaaa-000000000005', 'read', metadata);
     const { channel, handler } = await run(wire(canonical));
     expect(channel.nacked).toEqual([]);
     expect(channel.acked).toBe(1);
@@ -117,28 +121,28 @@ describe('axiam#882 — verification is over the received bytes', () => {
   });
 
   it('a body that writes characters as \\u escapes (where JSON.stringify writes them raw) verifies', async () => {
-    const canonical = audit('n-6', 'caf\\u00e9 \\u20ac \\u003c\\u003e\\u0026');
+    const canonical = audit('aaaaaaaa-aaaa-aaaa-aaaa-000000000006', 'caf\\u00e9 \\u20ac \\u003c\\u003e\\u0026');
     const { channel, handler } = await run(wire(canonical));
     expect(channel.nacked).toEqual([]);
     expect(handler.mock.calls[0][0].action).toBe('café € <>&');
   });
 
   it('a duplicate key nested in an object or array is nacked too', async () => {
-    const canonical = audit('n-7', 'read', '{"k":[{"a":1,"a":2}]}');
+    const canonical = audit('aaaaaaaa-aaaa-aaaa-aaaa-000000000007', 'read', '{"k":[{"a":1,"a":2}]}');
     const { channel, handler } = await run(wire(canonical));
     expect(handler).not.toHaveBeenCalled();
     expect(channel.nacked).toEqual([{ allUpTo: false, requeue: false }]);
   });
 
   it('a duplicate key spelled two ways (\\u0061 and a) is nacked', async () => {
-    const canonical = audit('n-8', 'read').replace('"action"', '"a":1,"\\u0061":2,"action"');
+    const canonical = audit('aaaaaaaa-aaaa-aaaa-aaaa-000000000008', 'read').replace('"action"', '"a":1,"\\u0061":2,"action"');
     const { channel, handler } = await run(wire(canonical));
     expect(handler).not.toHaveBeenCalled();
     expect(channel.nacked).toEqual([{ allUpTo: false, requeue: false }]);
   });
 
   it('a correctly signed body whose hmac_signature is NOT the trailing member is nacked and the handler never runs', async () => {
-    const canonical = audit('n-9', 'read');
+    const canonical = audit('aaaaaaaa-aaaa-aaaa-aaaa-000000000009', 'read');
     const sig = signPayload(KEY, Buffer.from(canonical, 'utf8'));
     const moved = Buffer.from(`{"hmac_signature":"${sig}",${canonical.slice(1)}`, 'utf8');
     const { channel, handler } = await run(moved);
@@ -148,7 +152,7 @@ describe('axiam#882 — verification is over the received bytes', () => {
   });
 
   it('a body with a duplicate key is nacked without requeue and the handler never runs', async () => {
-    const canonical = audit('n-3', 'read').replace('"outcome"', '"action":"admin","outcome"');
+    const canonical = audit('aaaaaaaa-aaaa-aaaa-aaaa-000000000003', 'read').replace('"outcome"', '"action":"admin","outcome"');
     const { channel, handler } = await run(wire(canonical));
     expect(handler).not.toHaveBeenCalled();
     expect(channel.acked).toBe(0);
@@ -156,7 +160,7 @@ describe('axiam#882 — verification is over the received bytes', () => {
   });
 
   it('a body with trailing content after the object is nacked without requeue and the handler never runs', async () => {
-    const good = wire(audit('n-4', 'read'));
+    const good = wire(audit('aaaaaaaa-aaaa-aaaa-aaaa-000000000004', 'read'));
     for (const trailer of [' {}', '\n{"action":"admin"}', 'x']) {
       const { channel, handler } = await run(Buffer.concat([good, Buffer.from(trailer, 'utf8')]));
       expect(handler).not.toHaveBeenCalled();

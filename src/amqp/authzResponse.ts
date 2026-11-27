@@ -205,12 +205,16 @@ export class AuthzResponseVerifier {
     // allowed, tenant_id, nonce or correlation_id -> malformed, BEFORE the
     // HMAC; (4) the HMAC fails -> signature; then tenant and unknown_request.
     let whole: unknown;
+    let text: string;
     try {
-      whole = JSON.parse(decodeUtf8Strict(body));
+      text = decodeUtf8Strict(body);
+      whole = JSON.parse(text);
     } catch {
       return this.#refuse('malformed', delivery);
     }
-    if (typeof whole !== 'object' || whole === null || Array.isArray(whole)) {
+    // The first byte must be the opening `{`: a byte-order mark or whitespace
+    // before it is refused, never skipped (contract 1.69 step 2a, D-10).
+    if (typeof whole !== 'object' || whole === null || Array.isArray(whole) || !text.startsWith('{')) {
       return this.#refuse('malformed', delivery);
     }
     if (!Object.prototype.hasOwnProperty.call(whole, 'hmac_signature')) {
@@ -288,20 +292,28 @@ export class AuthzResponseVerifier {
       exchange: msg.fields.exchange,
       routingKey: msg.fields.routingKey,
     });
-    if (verdict.accepted) {
-      channel.ack(msg);
-    } else {
-      channel.nack(msg, false, false);
+    try {
+      if (verdict.accepted) {
+        channel.ack(msg);
+      } else {
+        channel.nack(msg, false, false);
+      }
+    } catch {
+      // the channel closed under the delivery: nothing escapes the delivery loop (contract 1.69, D-10)
     }
     return verdict;
   }
 
   #refuse(reason: AuthzResponseRejection, delivery: AuthzResponseDelivery | undefined): AuthzResponseVerdict {
-    this.#logger?.warn(
-      'axiam_sdk.security',
-      `AMQP authorization response discarded (${reason})`,
-      this.#eventContext(reason, delivery),
-    );
+    try {
+      this.#logger?.warn(
+        'axiam_sdk.security',
+        `AMQP authorization response discarded (${reason})`,
+        this.#eventContext(reason, delivery),
+      );
+    } catch {
+      // an integrator logger's failure is not the delivery's problem (contract 1.69, D-10)
+    }
     return { accepted: false, reason };
   }
 
