@@ -49,3 +49,13 @@ export function verifyPayload(key: Buffer, payloadJson: Buffer, signatureHex: st
   if (received.length !== expected.length) return false;
   return timingSafeEqual(received, expected);
 }
+
+/**
+ * Decode `bytes` as UTF-8, throwing on an invalid sequence. A leading byte-order
+ * mark is kept (`ignoreBOM`), so the decoded text and the raw bytes always
+ * agree; a BOM then makes the body fail to parse as JSON instead of being
+ * silently dropped from one view of the message only.
+ */
+export function decodeUtf8Strict(bytes: Uint8Array): string {
+  return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+}

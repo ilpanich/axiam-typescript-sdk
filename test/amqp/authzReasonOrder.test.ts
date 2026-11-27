@@ -130,3 +130,28 @@ describe('§8 rule 2 — producer wire form', () => {
     expect(out.toString('utf8')).toBe(vectors.authz_request.wire_json);
   });
 });
+
+describe('review round 1', () => {
+  it('a BOM-prefixed body is nacked without requeue, the handler never runs and the call does not reject', async () => {
+    const { verifyAndDispatch } = await import('../../src/amqp/consumer.js');
+    const body = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(`{"a":1,"hmac_signature":"${'0'.repeat(64)}"}`, 'utf8')]);
+    const nacks: Array<[boolean, boolean]> = [];
+    const channel = { consume: vi.fn(), ack: vi.fn(), nack: (_m: unknown, a: boolean, r: boolean) => nacks.push([a, r]) };
+    const handler = vi.fn(async () => {});
+    const msg = { content: body, fields: { exchange: '', routingKey: 'k' }, properties: {} } as unknown as ConsumeMessage;
+    await expect(verifyAndDispatch(channel, msg, SUBKEY, handler)).resolves.toBeUndefined();
+    expect(handler).not.toHaveBeenCalled();
+    expect(nacks).toEqual([[false, false]]);
+  });
+
+  it('a BOM-prefixed response body is malformed', () => {
+    const w = wire(full());
+    expect(reasonOf(Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), w]))).toBe('malformed');
+  });
+
+  it('an ill-typed reason with a wrong HMAC is signature (normative order), with a right HMAC malformed', () => {
+    const canonical = `{"correlation_id":"${CID}","allowed":true,"reason":5,"tenant_id":"${TENANT}","nonce":"${NONCE}"}`;
+    expect(reasonOf(`${canonical.slice(0, -1)}${BADSIG}`)).toBe('signature');
+    expect(reasonOf(wire(canonical))).toBe('malformed');
+  });
+});

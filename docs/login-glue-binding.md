@@ -207,7 +207,7 @@ result. The reference implementation is `encodeRedirectLocation`, `src/middlewar
    `/%%41` becomes `/%25%41`). Any other `%` becomes `%25` (`/a%2` becomes `/a%252`).
 3. **Input that is not valid Unicode.** Whatever the language's string model, every part of the
    destination that is not valid Unicode is replaced by U+FFFD (encoded `%EF%BF%BD`) **before**
-   encoding, one replacement per invalid unit, and the encoder MUST NOT throw on any input. In a
+   encoding, one replacement per maximal ill-formed subpart (byte-string languages) or per unpaired surrogate (UTF-16 or code-point strings), and the encoder MUST NOT throw on any input. In a
    byte-string language (PHP, C) that means one U+FFFD per **maximal subpart** of an ill-formed
    UTF-8 sequence (the Unicode / WHATWG substitution): `\xE2\x82` is one, `\xF0\x9F\x98` is one,
    `\xFF` is one, `\xC0\x80` is two and `\xED\xA0\x80` is three. `returnTo=%FF` arrives as the

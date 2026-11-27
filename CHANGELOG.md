@@ -131,9 +131,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   1.69 §8, axiam#881). The requester requires a 1.68 server; a server older than 1.68 answers only
   on the shared queue the requester never reads, so every check times out whatever the option said.
 - **`ConsumeOptions.strict`, the lenient (accept-unsigned) mode of the AMQP event consumer**
-  (`verifyAndDispatch`, `consume`; present since 1.0, never released for 1.4.0): an unsigned
-  `AuthzRequest` or `AuditEventMessage` is always nacked without requeue, with no option to accept
-  one (CONTRACT 1.69 §8 rule 3). A JavaScript caller still passing `strict` has it ignored.
+  (`verifyAndDispatch`, `consume`) — **breaking TypeScript change**: the property no longer exists
+  on `ConsumeOptions`, so passing it is a compile error. An unsigned `AuthzRequest` or
+  `AuditEventMessage` is always nacked without requeue (CONTRACT 1.69 §8 rule 3). A JavaScript
+  caller still passing it has it ignored. *Migration:* delete `strict`; `false` is no longer
+  possible — contract §8 rule 3.
 
 ### Fixed
 
@@ -171,6 +173,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no event (it was logged as `unknown_request`). The `AuthzRequest` the requester publishes is
   pinned byte for byte to the reference vector's `wire_json`
   (`test/amqp/authzReasonOrder.test.ts`).
+- A body that starts with a UTF-8 byte-order mark, or whose cut canonical bytes do not parse,
+  is nacked without requeue by the event consumer instead of throwing out of `verifyAndDispatch`
+  (which, called unawaited from `consume()`, was an unhandled rejection a publisher could use to
+  crash the process); `consume()` also catches any rejection and nacks. The requester checks an
+  ill-typed `reason`/`reason_code` after the HMAC, so a wrong signature is `signature`.
 - `MemoryOidcStateStore` is bounded: at most `OIDC_STATE_MAX_ENTRIES` (10 000) entries by
   default, oldest evicted first (new optional second constructor argument).
 - A non-finite ID-token clock skew (`NaN`, `±Infinity`) is refused with a `TypeError` —

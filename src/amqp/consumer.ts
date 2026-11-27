@@ -23,7 +23,7 @@
 import amqp from 'amqplib';
 import type { Channel, ConsumeMessage } from 'amqplib';
 import type { Sensitive } from '../core/index.js';
-import { verifyPayload } from './hmac.js';
+import { decodeUtf8Strict, verifyPayload } from './hmac.js';
 import { buildAmqpConnectOptions, type AmqpTlsOptions } from './transport.js';
 
 /**
@@ -291,7 +291,7 @@ export async function verifyAndDispatch(
   // decoded to U+FFFD, which would make the handler's value differ from the bytes.
   let text: string;
   try {
-    text = new TextDecoder('utf-8', { fatal: true }).decode(msg.content);
+    text = decodeUtf8Strict(msg.content);
   } catch {
     refuse('AMQP message body is not one well-formed JSON object; nacking without requeue');
     return;
@@ -326,7 +326,13 @@ export async function verifyAndDispatch(
   // latin1 maps one byte to one unit and the member is ASCII, so the match
   // index is a byte index.
   const canonical = Buffer.concat([msg.content.subarray(0, trailing.index), Buffer.from('}', 'ascii')]);
-  const body = JSON.parse(canonical.toString('utf8')) as Record<string, unknown>;
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(decodeUtf8Strict(canonical)) as Record<string, unknown>;
+  } catch {
+    refuse('AMQP message body is not one well-formed JSON object; nacking without requeue');
+    return;
+  }
 
   // 2c: layout check over the canonical bytes' top-level names, exactly.
   if (!matchesSignedLayout(Object.keys(body))) {
@@ -440,6 +446,19 @@ export async function consume(
 
   await channel.consume(queue, (msg) => {
     if (!msg) return;
-    void verifyAndDispatch(channel, msg, signingKey.expose(), handler, sharedOptions);
+    verifyAndDispatch(channel, msg, signingKey.expose(), handler, sharedOptions).catch(() => {
+      // Never an unhandled rejection (it would take the process down and the
+      // unacked delivery would come back): nack without requeue; log no body content.
+      sharedOptions.logger?.warn('axiam_sdk.security', 'AMQP delivery handling failed; nacking without requeue', {
+        timestamp: new Date().toISOString(),
+        exchange: msg.fields.exchange,
+        routingKey: msg.fields.routingKey,
+      });
+      try {
+        channel.nack(msg, false, false);
+      } catch {
+        // channel already closed
+      }
+    });
   });
 }

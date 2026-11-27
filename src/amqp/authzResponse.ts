@@ -24,6 +24,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { ConsumeMessage } from 'amqplib';
 import type { Sensitive } from '../core/index.js';
 import type { ConsumeLogger } from './consumer.js';
+import { decodeUtf8Strict } from './hmac.js';
 
 /** The members of a request that its response must echo (§8 rule 3). */
 export interface OutstandingAuthzRequest {
@@ -205,7 +206,7 @@ export class AuthzResponseVerifier {
     // HMAC; (4) the HMAC fails -> signature; then tenant and unknown_request.
     let whole: unknown;
     try {
-      whole = JSON.parse(body.toString('utf8'));
+      whole = JSON.parse(decodeUtf8Strict(body));
     } catch {
       return this.#refuse('malformed', delivery);
     }
@@ -227,7 +228,7 @@ export class AuthzResponseVerifier {
     const canonical = Buffer.concat([body.subarray(0, match.index), Buffer.from('}', 'ascii')]);
     let parsed: unknown;
     try {
-      parsed = JSON.parse(canonical.toString('utf8'));
+      parsed = JSON.parse(decodeUtf8Strict(canonical));
     } catch {
       return this.#refuse('malformed', delivery);
     }
@@ -240,8 +241,6 @@ export class AuthzResponseVerifier {
       typeof r.allowed !== 'boolean' ||
       !isString(r.tenant_id) ||
       !isString(r.nonce) ||
-      (r.reason !== undefined && !isString(r.reason)) ||
-      (r.reason_code !== undefined && !isString(r.reason_code)) ||
       Object.prototype.hasOwnProperty.call(r, 'hmac_signature')
     ) {
       return this.#refuse('malformed', delivery);
@@ -251,6 +250,10 @@ export class AuthzResponseVerifier {
     const received = Buffer.from(match[1], 'hex');
     if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
       return this.#refuse('signature', delivery);
+    }
+    // Optional members are checked once the signature has verified (obligation 4 step 3 names only the four required ones).
+    if ((r.reason !== undefined && !isString(r.reason)) || (r.reason_code !== undefined && !isString(r.reason_code))) {
+      return this.#refuse('malformed', delivery);
     }
 
     // Rule 3 — the binding.
