@@ -174,6 +174,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The JWKS response body is capped, and the REST `customCa` adds to the trust store** (#176).
+  Neither Node JWKS fetch path (the global `fetch`, and the `node:https` path used with TLS
+  material) limited the body: a hostile endpoint could be buffered until the 5 s deadline. The body
+  is now read through a 50 KiB cap (the Java SDK's figure; CONTRACT.md §12.4 states none): a
+  `Content-Length` over it is refused before any byte is read, and a stream past it is cancelled,
+  closing the connection; either is a failed refresh. Separately, the REST agent passed `customCa`
+  as Node's `ca`, which REPLACES the process trust store (bundled roots, `NODE_EXTRA_CA_CERTS`,
+  OpenSSL's store under `--use-openssl-ca`), so with `customCa` set a call to any other publicly
+  trusted host failed. The agent now uses a secure context that keeps that store and adds the CA
+  (CONTRACT.md §6), with the client identity unchanged; verification and hostname checks stay on.
+
 - **The Node JWKS fetch honours `customCa` and the client identity** (#175). `createNodeSession`
   and the OIDC client's ID-token and logout-token verification fetched the key set with the global
   `fetch`, which carries neither, so against a private-CA server every `verifyAccessToken` /

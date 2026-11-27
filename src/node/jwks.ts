@@ -314,6 +314,40 @@ const TIMEOUT_DURATION_MS = 5_000;
 const JWKS_MAX_TTL_MS = 300_000;
 /** How long past its TTL a held set keeps verifying while every refresh fails (contract 1.69; D-10). */
 const JWKS_MAX_STALE_MS = 300_000;
+/**
+ * The largest JWKS response body read, in bytes: 50 KiB, the cap the Java SDK applies. A one-key
+ * EdDSA set is a few hundred bytes, so this is generous; CONTRACT.md §12.4 states no figure.
+ */
+const JWKS_MAX_BODY_BYTES = 50 * 1024;
+
+/**
+ * The response body as parsed JSON, read through a byte cap. A declared `Content-Length` over the cap
+ * is refused before a byte is read; otherwise the stream is counted and cancelled (closing the
+ * connection) at the first byte past the cap, so a hostile endpoint is never buffered whole. Either
+ * refusal throws, which is a failed refresh. Used by both fetch paths.
+ */
+async function readCappedJson(res: Response, maxBytes: number): Promise<unknown> {
+  const declared = res.headers.get('content-length');
+  if (declared !== null && /^\d+$/.test(declared.trim()) && Number(declared) > maxBytes) {
+    await res.body?.cancel().catch(() => undefined);
+    throw new Error('JWKS response too large');
+  }
+  const reader = res.body?.getReader();
+  if (reader === undefined) throw new Error('JWKS response has no body');
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new Error('JWKS response too large');
+    }
+    chunks.push(value);
+  }
+  return JSON.parse(new TextDecoder().decode(Buffer.concat(chunks)));
+}
 
 /** The lifetime the response advertises, clamped to {@link JWKS_MAX_TTL_MS}; the default when it advertises none. An advertised value is clamped silently. */
 function ttlFromResponse(res: Response): number {
@@ -532,7 +566,7 @@ class JwksCache {
       await res.body?.cancel().catch(() => undefined); // release the connection
       throw new Error('unexpected JWKS status');
     }
-    const doc = (await res.json()) as { keys?: unknown };
+    const doc = (await readCappedJson(res, JWKS_MAX_BODY_BYTES)) as { keys?: unknown };
     const isJwk = (k: unknown): boolean =>
       typeof k === 'object' && k !== null && !Array.isArray(k) && typeof (k as { kty?: unknown }).kty === 'string';
     if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.keys) || !doc.keys.some(isJwk)) {

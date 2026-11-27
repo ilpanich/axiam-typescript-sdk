@@ -354,6 +354,30 @@ export function resolveTenantHeaderValue(options: AxiamClientOptions): string {
 }
 
 /**
+ * The options an `https.Agent` (or `HttpsCookieAgent`) is constructed with for `tls`.
+ *
+ * Node's `ca` option REPLACES the process trust store (bundled roots, OpenSSL's under
+ * `--use-openssl-ca`, `NODE_EXTRA_CA_CERTS`), but CONTRACT.md §6 makes `customCa` an ADDED anchor. So
+ * when a CA is configured the agent gets a secure context that starts from that store, has the CA
+ * added to it, and carries the client identity (§6.1). Server verification stays at its default;
+ * there is no way to switch it off through this function (#176).
+ */
+export function agentTlsOptions(tls: NodeTlsOptions | undefined): Record<string, unknown> {
+  if (tls === undefined) return {};
+  if (tls.ca === undefined) {
+    return { ...(tls.cert !== undefined ? { cert: tls.cert } : {}), ...(tls.key !== undefined ? { key: tls.key } : {}) };
+  }
+  const tlsMod = loadNodeBuiltin<typeof import('node:tls')>('node:tls');
+  const secureContext = tlsMod.createSecureContext({
+    ...(tls.cert !== undefined ? { cert: tls.cert } : {}),
+    ...(tls.key !== undefined ? { key: tls.key } : {}),
+  });
+  // `addCACert` is not in the public typings; it is what `ca` itself calls after clearing the store.
+  (secureContext as unknown as { context: { addCACert(pem: string): void } }).context.addCACert(tls.ca);
+  return { secureContext };
+}
+
+/**
  * Build the Node-only `https.Agent` carrying the customCa server-trust PEM
  * (§6) and/or the mTLS client identity (§6.1). Guarded by
  * `typeof process !== 'undefined'` as a CAPABILITY guard (Node has node:https
@@ -381,7 +405,7 @@ export function resolveTenantHeaderValue(options: AxiamClientOptions): string {
  * before the module ever loaded. Reached off `process`, which every caller has
  * already capability-guarded, so a browser bundle never evaluates this.
  */
-function loadNodeBuiltin<T>(id: 'node:https' | 'node:http'): T {
+function loadNodeBuiltin<T>(id: 'node:https' | 'node:http' | 'node:tls'): T {
   const getBuiltinModule = (
     process as unknown as { getBuiltinModule?: (moduleId: string) => unknown }
   ).getBuiltinModule;
@@ -546,7 +570,7 @@ export function buildPlainNodeAgents(tls: NodeTlsOptions | undefined): {
   const https = loadNodeHttps();
   return {
     httpAgent: new http.Agent(),
-    httpsAgent: new https.Agent(tls ?? {}),
+    httpsAgent: new https.Agent(agentTlsOptions(tls)),
   };
 }
 
@@ -566,7 +590,7 @@ function maybeBuildHttpsAgent(
   // Node capability guard — resolved lazily (see loadNodeHttps) so this
   // branch never executes, and never needs to resolve, in a browser bundle.
   const https = loadNodeHttps();
-  return new https.Agent(tls);
+  return new https.Agent(agentTlsOptions(tls));
 }
 
 /** Build the axios instance + SharedSession for an AxiamClient (D-13/D-25). */
