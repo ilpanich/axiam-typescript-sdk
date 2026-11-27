@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `requireScope` (Express), `requireScopeHook` (Fastify), `@RequireScope` (NestJS) and
+  `hasAnyScope` (§11.1, contract 1.68); `AxiamIdentity.scopes`.
+- **AMQP authorization requester** (`axiam-sdk/amqp`, §8 "Signed authorization responses", N2,
+  D-9): `AuthzRequester`, built with `createAuthzRequester(channel, options)` or
+  `connectAuthzRequester(amqpsUrl, options)`. `check({ subjectId, action, resourceId, scope? })`
+  publishes a signed `AuthzRequest` (fresh random `correlation_id` and `nonce`) to
+  `axiam.authz.request` on the default exchange with `reply_to` a private, exclusive, auto-delete,
+  broker-named queue (an empty or `axiam.`-prefixed name is refused), and resolves only with an
+  answer that verifies under the tenant subkey and matches that request; forged or mismatched
+  answers are nacked without requeue and the check keeps waiting until `timeoutMs` (default 10 s,
+  then `NetworkError`). `close()` releases every waiter with `AuthzRequesterClosedError`. An
+  unsigned answer is discarded and logged; there is no option to accept one (see "Removed").
+  The requester requires an AXIAM server of 1.68 or later. Also exported: `buildAuthzRequest`, `AUTHZ_REQUEST_QUEUE`,
+  `DEFAULT_AUTHZ_TIMEOUT_MS`. `connectAuthzRequester` listens for its connection's and
+  channel's `'error'` (logged through `logger` as `axiam_sdk.amqp`, message only — never the URL's
+  credentials or a key; a socket error's message can name the broker host and port — so a broker
+  restart or a missed heartbeat is not an uncaught exception that ends the process) and `'close'`
+  (the requester closes: outstanding checks reject at once with `AuthzRequesterClosedError`).
+  With `createAuthzRequester` the caller owns the channel and must do both. A `timeoutMs` that is
+  not finite, not positive or above 2³¹−1 is refused with a `RangeError` at creation (Node would
+  otherwise fire such a timer after 1 ms).
+- `AuthzResponseVerifier`: the verification step on its own — over the received bytes, never a
+  re-serialization, with the tenant subkey, checking `tenant_id`, `correlation_id` and `nonce`
+  against an outstanding request; `settle()` acks or nacks without requeue. Its security events
+  carry the timestamp, the exchange, the routing key, the requester's own tenant and a `reason`
+  (`malformed`, `unsigned`, `signature`, `tenant`, `unknown_request`; CONTRACT §8 consumer
+  obligation 4, contract 1.69, #883), never a signature value or a nonce. The exchange and routing
+  key come from the delivery (`settle()`, or the optional second argument of
+  `verify(body, delivery)`, `AuthzResponseDelivery`); without one they are `''` and the new
+  `replyQueue` option. The four contract
+  vectors are tests. `AuthzResponse` gains the optional `reason_code`, `tenant_id`, `nonce` and
+  `hmac_signature` members.
+- `isSafeReturnTo`, `oidcBindingCookieName`, `OIDC_BINDING_COOKIE_NAME`,
+  `OIDC_BINDING_COOKIE_NAME_LOOPBACK`, `OidcCallbackContext`, `OidcLoginOptions.allowReturnTo`,
+  `OidcStateEntry.bindingDigest`; `assertAccessTokenHeader`, `assertNoPurposeClaim`,
+  `isAccessTokenTyp` (`axiam-sdk/node`).
+- `docs/login-glue-binding.md`: the design of the browser binding (cookie name and fallback,
+  order of consume and compare, store interface, clearing on the error path), for the other
+  SDKs' ports.
+- The §12.4 rule 2 conformance test for the unknown-`kid` re-fetch window
+  (`test/node/jwksRefetchWindow.test.ts`); no code change was needed.
+- **Contract 1.68 (§34.12)**: `CONTRACT.md` (sha256 `1f34656c…`), `openapi.json` and
+  `management-registry.json` re-vendored byte for byte from AXIAM `e502a3b` (spec digest
+  `sha256:badfb480…`); `proto/` is unchanged. The §27 layer is regenerated: `AuditLogEntry` gains
+  the optional `organization_id` (contract 1.67, §34.11 (c)); no operation changes. The 1.67
+  documentation and test updates of §34.11 (a)–(d) are not part of this release; the README's
+  conformance statement says so.
+
+- `oidcBindingClearCookie(redirectUri)` (`axiam-sdk/middleware`), public: the clearing `Set-Cookie`
+  value a direct caller of `completeOidcLogin` must send when it throws (TYP-R3-2). It was an
+  internal helper; the changelog and the TSDoc asked integrators to rebuild it by hand.
+- **Contract 1.69 (§34.13)**: `CONTRACT.md` re-vendored byte for byte from AXIAM; the README's
+  conformance statement is now 1.69. No operation, REST, gRPC or AMQP schema changes.
+- Tests: a server-shaped logout token (header exactly `{alg, typ: logout+jwt, kid}`, a two-key
+  JWKS, the signing key second), the kid-less and unknown-`kid` refusals, and rules 10 and 11 off
+  the logout and ID-token paths (`test/node/logoutServerShaped.test.ts`); the discard event on all
+  five reasons (`test/amqp/authzDiscardEvent.test.ts`); the event consumer over received bytes
+  (`test/amqp/consumerReceivedBytes.test.ts`, axiam#882).
+
 ### Changed (behaviour — read before upgrading)
 
 - **The AMQP event consumer is typed and takes its own tenant** (`consume`, `verifyAndDispatch`;
@@ -92,66 +153,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   audience was configured. A token from a server before 1.67 (`typ: JWT`) is refused; its holder
   refreshes.
 
-### Added
+### Changed
 
-- `requireScope` (Express), `requireScopeHook` (Fastify), `@RequireScope` (NestJS) and
-  `hasAnyScope` (§11.1, contract 1.68); `AxiamIdentity.scopes`.
-- **AMQP authorization requester** (`axiam-sdk/amqp`, §8 "Signed authorization responses", N2,
-  D-9): `AuthzRequester`, built with `createAuthzRequester(channel, options)` or
-  `connectAuthzRequester(amqpsUrl, options)`. `check({ subjectId, action, resourceId, scope? })`
-  publishes a signed `AuthzRequest` (fresh random `correlation_id` and `nonce`) to
-  `axiam.authz.request` on the default exchange with `reply_to` a private, exclusive, auto-delete,
-  broker-named queue (an empty or `axiam.`-prefixed name is refused), and resolves only with an
-  answer that verifies under the tenant subkey and matches that request; forged or mismatched
-  answers are nacked without requeue and the check keeps waiting until `timeoutMs` (default 10 s,
-  then `NetworkError`). `close()` releases every waiter with `AuthzRequesterClosedError`. An
-  unsigned answer is discarded and logged; there is no option to accept one (see "Removed").
-  The requester requires an AXIAM server of 1.68 or later. Also exported: `buildAuthzRequest`, `AUTHZ_REQUEST_QUEUE`,
-  `DEFAULT_AUTHZ_TIMEOUT_MS`. `connectAuthzRequester` listens for its connection's and
-  channel's `'error'` (logged through `logger` as `axiam_sdk.amqp`, message only — never the URL's
-  credentials or a key; a socket error's message can name the broker host and port — so a broker
-  restart or a missed heartbeat is not an uncaught exception that ends the process) and `'close'`
-  (the requester closes: outstanding checks reject at once with `AuthzRequesterClosedError`).
-  With `createAuthzRequester` the caller owns the channel and must do both. A `timeoutMs` that is
-  not finite, not positive or above 2³¹−1 is refused with a `RangeError` at creation (Node would
-  otherwise fire such a timer after 1 ms).
-- `AuthzResponseVerifier`: the verification step on its own — over the received bytes, never a
-  re-serialization, with the tenant subkey, checking `tenant_id`, `correlation_id` and `nonce`
-  against an outstanding request; `settle()` acks or nacks without requeue. Its security events
-  carry the timestamp, the exchange, the routing key, the requester's own tenant and a `reason`
-  (`malformed`, `unsigned`, `signature`, `tenant`, `unknown_request`; CONTRACT §8 consumer
-  obligation 4, contract 1.69, #883), never a signature value or a nonce. The exchange and routing
-  key come from the delivery (`settle()`, or the optional second argument of
-  `verify(body, delivery)`, `AuthzResponseDelivery`); without one they are `''` and the new
-  `replyQueue` option. The four contract
-  vectors are tests. `AuthzResponse` gains the optional `reason_code`, `tenant_id`, `nonce` and
-  `hmac_signature` members.
-- `isSafeReturnTo`, `oidcBindingCookieName`, `OIDC_BINDING_COOKIE_NAME`,
-  `OIDC_BINDING_COOKIE_NAME_LOOPBACK`, `OidcCallbackContext`, `OidcLoginOptions.allowReturnTo`,
-  `OidcStateEntry.bindingDigest`; `assertAccessTokenHeader`, `assertNoPurposeClaim`,
-  `isAccessTokenTyp` (`axiam-sdk/node`).
-- `docs/login-glue-binding.md`: the design of the browser binding (cookie name and fallback,
-  order of consume and compare, store interface, clearing on the error path), for the other
-  SDKs' ports.
-- The §12.4 rule 2 conformance test for the unknown-`kid` re-fetch window
-  (`test/node/jwksRefetchWindow.test.ts`); no code change was needed.
-- **Contract 1.68 (§34.12)**: `CONTRACT.md` (sha256 `1f34656c…`), `openapi.json` and
-  `management-registry.json` re-vendored byte for byte from AXIAM `e502a3b` (spec digest
-  `sha256:badfb480…`); `proto/` is unchanged. The §27 layer is regenerated: `AuditLogEntry` gains
-  the optional `organization_id` (contract 1.67, §34.11 (c)); no operation changes. The 1.67
-  documentation and test updates of §34.11 (a)–(d) are not part of this release; the README's
-  conformance statement says so.
-
-- `oidcBindingClearCookie(redirectUri)` (`axiam-sdk/middleware`), public: the clearing `Set-Cookie`
-  value a direct caller of `completeOidcLogin` must send when it throws (TYP-R3-2). It was an
-  internal helper; the changelog and the TSDoc asked integrators to rebuild it by hand.
-- **Contract 1.69 (§34.13)**: `CONTRACT.md` re-vendored byte for byte from AXIAM; the README's
-  conformance statement is now 1.69. No operation, REST, gRPC or AMQP schema changes.
-- Tests: a server-shaped logout token (header exactly `{alg, typ: logout+jwt, kid}`, a two-key
-  JWKS, the signing key second), the kid-less and unknown-`kid` refusals, and rules 10 and 11 off
-  the logout and ID-token paths (`test/node/logoutServerShaped.test.ts`); the discard event on all
-  five reasons (`test/amqp/authzDiscardEvent.test.ts`); the event consumer over received bytes
-  (`test/amqp/consumerReceivedBytes.test.ts`, axiam#882).
+- Monthly dependency refresh (2026-11): runtime floors `amqplib` ^2.4.0 and `jose` ^6.2.18; dev tooling `vitest` / `@vitest/coverage-v8` ^5.1.1, `msw` ^3.0.7, `ts-proto` ^2.23.5, `@nestjs/common` / `@nestjs/core` ^12.6.0. Node support unchanged (22 floor, 26 newest); TypeScript stays on 6.0.x until typedoc accepts 7.x.
 
 ### Removed
 
@@ -221,9 +225,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `exp`/`iat` checks. Finite values are still clamped into `[0, 60]`.
 - `SharedSession.isForeignHost` compares the origin, not the host, so a same-host URL on another
   scheme no longer receives the tenant header or the CSRF token.
-### Changed
-
-- Monthly dependency refresh (2026-11): runtime floors `amqplib` ^2.4.0 and `jose` ^6.2.18; dev tooling `vitest` / `@vitest/coverage-v8` ^5.1.1, `msw` ^3.0.7, `ts-proto` ^2.23.5, `@nestjs/common` / `@nestjs/core` ^12.6.0. Node support unchanged (22 floor, 26 newest); TypeScript stays on 6.0.x until typedoc accepts 7.x.
 
 ## [1.3.1] - 2026-11-11
 
