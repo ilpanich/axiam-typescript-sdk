@@ -339,29 +339,6 @@ export interface JwksTlsOptions {
 }
 
 /**
- * The trust list for a JWKS fetch: Node's `ca` option REPLACES the trust store,
- * so `customCa` (CONTRACT.md §6: an additional anchor) is appended to the
- * default roots (including `NODE_EXTRA_CA_CERTS`, where Node exposes them)
- * instead of standing alone. JWKS path only; the REST agent is unchanged.
- *
- * @internal
- */
-export function withDefaultRoots(customCa: string | string[]): string[] {
-  const tlsMod = (process as { getBuiltinModule?: (id: string) => unknown }).getBuiltinModule?.('node:tls') as
-    | typeof import('node:tls')
-    | undefined;
-  let defaults: string[] = [];
-  if (tlsMod !== undefined) {
-    try {
-      defaults = [...(tlsMod.getCACertificates?.('default') ?? tlsMod.rootCertificates)];
-    } catch {
-      defaults = [...tlsMod.rootCertificates];
-    }
-  }
-  return [...defaults, ...(Array.isArray(customCa) ? customCa : [customCa])];
-}
-
-/**
  * `fetch` over `node:https` with explicit TLS material. Node's global `fetch`
  * takes no CA or client identity (only a dispatcher from the separate `undici`
  * package, which this SDK does not depend on), so a private-CA or mTLS
@@ -378,6 +355,18 @@ async function fetchWithTls(
   // `.default` is the live CommonJS module object (what instrumentation such as msw patches), not the ESM snapshot of its named exports.
   const https = (await import('node:https')).default;
   const { Readable } = await import('node:stream');
+  const tlsMod = await import('node:tls');
+  // `ca` would REPLACE the process trust store (bundled roots, OpenSSL's under
+  // --use-openssl-ca, NODE_EXTRA_CA_CERTS). CONTRACT.md §6 makes `customCa` an
+  // ADDED anchor, so it goes into a secure context that starts from that store.
+  let secureContext: import('node:tls').SecureContext | undefined;
+  if (tls.ca !== undefined) {
+    secureContext = tlsMod.createSecureContext({
+      ...(tls.cert !== undefined ? { cert: tls.cert } : {}),
+      ...(tls.key !== undefined ? { key: tls.key } : {}),
+    });
+    (secureContext as unknown as { context: { addCACert(pem: string): void } }).context.addCACert(tls.ca);
+  }
   return new Promise<Response>((resolve, reject) => {
     let settled = false;
     const settle = (fn: () => void): void => {
@@ -385,14 +374,17 @@ async function fetchWithTls(
       settled = true;
       fn();
     };
-    const agent = new https.Agent({
-      ...(tls.ca !== undefined ? { ca: withDefaultRoots(tls.ca) } : {}),
-      ...(tls.cert !== undefined ? { cert: tls.cert } : {}),
-      ...(tls.key !== undefined ? { key: tls.key } : {}),
-    });
-    const fail = (): void => {
+    const agent = new https.Agent(
+      secureContext !== undefined
+        ? { secureContext }
+        : {
+            ...(tls.cert !== undefined ? { cert: tls.cert } : {}),
+            ...(tls.key !== undefined ? { key: tls.key } : {}),
+          },
+    );
+    const fail = (message = 'unexpected JWKS status'): void => {
       agent.destroy();
-      settle(() => reject(new Error('unexpected JWKS status')));
+      settle(() => reject(new Error(message)));
     };
     const req = https.request(
       url,
@@ -411,8 +403,9 @@ async function fetchWithTls(
           }
           if (status === 304) res.resume();
           const body = status === 304 ? null : (Readable.toWeb(res) as unknown as ReadableStream<Uint8Array>);
+          const response = new Response(body, { status, headers }); // built before settling: a throw here lands in the catch
           res.on('close', () => agent.destroy());
-          settle(() => resolve(new Response(body, { status, headers })));
+          settle(() => resolve(response));
         } catch {
           res.destroy();
           fail();
@@ -425,7 +418,7 @@ async function fetchWithTls(
     });
     req.on('close', () => {
       // Closed before any response was delivered: nothing else will settle us.
-      if (!settled) fail();
+      if (!settled) fail('JWKS request closed before a response');
     });
     req.end();
   });

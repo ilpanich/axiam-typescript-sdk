@@ -13,7 +13,7 @@ import type { AddressInfo } from 'node:net';
 import { createServer as createTlsServer, type Server as TlsServer } from 'node:tls';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
-import { createJwksVerifier, createVerifier, JWKS_PATH, withDefaultRoots } from '../../src/node/jwks.js';
+import { createJwksVerifier, createVerifier, JWKS_PATH } from '../../src/node/jwks.js';
 import { createNodeSession } from '../../src/node/session.js';
 import { nodeTlsOptionsOf, createSession } from '../../src/rest/session.js';
 
@@ -278,12 +278,17 @@ describe('#175 — JWKS fetch honours customCa and the client identity', () => {
     }
   });
 
-  it('customCa is added to the default roots, not substituted for them', async () => {
-    const tlsMod = await import('node:tls');
-    const list = withDefaultRoots(pki.caCert) as string[];
-    expect(list).toContain(pki.caCert);
-    const defaults = tlsMod.getCACertificates?.('default') ?? tlsMod.rootCertificates;
-    for (const c of defaults) expect(list).toContain(c);
-    expect(list.length).toBeGreaterThan(50);
+  it('an unconditional 304 fails on the TLS path', async () => {
+    const srv = createServer({ key: pki.serverKey, cert: pki.serverCert }, (_req, res) => {
+      res.statusCode = 304;
+      res.end();
+    });
+    const port = await listen(srv);
+    try {
+      const verifier = createVerifier(`https://127.0.0.1:${port}`, { ca: pki.caCert });
+      await expect(verifier.verifyAccessToken(token, { expectedTenantId: 't-1' })).rejects.toThrow();
+    } finally {
+      await new Promise((r) => srv.close(r));
+    }
   });
 });
