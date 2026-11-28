@@ -151,7 +151,7 @@ export function createNodeSession(options: AxiamClientOptions): NodeSession {
   wrapAxios(base.axios, jar, tlsOptions);
 
   const tokenManager = new TokenManager(jar, options.baseUrl, base.tenantHeaderValue);
-  const jwksVerifier = createVerifier(options.baseUrl);
+  const jwksVerifier = createVerifier(options.baseUrl, tlsOptions);
 
   return new NodeSession(options, base, tokenManager, jwksVerifier, jar, tlsOptions);
 }

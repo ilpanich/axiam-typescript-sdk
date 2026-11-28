@@ -194,6 +194,7 @@ export class SharedSession {
     // rejects one without the other before this line is reached.
     this.presentsClientCertificate =
       options.clientCert !== undefined && options.clientKey !== undefined;
+    registerTlsOptions(this, options);
     // Seed the resolved UUIDs from any UUID-form config so the browser persona
     // (which cannot decode the httpOnly access token) can still build a valid
     // refresh body. The Node persona later overwrites these from the
@@ -353,6 +354,30 @@ export function resolveTenantHeaderValue(options: AxiamClientOptions): string {
 }
 
 /**
+ * The options an `https.Agent` (or `HttpsCookieAgent`) is constructed with for `tls`.
+ *
+ * Node's `ca` option REPLACES the process trust store (bundled roots, OpenSSL's under
+ * `--use-openssl-ca`, `NODE_EXTRA_CA_CERTS`), but CONTRACT.md §6 makes `customCa` an ADDED anchor. So
+ * when a CA is configured the agent gets a secure context that starts from that store, has the CA
+ * added to it, and carries the client identity (§6.1). Server verification stays at its default;
+ * there is no way to switch it off through this function (#176).
+ */
+export function agentTlsOptions(tls: NodeTlsOptions | undefined): Record<string, unknown> {
+  if (tls === undefined) return {};
+  if (tls.ca === undefined) {
+    return { ...(tls.cert !== undefined ? { cert: tls.cert } : {}), ...(tls.key !== undefined ? { key: tls.key } : {}) };
+  }
+  const tlsMod = loadNodeBuiltin<typeof import('node:tls')>('node:tls');
+  const secureContext = tlsMod.createSecureContext({
+    ...(tls.cert !== undefined ? { cert: tls.cert } : {}),
+    ...(tls.key !== undefined ? { key: tls.key } : {}),
+  });
+  // `addCACert` is not in the public typings; it is what `ca` itself calls after clearing the store.
+  (secureContext as unknown as { context: { addCACert(pem: string): void } }).context.addCACert(tls.ca);
+  return { secureContext };
+}
+
+/**
  * Build the Node-only `https.Agent` carrying the customCa server-trust PEM
  * (§6) and/or the mTLS client identity (§6.1). Guarded by
  * `typeof process !== 'undefined'` as a CAPABILITY guard (Node has node:https
@@ -380,7 +405,7 @@ export function resolveTenantHeaderValue(options: AxiamClientOptions): string {
  * before the module ever loaded. Reached off `process`, which every caller has
  * already capability-guarded, so a browser bundle never evaluates this.
  */
-function loadNodeBuiltin<T>(id: 'node:https' | 'node:http'): T {
+function loadNodeBuiltin<T>(id: 'node:https' | 'node:http' | 'node:tls'): T {
   const getBuiltinModule = (
     process as unknown as { getBuiltinModule?: (moduleId: string) => unknown }
   ).getBuiltinModule;
@@ -418,6 +443,49 @@ function loadNodeBuiltin<T>(id: 'node:https' | 'node:http'): T {
  */
 function loadNodeHttps(): typeof import('node:https') {
   return loadNodeBuiltin<typeof import('node:https')>('node:https');
+}
+
+/**
+ * The TLS material each session was configured with, kept OUT of the session's
+ * own (public) fields because it holds the client private key (§6.1 rule 3 /
+ * §7). Read only through {@link nodeTlsOptionsOf}, by the Node JWKS verifiers.
+ */
+const sessionTlsOptions = new WeakMap<SharedSession, NodeTlsOptions>();
+
+function registerTlsOptions(session: SharedSession, options: AxiamClientOptions): void {
+  if (options.customCa === undefined && options.clientCert === undefined) return;
+  try {
+    const tls = resolveNodeTlsOptions(options);
+    if (tls !== undefined) sessionTlsOptions.set(session, tls);
+  } catch {
+    // Invalid material is rejected by `createSession` / `createNodeSession`,
+    // which validate before constructing; a hand-built session simply has none.
+  }
+}
+
+/**
+ * The TLS material `session` was configured with (`customCa`, §6.1 identity),
+ * for the JWKS fetch that must trust the same CA as its REST calls (#175).
+ * `undefined` when the session has none.
+ *
+ * The client identity (`cert`/`key`) is included ONLY when `targetUrl` has the
+ * same origin as the session's base URL (or none is given): a `jwks_uri` on
+ * another host (§12.3 rule 6) gets `customCa` trust alone, so the identity is
+ * never presented to a server the client was not configured to authenticate to.
+ *
+ * Not exported from the package barrel: the result holds the private key.
+ */
+export function nodeTlsOptionsOf(session: SharedSession, targetUrl?: string): NodeTlsOptions | undefined {
+  const tls = sessionTlsOptions.get(session);
+  if (tls === undefined || targetUrl === undefined) return tls;
+  let sameOrigin = false;
+  try {
+    sameOrigin = new URL(targetUrl).origin === new URL(session.baseUrl).origin;
+  } catch {
+    sameOrigin = false;
+  }
+  if (sameOrigin) return tls;
+  return tls.ca !== undefined ? { ca: tls.ca } : undefined;
 }
 
 export interface NodeTlsOptions {
@@ -502,7 +570,7 @@ export function buildPlainNodeAgents(tls: NodeTlsOptions | undefined): {
   const https = loadNodeHttps();
   return {
     httpAgent: new http.Agent(),
-    httpsAgent: new https.Agent(tls ?? {}),
+    httpsAgent: new https.Agent(agentTlsOptions(tls)),
   };
 }
 
@@ -522,7 +590,7 @@ function maybeBuildHttpsAgent(
   // Node capability guard — resolved lazily (see loadNodeHttps) so this
   // branch never executes, and never needs to resolve, in a browser bundle.
   const https = loadNodeHttps();
-  return new https.Agent(tls);
+  return new https.Agent(agentTlsOptions(tls));
 }
 
 /** Build the axios instance + SharedSession for an AxiamClient (D-13/D-25). */

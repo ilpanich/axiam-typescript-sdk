@@ -136,6 +136,8 @@ export interface LogoutTokenOptions {
   omitSub?: boolean;
   /** Sign with a header carrying no `kid`. */
   omitKid?: boolean;
+  /** Write this `typ` into the header; the default writes none (the server writes `logout+jwt`). */
+  typ?: string;
 }
 
 /** Mint a back-channel logout token (OIDC Back-Channel Logout 1.0 §2.4). */
@@ -161,6 +163,9 @@ export async function signLogoutToken(
   }
 
   const header: Record<string, unknown> = { alg: 'EdDSA' };
+  if (options.typ !== undefined) {
+    header.typ = options.typ;
+  }
   if (!options.omitKid) {
     header.kid = key.kid;
   }

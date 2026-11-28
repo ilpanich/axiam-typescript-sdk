@@ -40,6 +40,7 @@ export {
   type Verifier,
   type IdTokenVerifier,
   type JwksVerifier,
+  type JwksTlsOptions,
   type AxiamClaims,
   JWKS_PATH,
 } from './jwks.js';

@@ -9,6 +9,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ConsumeMessage } from 'amqplib';
 import { verifyAndDispatch } from '../../src/amqp/consumer.js';
+const OPTS = { tenantId: '99999999-9999-9999-9999-999999999999', eventType: 'AuthzRequest' } as const;
 
 const SUBKEY = Buffer.from('919e125ec83799c1e113a27707cac5008a2608d0557e00dfe1b3a316abed4b89', 'hex');
 
@@ -20,18 +21,17 @@ function message(body: string): ConsumeMessage {
   } as unknown as ConsumeMessage;
 }
 
-async function delivered(body: string, strict = true): Promise<boolean> {
+async function delivered(body: string): Promise<boolean> {
   const channel = { consume: vi.fn(), ack: vi.fn(), nack: vi.fn() };
   const handler = vi.fn(async () => {});
-  await verifyAndDispatch(channel, message(body), SUBKEY, handler, { strict });
+  await verifyAndDispatch(channel, message(body), SUBKEY, handler, OPTS);
   return handler.mock.calls.length > 0;
 }
 
 describe('N2 pin — consume() never delivers an AuthzResponse', () => {
-  it('a forged unsigned allow (1.67 shape) is not delivered, strict or lenient', async () => {
+  it('a forged unsigned allow (1.67 shape) is not delivered', async () => {
     const forged = '{"correlation_id":"22222222-2222-2222-2222-222222222222","allowed":true}';
     expect(await delivered(forged)).toBe(false);
-    expect(await delivered(forged, false)).toBe(false);
   });
 
   it('the genuine signed vector 1 is not delivered either (no replay fields)', async () => {

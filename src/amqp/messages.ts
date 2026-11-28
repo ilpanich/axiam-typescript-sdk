@@ -52,7 +52,7 @@ export interface AuthzRequest {
    * HMAC-SHA256 of the JSON-serialized message body (this field removed
    * before signing). Computed with the per-tenant AMQP signing key
    * (CONTRACT.md §8). The consumer MUST verify this before processing; a
-   * missing signature is rejected in strict mode (the default).
+   * missing signature is always rejected (no lenient mode).
    */
   hmac_signature?: string;
 }

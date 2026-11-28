@@ -36,8 +36,9 @@ import {
 } from './mcpCore.js';
 import {
   beginOidcLogin,
-  clearBindingCookie,
   completeOidcLogin,
+  encodeRedirectLocation,
+  oidcBindingClearCookie,
   oidcBindingCookieName,
   type OidcLoginOptions,
   type OidcLoginOutcome,
@@ -350,7 +351,9 @@ function sendOidcOutcome(res: Response, outcome: OidcLoginOutcome): void {
     res.append('Set-Cookie', outcome.setCookie);
   }
   if (outcome.kind === 'redirect') {
-    res.redirect(outcome.url);
+    // Encoded here by the rules of docs/login-glue-binding.md Decision 7; the
+    // framework helper's own encoding then finds nothing left to change.
+    res.redirect(encodeRedirectLocation(outcome.url));
     return;
   }
   if (outcome.kind === 'json') {
@@ -448,7 +451,7 @@ export function oidcLoginHandlers(options: OidcLoginOptions<Request>): {
       // The error response Express builds from `next(err)` keeps this header,
       // and the application's error handler still receives the error itself.
       if (!res.headersSent) {
-        res.append('Set-Cookie', clearBindingCookie(options.redirectUri));
+        res.append('Set-Cookie', oidcBindingClearCookie(options.redirectUri));
       }
       throw err;
     }

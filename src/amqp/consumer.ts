@@ -1,21 +1,26 @@
 // Closure-handler AMQP consumer (D-12, CONTRACT.md §8.3g/§8.4).
 //
 // The SDK owns the full ack/nack loop. Every delivery is HMAC-verified
-// (CONTRACT.md §8) BEFORE the caller-supplied handler is ever invoked. On
-// any verification failure (signature mismatch, missing signature in the
-// default strict mode, or a body that fails to parse as JSON) the delivery
-// is nacked WITHOUT requeue and a security event is emitted — the event
-// never contains the received/expected HMAC value or the signing key. Only
-// a verified delivery reaches the handler, and only then is it acked.
+// (CONTRACT.md §8) BEFORE the caller-supplied handler is ever invoked. The
+// consumer is typed (D-9): it is configured with the ONE signed type it
+// consumes and accepts that type's layout only. On any refusal (a body that is
+// not one well-formed JSON object starting with `{` — a byte-order mark is
+// refused, never stripped — a missing signature (no lenient mode, §8 rule 3), a
+// layout that is not the configured type's, a signature mismatch, a verified
+// body that does not decode, or a failed v2 gate) the delivery is nacked
+// WITHOUT requeue and ONE event is logged (D-8): timestamp, exchange, routing
+// key, the consumer's own tenant and a closed reason — never a signature, a
+// nonce, a key or any member of the body. Only a verified delivery reaches the
+// handler, and only then is it acked.
 //
 // NEW-4 (CONTRACT.md §8 "v2 — Replay Protection", hard cutover): once the
 // HMAC verifies, the delivery is ADDITIONALLY rejected (same nack-without-
 // requeue path) when `key_version < 2`, `issued_at` falls outside the
 // ±skew freshness window, or `nonce` has already been seen. Because this
-// module verifies by re-serializing the parsed body (minus
-// `hmac_signature`) in insertion order (Pitfall 5), `nonce`/`issued_at` are
-// already covered by the HMAC bytes with no canonicalization change — only
-// the three validation gates below are new.
+// module verifies over the received bytes (the body minus its trailing
+// `hmac_signature` member; axiam#882), `nonce`/`issued_at` are already
+// covered by the HMAC bytes with no canonicalization change — only the three
+// validation gates below are new.
 //
 // This is the TS port of the already-tested Rust `verify_and_dispatch`/
 // `consume` (the Rust SDK's src/amqp/consumer.rs).
@@ -23,7 +28,7 @@
 import amqp from 'amqplib';
 import type { Channel, ConsumeMessage } from 'amqplib';
 import type { Sensitive } from '../core/index.js';
-import { verifyPayload } from './hmac.js';
+import { decodeUtf8Strict, verifyPayload } from './hmac.js';
 import { buildAmqpConnectOptions, type AmqpTlsOptions } from './transport.js';
 
 /**
@@ -77,11 +82,101 @@ export class InMemoryNonceStore implements NonceStore {
   }
 }
 
-type ReplayRejectReason = 'key_version' | 'issued_at' | 'nonce';
+/** The two signed event types an event consumer can be configured for (CONTRACT.md §8 step 2c, D-9). */
+export type EventType = 'AuthzRequest' | 'AuditEventMessage';
+
+/** The closed vocabulary of the discard event's `reason` (CONTRACT.md §8 rule 4, D-8). */
+export type EventDiscardReason = 'malformed' | 'unsigned' | 'signature' | 'key_version' | 'stale' | 'replay';
+
+const UUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const RFC3339 = /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})$/;
+
+type MemberKind = 'uuid' | 'string' | 'json' | 'u8' | 'timestamp';
 
 /**
- * NEW-4 validation gates, checked only AFTER the HMAC has already verified.
- * Returns the failing gate's name, or `undefined` when all three pass.
+ * Step 2f decode: the verified canonical bytes decode into the configured
+ * type, member by member, as the server's struct does (`Uuid`, `String`,
+ * `u8`, `DateTime<Utc>`, `serde_json::Value`).
+ */
+function decodesAs(kinds: Readonly<Record<string, MemberKind>>, body: Record<string, unknown>): boolean {
+  for (const [name, value] of Object.entries(body)) {
+    switch (kinds[name]) {
+      case 'uuid':
+        if (typeof value !== 'string' || !UUID.test(value)) return false;
+        break;
+      case 'string':
+        if (typeof value !== 'string') return false;
+        break;
+      case 'u8':
+        if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 255) return false;
+        break;
+      case 'timestamp':
+        if (typeof value !== 'string' || !RFC3339.test(value) || Number.isNaN(Date.parse(value))) return false;
+        break;
+      case 'json':
+        if (value === null) return false; // an omitted member, never `null` (§8 wire form)
+        break;
+      default:
+        return false;
+    }
+  }
+  return true;
+}
+
+/** The members of each type, in declaration order (CONTRACT.md §8 "Exact signed field order"); a name ending in `?` is optional. */
+interface EventSpec {
+  readonly layout: readonly string[];
+  readonly kinds: Readonly<Record<string, MemberKind>>;
+}
+const EVENT_SPECS: Readonly<Record<EventType, EventSpec>> = {
+  AuthzRequest: {
+    layout: ['correlation_id', 'tenant_id', 'subject_id', 'action', 'resource_id', 'scope?', 'key_version', 'nonce', 'issued_at'],
+    kinds: {
+      correlation_id: 'uuid',
+      tenant_id: 'uuid',
+      subject_id: 'uuid',
+      action: 'string',
+      resource_id: 'uuid',
+      scope: 'string',
+      key_version: 'u8',
+      nonce: 'uuid',
+      issued_at: 'timestamp',
+    },
+  },
+  AuditEventMessage: {
+    layout: [
+      'tenant_id',
+      'actor_id',
+      'actor_type',
+      'action',
+      'resource_id?',
+      'outcome',
+      'ip_address?',
+      'metadata?',
+      'key_version',
+      'nonce',
+      'issued_at',
+    ],
+    kinds: {
+      tenant_id: 'uuid',
+      actor_id: 'uuid',
+      actor_type: 'string',
+      action: 'string',
+      resource_id: 'uuid',
+      outcome: 'string',
+      ip_address: 'string',
+      metadata: 'json',
+      key_version: 'u8',
+      nonce: 'uuid',
+      issued_at: 'timestamp',
+    },
+  },
+};
+
+/**
+ * Gates (6)–(8), checked only AFTER the HMAC verified and the body decoded.
+ * Returns the failing gate's reason, or `undefined` when all three pass; the
+ * nonce is recorded last, so a body refused at (6) or (7) leaves none behind.
  * `ttlMs` for the nonce store is 2x `skewMs` — the freshness window plus a
  * margin so a nonce cannot be replayed the instant its dedup entry expires
  * while `issued_at` might still (barely) be judged fresh by a differently-
@@ -91,29 +186,10 @@ function checkReplayProtection(
   body: Record<string, unknown>,
   skewMs: number,
   nonceStore: NonceStore,
-): ReplayRejectReason | undefined {
-  const keyVersion = body.key_version;
-  if (typeof keyVersion !== 'number' || keyVersion < 2) {
-    return 'key_version';
-  }
-
-  const issuedAtRaw = body.issued_at;
-  if (typeof issuedAtRaw !== 'string') {
-    return 'issued_at';
-  }
-  const issuedAtMs = Date.parse(issuedAtRaw);
-  if (Number.isNaN(issuedAtMs) || Math.abs(Date.now() - issuedAtMs) > skewMs) {
-    return 'issued_at';
-  }
-
-  const nonce = body.nonce;
-  if (typeof nonce !== 'string' || nonce.length === 0) {
-    return 'nonce';
-  }
-  if (nonceStore.checkAndRecord(nonce, skewMs * 2)) {
-    return 'nonce';
-  }
-
+): 'key_version' | 'stale' | 'replay' | undefined {
+  if ((body.key_version as number) < 2) return 'key_version';
+  if (Math.abs(Date.now() - Date.parse(body.issued_at as string)) > skewMs) return 'stale';
+  if (nonceStore.checkAndRecord(body.nonce as string, skewMs * 2)) return 'replay';
   return undefined;
 }
 
@@ -140,14 +216,20 @@ export interface ConsumeLogger {
 }
 
 export interface ConsumeOptions {
-  logger?: ConsumeLogger;
   /**
-   * Strict mode (default true, CONTRACT.md §8.3): a message with no
-   * `hmac_signature` is treated as a verification failure (nack-no-requeue),
-   * not a pass-through. Lenient mode (false) is a temporary rolling-
-   * deployment measure only — strict MUST remain the default.
+   * The consumer's OWN tenant: the tenant whose signing subkey `signingKey`
+   * is (CONTRACT.md §8 rule 1). Every discard event names it as `tenantId`;
+   * a `tenant_id` read from a message body is never logged (D-8).
    */
-  strict?: boolean;
+  tenantId: string;
+  /**
+   * The ONE signed type this consumer consumes (CONTRACT.md §8 step 2c, D-9).
+   * A body with the layout of any other signed type — the other event type, an
+   * `AuthzResponse`, a reactor message — is refused as `malformed` before the
+   * HMAC is computed. An application consuming both types runs two consumers.
+   */
+  eventType: EventType;
+  logger?: ConsumeLogger;
   /**
    * Freshness skew window for `issued_at` validation (NEW-4), in
    * milliseconds. Defaults to {@link DEFAULT_REPLAY_SKEW_MS} (5 minutes),
@@ -174,6 +256,72 @@ export interface ConsumeOptions {
   tls?: AmqpTlsOptions;
 }
 
+/** `,"hmac_signature":"<64 hex>"}` at the very end of the body, nothing after it (CONTRACT.md §8 step 2b). */
+const TRAILING_SIGNATURE = /,"hmac_signature":"([0-9a-fA-F]{64})"\}$/;
+
+/** Whether `names` (top-level member names, in wire order) fit `layout` exactly. */
+function matchesSignedLayout(names: readonly string[], layout: readonly string[]): boolean {
+  let i = 0;
+  for (const declared of layout) {
+    const optional = declared.endsWith('?');
+    const name = optional ? declared.slice(0, -1) : declared;
+    if (i < names.length && names[i] === name) i += 1;
+    else if (!optional) return false;
+  }
+  return i === names.length;
+}
+
+/**
+ * A configuration fault, found before any delivery is read: the consumer needs
+ * its own tenant (D-8) and the one type it consumes (D-9).
+ */
+function assertConsumeConfig(options: ConsumeOptions, where: string): void {
+  if (typeof options?.tenantId !== 'string' || options.tenantId === '') {
+    throw new TypeError(`${where}: options.tenantId (the consumer's own tenant) is required`);
+  }
+  if (!Object.prototype.hasOwnProperty.call(EVENT_SPECS, options.eventType)) {
+    throw new TypeError(`${where}: options.eventType must be 'AuthzRequest' or 'AuditEventMessage'`);
+  }
+}
+
+/**
+ * Whether any JSON object in `text` (already known to be well-formed JSON)
+ * repeats a key. Keys are compared after unescaping, so `"a"` and `"\u0061"`
+ * are the same key.
+ */
+function hasDuplicateKey(text: string): boolean {
+  const stack: Array<Set<string> | null> = [];
+  let i = 0;
+  const n = text.length;
+  while (i < n) {
+    const c = text[i];
+    if (c === '"') {
+      let j = i + 1;
+      while (j < n && text[j] !== '"') {
+        j += text[j] === '\\' ? 2 : 1;
+      }
+      const raw = text.slice(i, j + 1);
+      i = j + 1;
+      const top = stack[stack.length - 1];
+      if (top !== undefined && top !== null) {
+        let k = i;
+        while (k < n && /\s/.test(text[k])) k += 1;
+        if (text[k] === ':') {
+          const key = JSON.parse(raw) as string;
+          if (top.has(key)) return true;
+          top.add(key);
+        }
+      }
+      continue;
+    }
+    if (c === '{') stack.push(new Set());
+    else if (c === '[') stack.push(null);
+    else if (c === '}' || c === ']') stack.pop();
+    i += 1;
+  }
+  return false;
+}
+
 /**
  * Verify a single delivery's HMAC signature (CONTRACT.md §8 steps a-g) and,
  * only on success, invoke `handler` with the parsed body (hmac_signature
@@ -190,79 +338,132 @@ export async function verifyAndDispatch(
   msg: ConsumeMessage,
   signingKey: Buffer,
   handler: (event: Record<string, unknown>) => Promise<void>,
-  options: ConsumeOptions = {},
+  options: ConsumeOptions,
 ): Promise<void> {
-  const { logger, strict = true } = options;
+  assertConsumeConfig(options, 'verifyAndDispatch()');
+  const { logger } = options;
+  const spec = EVENT_SPECS[options.eventType];
 
-  let body: Record<string, unknown>;
-  try {
-    body = JSON.parse(msg.content.toString('utf8')) as Record<string, unknown>;
-  } catch {
-    logger?.warn('axiam_sdk.security', 'AMQP message body failed JSON parse; nacking without requeue', {
-      exchange: msg.fields.exchange,
-      routingKey: msg.fields.routingKey,
-    });
-    // channel.nack(msg, /* allUpTo */ false, /* requeue */ false)
-    channel.nack(msg, false, false);
-    return;
-  }
-
-  const sig = typeof body.hmac_signature === 'string' ? body.hmac_signature : undefined;
-  delete body.hmac_signature;
-  const canonical = Buffer.from(JSON.stringify(body), 'utf8');
-
-  // Strict mode (default, CONTRACT.md §8.3): a missing signature is treated
-  // as a verification failure, not a pass-through. A present signature is
-  // always verified regardless of strict/lenient mode; lenient mode only
-  // changes the outcome for a MISSING signature (temporary rolling-
-  // deployment measure — strict MUST remain the default).
-  let verified: boolean;
-  if (sig !== undefined) {
-    verified = verifyPayload(signingKey, canonical, sig);
-  } else {
-    verified = !strict;
-  }
-
-  if (!verified) {
-    // Security event (§8.4): timestamp, exchange, routing key, and tenant
-    // context (if present in the body) — NEVER the signature value or the
-    // signing key.
-    const tenantContext: Record<string, unknown> = {};
-    if (typeof body.tenant_id === 'string') tenantContext.tenantId = body.tenant_id;
-    logger?.warn('axiam_sdk.security', 'AMQP HMAC verification failed; nacking without requeue', {
-      timestamp: new Date().toISOString(),
-      exchange: msg.fields.exchange,
-      routingKey: msg.fields.routingKey,
-      ...tenantContext,
-    });
-    // channel.nack(msg, /* allUpTo */ false, /* requeue */ false)
-    channel.nack(msg, false, false);
-    return;
-  }
-
-  // NEW-4 (CONTRACT.md §8 v2, hard cutover): only reached once the HMAC has
-  // verified. `body` was re-serialized in insertion order to compute
-  // `canonical` above, so `nonce`/`issued_at` are already inside the bytes
-  // that were just verified — these are the three ADDITIONAL validation
-  // gates (key_version, freshness, replay), not re-verification.
-  const skewMs = options.skewMs ?? DEFAULT_REPLAY_SKEW_MS;
-  const nonceStore = options.nonceStore ?? new InMemoryNonceStore();
-  const replayRejectReason = checkReplayProtection(body, skewMs, nonceStore);
-  if (replayRejectReason) {
-    const tenantContext: Record<string, unknown> = {};
-    if (typeof body.tenant_id === 'string') tenantContext.tenantId = body.tenant_id;
-    logger?.warn(
-      'axiam_sdk.security',
-      `AMQP v2 replay-protection check failed (${replayRejectReason}); nacking without requeue`,
-      {
+  // CONTRACT.md §8 step 2 / axiam#882: verify over the RECEIVED bytes — the body
+  // with its trailing `,"hmac_signature":"<hex>"}` member removed — never over a
+  // re-serialization, which disagrees with serde_json on floats (`1.0`),
+  // integer-like keys (reordered) and large integers. The handler is given the
+  // value decoded from those same verified bytes, so what is verified and what
+  // is delivered cannot differ.
+  //
+  // Every discard is ONE call of `refuse` (D-8): nack first (a logger that
+  // throws must not leave the delivery unacked), then exactly the five members
+  // of the event — the tenant is this consumer's own, never read from the body.
+  const refuse = (reason: EventDiscardReason): void => {
+    try {
+      // channel.nack(msg, /* allUpTo */ false, /* requeue */ false)
+      channel.nack(msg, false, false);
+    } catch {
+      // channel already closed: nothing more can be done for this delivery
+    }
+    try {
+      logger?.warn('axiam_sdk.security', `AMQP event discarded (${reason})`, {
         timestamp: new Date().toISOString(),
         exchange: msg.fields.exchange,
         routingKey: msg.fields.routingKey,
-        ...tenantContext,
-      },
-    );
-    // channel.nack(msg, /* allUpTo */ false, /* requeue */ false)
-    channel.nack(msg, false, false);
+        tenantId: options.tenantId,
+        reason,
+      });
+    } catch {
+      // an integrator logger's failure is not the delivery's problem
+    }
+  };
+
+  // (1) one JSON object whose FIRST BYTE is its opening `{` (a byte-order mark,
+  // whitespace or any other prefix is refused, never stripped; D-10), nothing
+  // after its `}`. Invalid UTF-8 is refused rather than decoded to U+FFFD, which
+  // would make the handler's value differ from the bytes.
+  let text: string;
+  try {
+    text = decodeUtf8Strict(msg.content);
+  } catch {
+    refuse('malformed');
+    return;
+  }
+  let whole: unknown;
+  try {
+    whole = JSON.parse(text);
+  } catch {
+    whole = undefined;
+  }
+  if (
+    typeof whole !== 'object' ||
+    whole === null ||
+    Array.isArray(whole) ||
+    !text.startsWith('{') ||
+    !text.endsWith('}')
+  ) {
+    refuse('malformed');
+    return;
+  }
+
+  // (2) no top-level `hmac_signature` member: unsigned, whatever else is wrong
+  // (§8 rule 3: there is no lenient mode).
+  if (!Object.prototype.hasOwnProperty.call(whole, 'hmac_signature')) {
+    refuse('unsigned');
+    return;
+  }
+
+  // (3) everything else steps 2a-2c refuse: a repeated member at any depth, a
+  // signature that is not the trailing 64-hex member (null, non-string, not
+  // last), and a layout that is not the configured type's.
+  if (hasDuplicateKey(text)) {
+    refuse('malformed');
+    return;
+  }
+  const trailing = TRAILING_SIGNATURE.exec(msg.content.toString('latin1'));
+  const sig = (whole as Record<string, unknown>).hmac_signature;
+  if (trailing === null || sig !== trailing[1]) {
+    refuse('malformed');
+    return;
+  }
+  // latin1 maps one byte to one unit and the member is ASCII, so the match
+  // index is a byte index.
+  const canonical = Buffer.concat([msg.content.subarray(0, trailing.index), Buffer.from('}', 'ascii')]);
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(decodeUtf8Strict(canonical)) as Record<string, unknown>;
+  } catch {
+    refuse('malformed');
+    return;
+  }
+  // Step 2c, typed (D-9): the configured type's layout ONLY, before the HMAC
+  // and before anything is decoded.
+  if (!matchesSignedLayout(Object.keys(body), spec.layout)) {
+    refuse('malformed');
+    return;
+  }
+
+  // (4) HMAC over the canonical bytes, compared in constant time.
+  if (!verifyPayload(signingKey, canonical, trailing[1])) {
+    refuse('signature');
+    return;
+  }
+
+  // (5) the verified bytes decode into the configured type. `key_version` is a `u8`: only an
+  // integer literal decodes (`2.0` and `2e0` parse to 2 in JavaScript but not in serde), and the
+  // last three members are fixed, so its raw token is read from the end of the canonical bytes.
+  const keyVersionToken = /,"key_version":([^,]*),"nonce":"[^"]*","issued_at":"[^"]*"\}$/.exec(
+    canonical.toString('utf8'),
+  );
+  if (keyVersionToken === null || !/^\d+$/.test(keyVersionToken[1]) || !decodesAs(spec.kinds, body)) {
+    refuse('malformed');
+    return;
+  }
+
+  // (6)-(8) NEW-4 (CONTRACT.md §8 v2, hard cutover): key_version, freshness,
+  // replay — three ADDITIONAL gates over bytes already verified; the nonce is
+  // recorded only when all of them pass.
+  const skewMs = options.skewMs ?? DEFAULT_REPLAY_SKEW_MS;
+  const nonceStore = options.nonceStore ?? new InMemoryNonceStore();
+  const gate = checkReplayProtection(body, skewMs, nonceStore);
+  if (gate !== undefined) {
+    refuse(gate);
     return;
   }
 
@@ -270,17 +471,31 @@ export async function verifyAndDispatch(
     await handler(body);
   } catch (err) {
     // Do not requeue a handler-crashing message into a hot loop.
-    logger?.warn('axiam_sdk.security', 'AMQP handler threw; nacking without requeue', {
-      exchange: msg.fields.exchange,
-      routingKey: msg.fields.routingKey,
-      error: err instanceof Error ? err.message : String(err),
-    });
-    // channel.nack(msg, /* allUpTo */ false, /* requeue */ false)
-    channel.nack(msg, false, false);
+    try {
+      channel.nack(msg, false, false);
+    } catch {
+      // channel already closed
+    }
+    try {
+      // The error's NAME only: its message is application text and may hold body content.
+      logger?.warn('axiam_sdk.security', 'AMQP handler threw; nacking without requeue', {
+        timestamp: new Date().toISOString(),
+        exchange: msg.fields.exchange,
+        routingKey: msg.fields.routingKey,
+        tenantId: options.tenantId,
+        error: err instanceof Error ? err.name : 'non-Error',
+      });
+    } catch {
+      // an integrator logger's failure is not the delivery's problem
+    }
     return;
   }
 
-  channel.ack(msg);
+  try {
+    channel.ack(msg);
+  } catch {
+    // The message was verified and processed; a closed channel is not a discard.
+  }
 }
 
 /**
@@ -307,8 +522,9 @@ export async function consume(
   queue: string,
   signingKey: Sensitive<Buffer>,
   handler: (event: Record<string, unknown>) => Promise<void>,
-  options: ConsumeOptions = {},
+  options: ConsumeOptions,
 ): Promise<void> {
+  assertConsumeConfig(options, 'consume()');
   // §8b: validated BEFORE dialling. A bad URL or half a client identity is a
   // configuration fault, and finding out at connect time turns it into a
   // network error message that says nothing about what to fix.
@@ -327,6 +543,26 @@ export async function consume(
 
   await channel.consume(queue, (msg) => {
     if (!msg) return;
-    void verifyAndDispatch(channel, msg, signingKey.expose(), handler, sharedOptions);
+    verifyAndDispatch(channel, msg, signingKey.expose(), handler, sharedOptions).catch(() => {
+      // Never an unhandled rejection (it would take the process down and the
+      // unacked delivery would come back): nack without requeue first, then
+      // log without body content; neither step may throw out of here.
+      try {
+        channel.nack(msg, false, false);
+      } catch {
+        // channel already closed
+      }
+      try {
+        sharedOptions.logger?.warn('axiam_sdk.security', 'AMQP event discarded (malformed)', {
+          timestamp: new Date().toISOString(),
+          exchange: msg.fields.exchange,
+          routingKey: msg.fields.routingKey,
+          tenantId: sharedOptions.tenantId,
+          reason: 'malformed' satisfies EventDiscardReason,
+        });
+      } catch {
+        // an integrator logger's failure is not the delivery's problem
+      }
+    });
   });
 }

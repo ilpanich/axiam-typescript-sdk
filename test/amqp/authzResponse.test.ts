@@ -51,13 +51,12 @@ function sign(canonical: string, key: Buffer): string {
   return createHmac('sha256', key).update(Buffer.from(canonical, 'utf8')).digest('hex');
 }
 
-function verifier(options: { acceptUnsignedResponses?: boolean } = {}) {
+function verifier() {
   const logger = { warn: vi.fn() };
   const v = new AuthzResponseVerifier({
     subkey: new Sensitive(Buffer.from(SUBKEY_HEX, 'hex')),
     tenantId: TENANT,
     logger,
-    ...options,
   });
   v.expect({ correlation_id: CORRELATION, nonce: NONCE, tenant_id: TENANT });
   return { v, logger };
@@ -83,7 +82,6 @@ describe('§8 signed AuthzResponse — vectors', () => {
     expect(verdict.response.allowed).toBe(allowed);
     expect(verdict.response.reason_code).toBe(reasonCode);
     expect(verdict.response.correlation_id).toBe(CORRELATION);
-    expect(verdict.unsigned).toBe(false);
   });
 
   it('vector 4 delivers the reason exactly as the verified bytes carry it', () => {
@@ -177,32 +175,24 @@ describe('§8 signed AuthzResponse — each discarded, never an allow', () => {
   });
 });
 
-describe('§8 signed AuthzResponse — against a server older than 1.68', () => {
+describe('§8 signed AuthzResponse — no unsigned responses (contract 1.69, #881)', () => {
   const UNSIGNED = Buffer.from(`{"correlation_id":"${CORRELATION}","allowed":true,"reason":"ok"}`, 'utf8');
 
-  it('an unsigned 1.67-shaped response is refused by default', () => {
-    const { v } = verifier();
+  it('an unsigned response for an outstanding request is discarded as `unsigned`, and the request stays outstanding', () => {
+    const { v, logger } = verifier();
+    expect(v.verify(UNSIGNED)).toEqual({ accepted: false, reason: 'unsigned' });
+    expect(v.pending).toBe(1);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('the opt-out no longer exists: passing it still refuses an unsigned response', () => {
+    const v = new AuthzResponseVerifier({
+      subkey: new Sensitive(Buffer.from(SUBKEY_HEX, 'hex')),
+      tenantId: TENANT,
+      acceptUnsignedResponses: true,
+    } as never);
+    v.expect({ correlation_id: CORRELATION, nonce: NONCE, tenant_id: TENANT });
     expect(v.verify(UNSIGNED).accepted).toBe(false);
-  });
-
-  it('with the opt-out set, a response carrying no hmac_signature at all is accepted on its correlation_id, with a warning', () => {
-    const { v, logger } = verifier({ acceptUnsignedResponses: true });
-    const verdict = v.verify(UNSIGNED);
-    expect(verdict.accepted).toBe(true);
-    expect(verdict.accepted && verdict.unsigned).toBe(true);
-    expect(logger.warn).toHaveBeenCalled();
-  });
-
-  it('with the opt-out set, an unsigned response for no outstanding request is still dropped', () => {
-    const { v } = verifier({ acceptUnsignedResponses: true });
-    const stray = Buffer.from('{"correlation_id":"88888888-8888-8888-8888-888888888888","allowed":true}', 'utf8');
-    expect(v.verify(stray).accepted).toBe(false);
-  });
-
-  it('with the opt-out set, a response that carries a signature is still verified, and a bad one fails', () => {
-    const { v } = verifier({ acceptUnsignedResponses: true });
-    expect(v.verify(wire(V1.replace('"allowed":true', '"allowed":false'), V1_SIG)).accepted).toBe(false);
-    expect(v.verify(wire(V1, V1_SIG)).accepted).toBe(true);
   });
 });
 
@@ -236,14 +226,5 @@ describe('§8 signed AuthzResponse — settling a delivery read from a queue', (
     expect(context).toMatchObject({ exchange: '', routingKey: 'amq.gen-abc', tenantId: TENANT });
     expect(typeof context.timestamp).toBe('string');
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain(V1_SIG);
-  });
-
-  it('the warning for an unsigned response admitted by the opt-out names its exchange and routing key', () => {
-    const { v, logger } = verifier({ acceptUnsignedResponses: true });
-    const channel = { ack: vi.fn(), nack: vi.fn() };
-    const unsigned = Buffer.from(`{"correlation_id":"${CORRELATION}","allowed":true}`, 'utf8');
-    expect(v.settle(channel, message(unsigned)).accepted).toBe(true);
-    const [, , context] = logger.warn.mock.calls[0] as [string, string, Record<string, unknown>];
-    expect(context).toMatchObject({ exchange: '', routingKey: 'amq.gen-abc', tenantId: TENANT });
   });
 });

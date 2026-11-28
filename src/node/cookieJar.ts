@@ -13,7 +13,7 @@
 import { CookieJar } from 'tough-cookie';
 import { HttpCookieAgent, HttpsCookieAgent } from 'http-cookie-agent/http';
 import type { AxiosInstance } from 'axios';
-import type { NodeTlsOptions } from '../rest/session.js';
+import { agentTlsOptions, type NodeTlsOptions } from '../rest/session.js';
 
 /** The `axiam_access` cookie name (httpOnly, path `/`). */
 export const ACCESS_COOKIE = 'axiam_access';
@@ -70,7 +70,7 @@ export function wrapAxios(
   type AgentCookieOptions = NonNullable<ConstructorParameters<typeof HttpCookieAgent>[0]['cookies']>;
   const cookies = { jar } as unknown as AgentCookieOptions;
   instance.defaults.httpAgent = new HttpCookieAgent({ cookies });
-  instance.defaults.httpsAgent = new HttpsCookieAgent({ cookies, ...(tls ?? {}) });
+  instance.defaults.httpsAgent = new HttpsCookieAgent({ cookies, ...agentTlsOptions(tls) });
   return instance;
 }
 

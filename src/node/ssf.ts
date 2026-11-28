@@ -45,8 +45,9 @@ export const MIN_REPLAY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 export const JWKS_REFETCH_INTERVAL_MS = 60_000;
 
 /**
- * How long a fetched key set is trusted: ten minutes, the lifetime of the
- * `jose` remote key set that §10's verifier (`createVerifier`) uses. Past it
+ * How long a fetched key set is trusted: ten minutes (§32.7; the §10 verifier's
+ * own cache, `createVerifier`, now holds a set for at most 300 s plus a 300 s
+ * stale bound, which is within it). Past it
  * the cache is treated as empty and the next SET fills it again, so a key the
  * transmitter has removed stops verifying (§34.2 P6's SHOULD).
  */

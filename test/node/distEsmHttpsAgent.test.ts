@@ -15,9 +15,11 @@
 // Skips (does not fail) when dist/ has not been built — `npm run build` first,
 // or run this in CI after the build step.
 
-import { existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -33,6 +35,19 @@ const PEM = [
   '-----END CERTIFICATE-----',
   '',
 ].join('\n');
+
+// The client identity goes into a TLS secure context at construction (so customCa ADDS to the process
+// trust store, #176), and OpenSSL parses it there: it must be a real certificate and key.
+function makeIdentity(): { cert: string; key: string } {
+  const dir = mkdtempSync(join(tmpdir(), 'axiam-dist-esm-'));
+  try {
+    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', 'k.pem', '-out', 'c.pem', '-days', '2', '-subj', '/CN=dist-esm'], { cwd: dir, stdio: 'pipe' });
+    return { cert: readFileSync(join(dir, 'c.pem'), 'utf8'), key: readFileSync(join(dir, 'k.pem'), 'utf8') };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+const identity = built ? makeIdentity() : { cert: '', key: '' };
 
 describe.skipIf(!built)('built ESM bundle (dist/node/index.mjs)', () => {
   it('constructs a client with customCa without a dynamic-require failure', async () => {
@@ -55,8 +70,8 @@ describe.skipIf(!built)('built ESM bundle (dist/node/index.mjs)', () => {
         tenantSlug: 'default',
         orgSlug: 'bench-org',
         customCa: PEM,
-        clientCert: PEM,
-        clientKey: '-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIA==\n-----END PRIVATE KEY-----\n',
+        clientCert: identity.cert,
+        clientKey: identity.key,
       }),
     ).not.toThrow();
   });

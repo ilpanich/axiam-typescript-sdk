@@ -250,4 +250,14 @@ describe('barrel entry points', () => {
     expect(typeof mod.MemoryOidcStateStore).toBe('function');
     expect(mod.OIDC_STATE_TTL_MS).toBe(600_000);
   });
+
+  it('/middleware exports the clearing cookie a direct completeOidcLogin caller must send (TYP-R3-2)', async () => {
+    const mod = await import('../src/middleware/index.js');
+    expect(mod.oidcBindingClearCookie('https://app.example.com/auth/callback')).toBe(
+      '__Host-axiam_oidc_bind=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0',
+    );
+    const loopback = mod.oidcBindingClearCookie('http://localhost:3000/auth/callback');
+    expect(loopback.startsWith('axiam_oidc_bind=;')).toBe(true);
+    expect(loopback).not.toContain('Secure');
+  });
 });

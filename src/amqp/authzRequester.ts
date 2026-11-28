@@ -62,14 +62,12 @@ export class AuthzRequesterClosedError extends Error {
 
 /** A verified answer to one `AuthzRequest`. */
 export interface AuthzDecision {
-  /** The decision; `true` only for a response that verified (or, with the opt-out, one that carried no signature at all). */
+  /** The decision; `true` only for a response that verified. */
   allowed: boolean;
   /** The server's human-readable reason, when it gave one. */
   reason?: string;
   /** `allowed`, `no_grant`, `denied_by_rule`, `tenant_suspended`, or a code this SDK does not know (verbatim). */
   reasonCode?: string;
-  /** `true` when accepted unsigned because `acceptUnsignedResponses` is set. */
-  unsigned: boolean;
 }
 
 /** One authorization question (CONTRACT.md §8 `AuthzRequest`). */
@@ -129,11 +127,6 @@ export interface AuthzRequesterOptions {
    * requester is created.
    */
   timeoutMs?: number;
-  /**
-   * Accept unsigned responses, for ONE rolling upgrade against a server older
-   * than 1.68. Off by default; see {@link AuthzResponseVerifierOptions.acceptUnsignedResponses}.
-   */
-  acceptUnsignedResponses?: boolean;
   /** Security-event logger. Never receives a signature value or the key. */
   logger?: ConsumeLogger;
   /** Clock for `issued_at`; injectable for tests. */
@@ -211,6 +204,18 @@ interface Pending {
  * Publishes `AuthzRequest` messages and verifies their answers. Many checks
  * may be outstanding at once. Build it with {@link createAuthzRequester} or
  * {@link connectAuthzRequester}.
+ *
+ * The AMQP authorization requester requires an AXIAM server of 1.68 or later
+ * (contract 1.68). Such a server signs every authorization response with the
+ * tenant's AMQP subkey and answers on the requester's private `reply_to`
+ * queue. A server older than 1.68 ignores `reply_to` and answers, unsigned,
+ * only on the shared `axiam.authz.response` queue, which this requester never
+ * reads: against it every check times out. There is no option to accept
+ * unsigned responses (CONTRACT.md §8, contract 1.69): no AXIAM server sends
+ * one to a reply queue, so an unsigned response can only have been published
+ * by someone else, and it is discarded and logged. During a rolling upgrade
+ * from a pre-1.68 server, use REST or gRPC authorization until every replica
+ * runs 1.68 or later.
  */
 export class AuthzRequester {
   readonly #channel: AuthzRequesterChannel;
@@ -232,9 +237,7 @@ export class AuthzRequester {
     this.#verifier = new AuthzResponseVerifier({
       subkey: options.subkey,
       tenantId,
-      ...(options.acceptUnsignedResponses !== undefined
-        ? { acceptUnsignedResponses: options.acceptUnsignedResponses }
-        : {}),
+      replyQueue: replyTo,
       ...(options.logger !== undefined ? { logger: options.logger } : {}),
     });
   }
@@ -354,19 +357,30 @@ export class AuthzRequester {
       void this.close();
       return;
     }
-    // Acks an accepted answer, nacks (no requeue) and logs anything else; on
-    // acceptance the verifier has already retired the request.
-    const verdict = this.#verifier.settle(this.#channel, msg);
-    if (!verdict.accepted) {
-      return;
+    // No body escapes the delivery loop (CONTRACT.md §8, contract 1.69, D-10): whatever
+    // the bytes, nothing thrown here may reach the channel's dispatcher.
+    try {
+      // Acks an accepted answer, nacks (no requeue) and logs anything else; on
+      // acceptance the verifier has already retired the request.
+      if (this.#closed) {
+        // After Close an answer is not decoded or dispatched: nacked without
+        // requeue, no discard event (CONTRACT.md §8 consumer obligation 4).
+        this.#channel.nack(msg, false, false);
+        return;
+      }
+      const verdict = this.#verifier.settle(this.#channel, msg);
+      if (!verdict.accepted) {
+        return;
+      }
+      const pending = this.#pending.get(verdict.response.correlation_id);
+      pending?.resolve({
+        allowed: verdict.response.allowed,
+        ...(verdict.response.reason !== undefined ? { reason: verdict.response.reason } : {}),
+        ...(verdict.response.reason_code !== undefined ? { reasonCode: verdict.response.reason_code } : {}),
+      });
+    } catch {
+      // a closed channel or a failing resolver is not the delivery's problem
     }
-    const pending = this.#pending.get(verdict.response.correlation_id);
-    pending?.resolve({
-      allowed: verdict.response.allowed,
-      ...(verdict.response.reason !== undefined ? { reason: verdict.response.reason } : {}),
-      ...(verdict.response.reason_code !== undefined ? { reasonCode: verdict.response.reason_code } : {}),
-      unsigned: verdict.unsigned,
-    });
   }
 }
 
@@ -424,8 +438,9 @@ async function createOn(
  * The connection and channel are private to the requester, so it handles
  * their events itself: an `'error'` on either (a socket error, a missed
  * heartbeat, a channel-level exception) is logged through `options.logger`
- * — the error's message only, never the URL or a key — instead of escaping
- * as an uncaught exception, and a `'close'` of either closes the requester:
+ * — the error's message only, never the URL's credentials or a key (a
+ * socket error's message can name the broker host and port) — instead of
+ * escaping as an uncaught exception, and a `'close'` of either closes the requester:
  * every outstanding check rejects at once with
  * {@link AuthzRequesterClosedError}, and so does every later one. Reconnect
  * by building a new requester.

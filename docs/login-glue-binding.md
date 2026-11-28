@@ -8,7 +8,8 @@ disagree, the contract wins.
 Code: `src/middleware/oidcLoginCore.ts` (the framework-neutral core), with the cookie I/O in
 `src/middleware/express.ts` (`oidcLoginHandlers`) and `src/middleware/fastify.ts`
 (`oidcLoginPlugin`). Tests: `test/middleware/oidcLoginBinding.test.ts`, which runs every case
-against both adapters.
+against both adapters, and `test/middleware/oidcLoginRedirectEncoding.test.ts`, which drives both
+inside the real frameworks for Decision 7.
 
 ## The defect
 
@@ -169,6 +170,74 @@ application's other origins. It is consulted at both points and **only** for val
 rule refuses; a predicate that throws accepts nothing. No SDK ships a default predicate that
 accepts absolute URLs.
 
+## Decision 7: the redirect target is encoded by the adapter
+
+**The rule.** The `Location` header of the callback's `302` carries the **percent-encoded form** of
+the destination (the configured `success_redirect`, or the accepted `return_to`). The **adapter**
+produces that form, at the point where it writes the header, in every adapter — whether or not the
+framework's own redirect helper would do it. The **application is never asked to encode** and the
+application hooks never see or alter the encoded value: `allowReturnTo` receives the raw value,
+`onSuccess` runs before any redirect is built, `success_redirect` is configured raw. The core
+returns the raw destination (`kind: 'redirect'`, `url`); encoding happens once, in the adapter.
+
+**Why.** `isSafeReturnTo` (Decision 6) deliberately accepts any path that starts with a single `/`
+and holds no `\` or control character, so `/日本`, `/café` and `/a b` are valid stored values: the
+framework has already percent-*decoded* the query parameter the login received. A header value may
+hold only visible ASCII. Express's `res.redirect` encodes (it uses `encodeurl`); Fastify's
+`reply.header('location', …)` does not, and Node refuses a header value holding a character above
+U+00FF, so the write throws **after `onSuccess` has run** and the user, signed in, gets a bare `500`
+without the clearing `Set-Cookie` (a rule 1 (d) miss); a character in U+0080–U+00FF is sent as a
+raw latin1 byte the browser cannot read as UTF-8, and lands on the wrong path. A destination an
+integrator's `allowReturnTo` admitted may even hold CR/LF, which must never reach a header.
+
+**What the `Location` value must be.** These four rules are **normative**; they are the
+specification, and a framework's redirect helper or a library encoder (`encodeurl`,
+`encodeURI`, `Uri.EscapeUriString`, `URLEncoder`, …) is acceptable only where it gives the same
+result. The reference implementation is `encodeRedirectLocation`, `src/middleware/oidcLoginCore.ts`.
+
+1. **Characters.** Every character outside the URL-safe set is UTF-8 percent-encoded with
+   upper-case hex digits: space becomes `%20`, `é` `%C3%A9`, `€` `%E2%82%AC`, CR `%0D`, LF `%0A`,
+   `"` `%22`, `<` `%3C`, `>` `%3E`, `` ` `` `%60`, `{` `%7B`, `}` `%7D`, DEL `%7F`, every other
+   control character `%XX`. The URL-safe set, which MUST be left as it is, is exactly:
+   `A-Z a-z 0-9` and `! # $ % & ' ( ) * + , - . / : ; = ? @ [ \ ] ^ _ | ~`. A backslash is in the
+   set and is kept as `\` (the default `returnTo` rule refuses one before it can get here; a value
+   an integrator's predicate admitted keeps it).
+2. **Existing escapes.** A `%` followed by two hex digits (either case) is a well-formed escape
+   and is **kept as it is**, so an encoded value is not encoded twice (`/a%20b` stays `/a%20b`,
+   `/%%41` becomes `/%25%41`). Any other `%` becomes `%25` (`/a%2` becomes `/a%252`).
+3. **Input that is not valid Unicode.** Whatever the language's string model, every part of the
+   destination that is not valid Unicode is replaced by U+FFFD (encoded `%EF%BF%BD`) **before**
+   encoding, one replacement per maximal ill-formed subpart (byte-string languages) or per unpaired surrogate (UTF-16 or code-point strings), and the encoder MUST NOT throw on any input. In a
+   byte-string language (PHP, C) that means one U+FFFD per **maximal subpart** of an ill-formed
+   UTF-8 sequence (the Unicode / WHATWG substitution): `\xE2\x82` is one, `\xF0\x9F\x98` is one,
+   `\xFF` is one, `\xC0\x80` is two and `\xED\xA0\x80` is three. `returnTo=%FF` arrives as the
+   single byte `0xFF` and becomes `%EF%BF%BD`. In a language whose strings are UTF-16 (JavaScript,
+   Java, C#) or hold code points (Python `str`) it means each unpaired surrogate, however many are
+   adjacent (`/\uD800\uD800` becomes `/%EF%BF%BD%EF%BF%BD`). A valid surrogate pair is one character
+   (`/😀` becomes `/%F0%9F%98%80`).
+4. **Result.** Pure ASCII: no byte below `0x21` and none above `0x7E`, so no space, CR or LF; a
+   CR/LF in the destination cannot split the header or inject another one.
+
+**Where `encodeurl` (Express's `res.redirect`) differs from these rules**, as observed with the
+`encodeurl` Express 5 ships: `/%%41` becomes `/%25%2541` (a well-formed escape is double-encoded,
+against rule 2); `/a%2` stays `/a%2` (a truncated escape is kept, against rule 2); and two adjacent
+lone surrogates (`/\uD800\uD800`) make it throw `URIError` (against rule 3). On every other row
+below it agrees with the rules. Both adapters here therefore
+run `encodeRedirectLocation` first, and `res.redirect`'s own pass then finds nothing to change. A
+port on a framework whose helper encodes must do the same, or show with the matrix below that the
+helper meets the four rules.
+
+Test it per adapter, against the real framework, not a response double (a double that records the
+`url` passed to a redirect helper hides this defect): `/a b` gives `/a%20b`; `/café` gives
+`/caf%C3%A9`; `/€` gives `/%E2%82%AC`; a lone surrogate gives `%EF%BF%BD`, and so do two adjacent
+ones (`/\uD800\uD800`, `/\uDC00\uDC00`) without an exception, and so does a raw byte `0xFF` in a
+byte-string language (`returnTo=%2F%FF`, which arrives as `/` and the byte `0xFF`, gives
+`/%EF%BF%BD`); `/a%20b` is unchanged; `/%%41` gives
+`/%25%41`; `/a%2` gives `/a%252`;
+a CR/LF value admitted through `allowReturnTo` gives `%0D%0A` and injects no header; a non-ASCII
+`success_redirect` is encoded too. Each of these answers `302`, with the binding cookie cleared and
+`onSuccess` called once.
+
 ## Test matrix (per adapter)
 
 | Case | Expected |
@@ -186,3 +255,4 @@ accepts absolute URLs.
 | `return_to` `https://evil.example/x`, `//evil.example/x`, `/\evil.example`, `/a\b`, `/a` + CR, `/a` + NUL, `/a` + DEL | dropped at login; stored directly, not followed |
 | `return_to` `/dashboard?tab=1` | stored and followed |
 | Predicate accepting `https://app.example/x` | that value followed; `https://evil.example/x` still not |
+| `return_to` holding a space, a non-ASCII character, a lone surrogate or an invalid UTF-8 byte (`0xFF`), an existing `%XX`; a CR/LF value admitted by `allowReturnTo`; a non-ASCII `success_redirect` (Decision 7) | `302`; `Location` is the percent-encoded form, pure ASCII, no injected header; cookie cleared; `onSuccess` called once |

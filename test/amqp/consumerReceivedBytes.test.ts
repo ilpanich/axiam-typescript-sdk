@@ -1,0 +1,170 @@
+// Tests for axiam#882 (cross-SDK): the event consumer verifies over the received
+// bytes (the body with its trailing `hmac_signature` member removed), never a
+// re-serialization, and hands the handler the value parsed from those same
+// bytes. It must verify a genuine server-signed message whatever its string content, and
+// must never hand the handler a parse that differs from what was verified.
+//
+// The bodies below are written as literal text, the way the server's serde_json
+// emits them (the signature is computed over that text with the trailing
+// `hmac_signature` member removed) — NOT built with JSON.stringify, which is
+// the encoder under test.
+
+import { describe, expect, it, vi } from 'vitest';
+import type { ConsumeMessage } from 'amqplib';
+import { signPayload } from '../../src/amqp/hmac.js';
+import { InMemoryNonceStore, verifyAndDispatch, type ConsumeChannel } from '../../src/amqp/consumer.js';
+
+const KEY = Buffer.from('received-bytes-pin-key', 'utf8');
+
+class Channel implements ConsumeChannel {
+  acked = 0;
+  nacked: Array<{ allUpTo: boolean; requeue: boolean }> = [];
+  async consume(): Promise<unknown> {
+    throw new Error('unused');
+  }
+  ack(): void {
+    this.acked += 1;
+  }
+  nack(_msg: ConsumeMessage, allUpTo: boolean, requeue: boolean): void {
+    this.nacked.push({ allUpTo, requeue });
+  }
+}
+
+function message(content: Buffer): ConsumeMessage {
+  return {
+    content,
+    fields: { deliveryTag: 1, redelivered: false, exchange: 'axiam.events', routingKey: 'k', consumerTag: 't' },
+    properties: {},
+  } as unknown as ConsumeMessage;
+}
+
+/** Fixed fields every v2 body needs, as literal JSON member text. */
+function head(nonce: string): string {
+  return `"key_version":2,"nonce":"${nonce}","issued_at":"${new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')}"`;
+}
+
+/**
+ * A genuine AuditEventMessage body, as literal member text in declaration order (CONTRACT.md §8 step 2c);
+ * `action` and `metadata` are written verbatim so each test controls the exact bytes.
+ */
+function audit(nonce: string, action: string, metadata?: string): string {
+  const meta = metadata === undefined ? '' : `,"metadata":${metadata}`;
+  return (
+    '{"tenant_id":"11111111-1111-1111-1111-111111111111","actor_id":"66666666-6666-6666-6666-666666666666",' +
+    `"actor_type":"User","action":"${action}","outcome":"Success"${meta},${head(nonce)}}`
+  );
+}
+
+/** Sign the literal text `canonical` (a JSON object) and append the member last, as the server does. */
+function wire(canonical: string, tail = ''): Buffer {
+  const sig = signPayload(KEY, Buffer.from(canonical, 'utf8'));
+  return Buffer.from(`${canonical.slice(0, -1)}${tail},"hmac_signature":"${sig}"}`, 'utf8');
+}
+
+async function run(content: Buffer) {
+  const channel = new Channel();
+  const handler = vi.fn(async (_event: Record<string, unknown>) => {});
+  await verifyAndDispatch(channel, message(content), KEY, handler, {
+    tenantId: '99999999-9999-9999-9999-999999999999',
+    eventType: 'AuditEventMessage',
+    nonceStore: new InMemoryNonceStore(),
+  });
+  return { channel, handler };
+}
+
+describe('axiam#882 — verification is over the received bytes', () => {
+  it.each([
+    ['<, > and &', 'docs:a&b</\\"c\\">'],
+    ['non-ASCII (raw UTF-8)', 'é€日本'],
+    ['a control character the server writes as \\u001f', 'a\\u001fb'],
+    ['the short escapes', 'a\\n\\t\\"\\\\b'],
+  ])('a genuine message whose action holds %s verifies and is delivered', async (_label, action) => {
+    const canonical = audit('aaaaaaaa-aaaa-aaaa-aaaa-000000000001', action);
+    const { channel, handler } = await run(wire(canonical));
+    expect(channel.nacked).toEqual([]);
+    expect(channel.acked).toBe(1);
+    expect(handler).toHaveBeenCalledTimes(1);
+    const delivered = handler.mock.calls[0][0];
+    expect(delivered).toEqual(JSON.parse(canonical));
+    expect(delivered.hmac_signature).toBeUndefined();
+  });
+
+  it('every control character, written the way serde_json writes it (\\u00xx lower-case, short escapes), verifies', async () => {
+    const short: Record<number, string> = { 8: '\\b', 9: '\\t', 10: '\\n', 12: '\\f', 13: '\\r' };
+    let escaped = '';
+    for (let c = 0; c < 0x20; c += 1) {
+      escaped += short[c] ?? `\\u${c.toString(16).padStart(4, '0')}`;
+    }
+    // DEL (0x7f) is written raw by serde_json and by JSON.stringify alike.
+    const canonical = audit('aaaaaaaa-aaaa-aaaa-aaaa-000000000002', `${escaped}\x7f`);
+    const { channel, handler } = await run(wire(canonical));
+    expect(channel.nacked).toEqual([]);
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler.mock.calls[0][0].action).toBe(
+      Array.from({ length: 0x20 }, (_, c) => String.fromCharCode(c)).join('') + '\x7f',
+    );
+  });
+
+  it.each([
+    ['a float written 1.0', '{"x":1.0,"y":2.50}'],
+    ['integer-like keys in ascending-unsorted order', '{"10":"a","9":"b","1":"c"}'],
+    ['an integer above 2^53', '{"big":18446744073709551615}'],
+    ['an exponent form', '{"n":1e2,"m":1E+2}'],
+  ])('a genuine serde_json-shaped metadata holding %s verifies (received bytes, not a re-serialization)', async (_label, metadata) => {
+    const canonical = audit('aaaaaaaa-aaaa-aaaa-aaaa-000000000005', 'read', metadata);
+    const { channel, handler } = await run(wire(canonical));
+    expect(channel.nacked).toEqual([]);
+    expect(channel.acked).toBe(1);
+    expect(handler).toHaveBeenCalledTimes(1);
+    // What the handler gets is parsed from the verified bytes.
+    expect(handler.mock.calls[0][0]).toEqual(JSON.parse(canonical));
+  });
+
+  it('a body that writes characters as \\u escapes (where JSON.stringify writes them raw) verifies', async () => {
+    const canonical = audit('aaaaaaaa-aaaa-aaaa-aaaa-000000000006', 'caf\\u00e9 \\u20ac \\u003c\\u003e\\u0026');
+    const { channel, handler } = await run(wire(canonical));
+    expect(channel.nacked).toEqual([]);
+    expect(handler.mock.calls[0][0].action).toBe('café € <>&');
+  });
+
+  it('a duplicate key nested in an object or array is nacked too', async () => {
+    const canonical = audit('aaaaaaaa-aaaa-aaaa-aaaa-000000000007', 'read', '{"k":[{"a":1,"a":2}]}');
+    const { channel, handler } = await run(wire(canonical));
+    expect(handler).not.toHaveBeenCalled();
+    expect(channel.nacked).toEqual([{ allUpTo: false, requeue: false }]);
+  });
+
+  it('a duplicate key spelled two ways (\\u0061 and a) is nacked', async () => {
+    const canonical = audit('aaaaaaaa-aaaa-aaaa-aaaa-000000000008', 'read').replace('"action"', '"a":1,"\\u0061":2,"action"');
+    const { channel, handler } = await run(wire(canonical));
+    expect(handler).not.toHaveBeenCalled();
+    expect(channel.nacked).toEqual([{ allUpTo: false, requeue: false }]);
+  });
+
+  it('a correctly signed body whose hmac_signature is NOT the trailing member is nacked and the handler never runs', async () => {
+    const canonical = audit('aaaaaaaa-aaaa-aaaa-aaaa-000000000009', 'read');
+    const sig = signPayload(KEY, Buffer.from(canonical, 'utf8'));
+    const moved = Buffer.from(`{"hmac_signature":"${sig}",${canonical.slice(1)}`, 'utf8');
+    const { channel, handler } = await run(moved);
+    expect(handler).not.toHaveBeenCalled();
+    expect(channel.acked).toBe(0);
+    expect(channel.nacked).toEqual([{ allUpTo: false, requeue: false }]);
+  });
+
+  it('a body with a duplicate key is nacked without requeue and the handler never runs', async () => {
+    const canonical = audit('aaaaaaaa-aaaa-aaaa-aaaa-000000000003', 'read').replace('"outcome"', '"action":"admin","outcome"');
+    const { channel, handler } = await run(wire(canonical));
+    expect(handler).not.toHaveBeenCalled();
+    expect(channel.acked).toBe(0);
+    expect(channel.nacked).toEqual([{ allUpTo: false, requeue: false }]);
+  });
+
+  it('a body with trailing content after the object is nacked without requeue and the handler never runs', async () => {
+    const good = wire(audit('aaaaaaaa-aaaa-aaaa-aaaa-000000000004', 'read'));
+    for (const trailer of [' {}', '\n{"action":"admin"}', 'x']) {
+      const { channel, handler } = await run(Buffer.concat([good, Buffer.from(trailer, 'utf8')]));
+      expect(handler).not.toHaveBeenCalled();
+      expect(channel.nacked).toEqual([{ allUpTo: false, requeue: false }]);
+    }
+  });
+});

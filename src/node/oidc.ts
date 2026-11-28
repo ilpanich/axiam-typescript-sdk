@@ -22,11 +22,11 @@
 // Everything else is reuse, not reimplementation (§12 forbids forking):
 //   * transport + §2 error mapping + §3 CSRF + §4 cookie jar + §5 tenant
 //     header + §6 TLS  → the SharedSession/NodeSession axios instance;
-//   * §9 single-flight refresh                → session.refreshGuard;
+//   * §9 single-flight refresh                → session.refreshGuard (§1 refresh); oidcRefresh: per-token map;
 //   * §12.4 signature verification            → node/jwks.ts's verifier;
 //   * §7/§12.5 redaction                      → core/sensitive.ts.
 
-import { randomBytes, timingSafeEqual, type KeyObject } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual, type KeyObject } from 'node:crypto';
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import {
   AuthError,
@@ -43,7 +43,7 @@ import { ValidationError } from '../management/errors.js';
 import { retryAfterMs, retryableNetworkError, statusIsRetryable } from '../rest/bareTransport.js';
 import { isOAuth2Endpoint } from '../rest/interceptors.js';
 import { withRetry } from '../rest/retry.js';
-import type { SharedSession } from '../rest/session.js';
+import { nodeTlsOptionsOf, type SharedSession } from '../rest/session.js';
 import { createJwksVerifier, type JwksVerifier } from './jwks.js';
 import { resolveClockSkewSec, type IdTokenClaims } from './oidcIdToken.js';
 import {
@@ -545,6 +545,18 @@ function exposeSecret(value: Sensitive<string> | string): string {
   return typeof value === 'string' ? value : value.expose();
 }
 
+/**
+ * The single-flight key of an `oidcRefresh` call: a SHA-256 digest of the resolved tenant UUID and the
+ * refresh token. The raw token is never a map key.
+ */
+function refreshFlightKey(refreshToken: Sensitive<string> | string, resolvedTenantId: string): string {
+  return createHash('sha256')
+    .update(resolvedTenantId.toLowerCase())
+    .update('\0')
+    .update(exposeSecret(refreshToken))
+    .digest('hex');
+}
+
 /** Pull the HTTP status off an axios-shaped error, if any. */
 function axiosStatus(err: unknown): number | undefined {
   if (err && typeof err === 'object' && 'response' in err) {
@@ -995,8 +1007,17 @@ export class OidcClient {
   /** The access token adopted by `loginClientCredentials({ adoptAsCredential: true })`, if any. */
   #adoptedCredential: Sensitive<string> | null = null;
   #adoptionInterceptorInstalled = false;
-  /** In-flight `oidcRefresh`, shared by concurrent callers (§9 rule 2). */
-  #pendingRefresh: Promise<OidcTokenSet> | null = null;
+  /**
+   * In-flight `oidcRefresh` calls, one per refresh token (§9 rule 2: a burst is the callers of ONE
+   * token). Keyed by {@link refreshFlightKey}, a SHA-256 digest, never the raw token. A key's slot is
+   * removed once its flight has settled.
+   */
+  readonly #pendingRefresh = new Map<string, Promise<OidcTokenSet>>();
+
+  /** @internal Test hook: the number of occupied single-flight slots. */
+  _pendingRefreshSlots(): number {
+    return this.#pendingRefresh.size;
+  }
 
   constructor(session: SharedSession, options: OidcClientOptions) {
     // A non-finite skew is a configuration fault: refuse it here, where the
@@ -1131,32 +1152,50 @@ export class OidcClient {
 
   /**
    * `POST /oauth2/token` with `grant_type=refresh_token` (§12.1) — refresh an
-   * {@link OidcTokenSet}, under the §9 single-flight refresh guard.
+   * {@link OidcTokenSet}, single-flight per refresh token (§9).
    *
    * @remarks
    * This is a **distinct operation** from `AxiamClient.refresh()`, which drives
    * the cookie/opaque-token session path at `POST /api/v1/auth/refresh`. The
    * two are never merged or aliased and neither falls back to the other
-   * (§12.1). They do share the session's §9 guard, so at most one refresh of
-   * either kind is ever in flight for a session.
+   * (§12.1), and they do not share a lock: the single-flight here is keyed per
+   * refresh token, so refreshes of different tokens run concurrently.
    *
-   * Concurrent `oidcRefresh` calls collapse into one HTTP request and all
-   * receive the same token set — §9 rule 2's result sharing.
+   * Concurrent `oidcRefresh` calls presenting the SAME refresh token (and
+   * tenant) collapse into one HTTP request and all receive the same token set
+   * — §9 rule 2's result sharing. A different token gets its own request and
+   * its own result.
    *
    * An `id_token` in the response is validated against §12.4 rules 1–5 and 7;
    * rule 6 (nonce) is skipped, since OIDC Core §12.2 does not require a nonce
    * in a refresh-issued ID token.
    */
   oidcRefresh(params: OidcRefreshParams): Promise<OidcTokenSet> {
-    const existing = this.#pendingRefresh;
+    // Only a caller presenting the SAME refresh token (and tenant) joins; a different token gets its
+    // own wire call and its own result (§9 rules 2 and 6d).
+    // The tenant is the RESOLVED one (§12.3 rule 4: the explicit argument, else the client default), so
+    // an explicit tenant equal to the default and an omitted one share a flight: a second wire call
+    // with the same rotating token would be a replay. A tenant that cannot be resolved rejects as before.
+    // Resolved and canonicalised (lower-case) ONCE; that one value keys the flight AND goes on the wire,
+    // so a change of the client's defaults in between cannot give the key one tenant and the request another.
+    let tenantId: string;
+    let key: string;
+    try {
+      tenantId = this.#resolveTenantId(params.tenantId).toLowerCase();
+      key = refreshFlightKey(params.refreshToken, tenantId);
+    } catch (err) {
+      return Promise.reject(err);
+    }
+    const existing = this.#pendingRefresh.get(key);
     if (existing) {
       return existing;
     }
-    const pending = this.#refreshUnderGuard(params);
-    this.#pendingRefresh = pending;
+    const pending = this.#refreshFlight({ ...params, tenantId });
+    this.#pendingRefresh.set(key, pending); // published strictly before it can be vacated
     const clear = (): void => {
-      if (this.#pendingRefresh === pending) {
-        this.#pendingRefresh = null;
+      // Identity-checked: never vacate a different, still-live flight's slot.
+      if (this.#pendingRefresh.get(key) === pending) {
+        this.#pendingRefresh.delete(key);
       }
     };
     pending.then(clear, clear);
@@ -2343,8 +2382,14 @@ export class OidcClient {
    * Every check exists because skipping it has a name:
    *
    * 1. **Signature**, through the same §12.4 JWKS verifier the ID-token path
-   *    uses — no second key-fetching path — with the same `kid`-required
-   *    discipline.
+   *    uses — no second key-fetching path. The key is selected **by `kid`**
+   *    (contract 1.69): the server signs every logout token with the header
+   *    `{"alg":"EdDSA","typ":"logout+jwt","kid":"<kid>"}`. A token with no
+   *    `kid` is refused as `unknown_kid` (no single-key fallback, no trying
+   *    every key), and an unknown `kid` causes at most one JWKS re-fetch per
+   *    cooldown window and is then refused as `unknown_kid`. §10.1 rules 10
+   *    and 11 (`typ` `at+jwt`, no `purpose`) apply to the access-token path
+   *    only, not here.
    * 2. **`iss`/`aud`**: a token minted for another RP is not accepted here.
    * 3. **`events` carries the back-channel-logout key.** This is what
    *    distinguishes a logout token from an ID token; skipping it means
@@ -2366,8 +2411,9 @@ export class OidcClient {
     const config = configuration ?? (await this.oidcDiscover());
     const { decodeProtectedHeader } = await import('jose');
 
-    // Same alg/kid discipline as §12.4 rules 1-2, applied before any key
-    // lookup: a token with no `kid` gets no "the only key" fallback.
+    // Same alg/kid discipline as §12.4 rules 1-2 (§12.7.3 rule 1), applied
+    // before any key lookup: a token with no `kid` gets no "the only key"
+    // fallback and is refused as `unknown_kid`.
     let header: { alg?: string; kid?: string };
     try {
       header = decodeProtectedHeader(token);
@@ -2378,12 +2424,22 @@ export class OidcClient {
       throw new AuthError(`logout token alg must be EdDSA, got ${String(header.alg)}`);
     }
     if (!header.kid) {
-      throw new AuthError('logout token carries no kid header');
+      throw new AuthError('logout token carries no kid header (unknown_kid)', 'unknown_kid');
     }
 
-    const claims = (await this.#verifierFor(config.jwks_uri).verifySignatureOnlyUnchecked(
-      token,
-    )) as unknown as LogoutTokenClaims;
+    let claims: LogoutTokenClaims;
+    try {
+      claims = (await this.#verifierFor(config.jwks_uri).verifySignatureOnlyUnchecked(
+        token,
+      )) as unknown as LogoutTokenClaims;
+    } catch (err) {
+      // The JWKS cache has already refreshed at most once for this `kid` (one
+      // attempt per cooldown window); an unmatched `kid` is then `unknown_kid`.
+      if (typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 'ERR_JWKS_NO_MATCHING_KEY') {
+        throw new AuthError('no JWKS key matches the logout token kid (unknown_kid)', 'unknown_kid');
+      }
+      throw err;
+    }
 
     if (claims.iss !== config.issuer) {
       throw new AuthError('logout token issuer does not match the discovery document');
@@ -2441,17 +2497,13 @@ export class OidcClient {
   // -------------------------------------------------------------------------
 
   /**
-   * Run one `refresh_token` grant under the session's §9 single-flight guard.
-   *
-   * The guard's callback signature returns `void`, so the token set is
-   * published through a local variable. When the callback does NOT run, the
-   * guard was already busy with a *different* refresh (the §1 cookie-session
-   * path, which cannot produce an `OidcTokenSet`); rather than return a stale
-   * or wrong result we simply try again now that the other refresh has
-   * settled. Bounded, so a pathologically busy guard fails loudly instead of
-   * spinning.
+   * One `oidcRefresh` wire call: the unit the per-token single-flight map shares. It deliberately holds
+   * NO session-wide lock across the call (§9 rules 5 and 7, contract clarification): flights of
+   * different refresh tokens run independently and concurrently, and the §1 cookie-session refresh
+   * (the session's own `refreshGuard`) neither waits for nor fails them. The per-key map in
+   * {@link OidcClient.oidcRefresh} is the guard; a refresh token namespace is not the session cookie's.
    */
-  async #refreshUnderGuard(params: OidcRefreshParams): Promise<OidcTokenSet> {
+  async #refreshFlight(params: OidcRefreshParams & { tenantId: string }): Promise<OidcTokenSet> {
     const configuration = params.configuration ?? (await this.oidcDiscover());
     const form = new URLSearchParams();
     form.set('grant_type', 'refresh_token');
@@ -2461,21 +2513,9 @@ export class OidcClient {
     if (params.scope !== undefined) {
       form.set('scope', params.scope);
     }
-
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      let refreshed: OidcTokenSet | undefined;
-      await this.#session.refreshGuard(async () => {
-        const wire = await this.#postToken(configuration, form, params.tenantId);
-        // No nonce: rule 6 does not apply to a refresh-issued ID token.
-        refreshed = await this.#toTokenSet(wire, configuration, undefined);
-      });
-      if (refreshed) {
-        return refreshed;
-      }
-    }
-    throw new AuthError(
-      'oidcRefresh could not acquire the single-flight refresh guard (CONTRACT.md §9); another refresh kept it busy.',
-    );
+    const wire = await this.#postToken(configuration, form, params.tenantId);
+    // No nonce: rule 6 does not apply to a refresh-issued ID token.
+    return this.#toTokenSet(wire, configuration, undefined);
   }
 
   // -------------------------------------------------------------------------
@@ -2921,7 +2961,7 @@ export class OidcClient {
     if (existing) {
       return existing;
     }
-    const verifier = createJwksVerifier(jwksUri);
+    const verifier = createJwksVerifier(jwksUri, nodeTlsOptionsOf(this.#session, jwksUri));
     this.#verifiers.set(jwksUri, verifier);
     return verifier;
   }
