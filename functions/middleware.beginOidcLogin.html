@@ -1,5 +1,5 @@
-<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>beginOidcLogin | AXIAM TypeScript SDK - v1.3.1</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
-<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK - v1.3.1</a>
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>beginOidcLogin | AXIAM TypeScript SDK - v1.4.0</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK - v1.4.0</a>
 <div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
 <ul role="listbox" id="tsd-search-results"></ul>
 <div id="tsd-search-status" aria-live="polite" aria-atomic="true">
@@ -14,28 +14,38 @@
 <section class="tsd-panel">
 <ul class="tsd-signatures">
 <li class="">
-<div class="tsd-signature tsd-anchor-link" id="beginoidclogin"><span class="tsd-kind-call-signature">beginOidcLogin</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/middleware.OidcLoginOptions.html" class="tsd-signature-type tsd-kind-interface">OidcLoginOptions</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">returnTo</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/middleware.OidcLoginOutcome.html" class="tsd-signature-type tsd-kind-type-alias">OidcLoginOutcome</a><span class="tsd-signature-symbol">&gt;</span><a href="#beginoidclogin" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-signature tsd-anchor-link" id="beginoidclogin"><span class="tsd-kind-call-signature">beginOidcLogin</span><span class="tsd-signature-symbol">&lt;</span><a class="tsd-signature-type tsd-kind-type-parameter" href="#beginoidclogintrequest">TRequest</a> <span class="tsd-signature-symbol">=</span> <span class="tsd-signature-type">unknown</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/middleware.OidcLoginOptions.html" class="tsd-signature-type tsd-kind-interface">OidcLoginOptions</a><span class="tsd-signature-symbol">&lt;</span><a class="tsd-signature-type tsd-kind-type-parameter" href="#beginoidclogintrequest">TRequest</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">returnTo</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/middleware.OidcLoginOutcome.html" class="tsd-signature-type tsd-kind-type-alias">OidcLoginOutcome</a><span class="tsd-signature-symbol">&gt;</span><a href="#beginoidclogin" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Step 1 — build the authorization request, park its state, and hand back the
 redirect (CONTRACT.md §12.1 <code>oidc_begin</code>).</p>
 <p>Discovery is fetched through <code>oidcDiscover</code>, so its per-origin cache and
 single-flight de-duplication apply and a busy login route does not hammer
 the discovery endpoint (§12.3 rule 6).</p>
+<p><strong>Browser binding (contract 1.68, §12.8 rule 1 (a)).</strong> Every login draws a
+fresh 32-byte CSPRNG value, stores its SHA-256 on the entry as
+<a href="../interfaces/middleware.OidcStateEntry.html#bindingdigest" class="tsd-kind-property">OidcStateEntry.bindingDigest</a>, and returns the value in the redirect
+outcome's <code>setCookie</code>, which the adapter MUST send. A cookie the request
+already presents is never reused.</p>
 </div>
+<section class="tsd-panel">
+<h4>Type Parameters</h4>
+<ul class="tsd-type-parameter-list">
+<li><span id="beginoidclogintrequest"><span class="tsd-kind-type-parameter">TRequest</span> = <span class="tsd-signature-type">unknown</span></span></li></ul></section>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">options</span>: <a href="../interfaces/middleware.OidcLoginOptions.html" class="tsd-signature-type tsd-kind-interface">OidcLoginOptions</a></span>
+<li><span><span class="tsd-kind-parameter">options</span>: <a href="../interfaces/middleware.OidcLoginOptions.html" class="tsd-signature-type tsd-kind-interface">OidcLoginOptions</a><span class="tsd-signature-symbol">&lt;</span><a class="tsd-signature-type tsd-kind-type-parameter" href="#beginoidclogintrequest">TRequest</a><span class="tsd-signature-symbol">&gt;</span></span>
 <div class="tsd-comment tsd-typography"><p>the shared login configuration.</p>
 </div></li>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">returnTo</span>: <span class="tsd-signature-type">string</span></span>
-<div class="tsd-comment tsd-typography"><p>optional application destination to restore after login;
-stored with the state entry and used as the post-login redirect when
-<code>successRedirect</code> is unset.</p>
+<div class="tsd-comment tsd-typography"><p>optional application destination to restore after login.
+Stored only when it passes <a href="middleware.isSafeReturnTo.html" class="tsd-kind-function">isSafeReturnTo</a> (or
+<a href="../interfaces/middleware.OidcLoginOptions.html#allowreturnto" class="tsd-kind-property">OidcLoginOptions.allowReturnTo</a>); any other value is dropped, as if
+none had been given (§12.8 rule 3).</p>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/middleware.OidcLoginOutcome.html" class="tsd-signature-type tsd-kind-type-alias">OidcLoginOutcome</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ca0701ecf5d9b10440d6260496ebebfc6a4a93a4/src/middleware/oidcLoginCore.ts#L132">src/middleware/oidcLoginCore.ts:132</a></li></ul></aside></div></li></ul></section></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/a93397242a6bb1f9e558efe7c6a220c30383d50c/src/middleware/oidcLoginCore.ts#L364">src/middleware/oidcLoginCore.ts:364</a></li></ul></aside></div></li></ul></section></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -49,7 +59,7 @@ stored with the state entry and used as the post-login redirect when
 <li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></div>
 <div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div></div>
 <div class="site-menu">
-<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK - v1.3.1</a>
+<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK - v1.4.0</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
 <li>Loading...</li></ul></nav></div></div></div><footer>
 <p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>

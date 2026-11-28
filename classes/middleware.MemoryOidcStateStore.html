@@ -1,5 +1,5 @@
-<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>MemoryOidcStateStore | AXIAM TypeScript SDK - v1.3.1</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
-<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK - v1.3.1</a>
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>MemoryOidcStateStore | AXIAM TypeScript SDK - v1.4.0</title><meta name="description" content="Documentation for AXIAM TypeScript SDK"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">AXIAM TypeScript SDK - v1.4.0</a>
 <div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
 <ul role="listbox" id="tsd-search-results"></ul>
 <div id="tsd-search-status" aria-live="polite" aria-atomic="true">
@@ -16,7 +16,8 @@
 </div>
 <div class="tsd-comment tsd-typography">
 <div class="tsd-tag-remarks">
-<h4 class="tsd-anchor-link" id="remarks">Remarks<a href="#remarks" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Per-instance (never process-global), single-use, 10-minute TTL. Expired
+<h4 class="tsd-anchor-link" id="remarks">Remarks<a href="#remarks" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Per-instance (never process-global), single-use, 10-minute TTL, and
+bounded at <a href="../variables/middleware.OIDC_STATE_MAX_ENTRIES.html" class="tsd-kind-variable">OIDC_STATE_MAX_ENTRIES</a> entries (oldest evicted). Expired
 entries are dropped lazily on <a href="#consume" class="tsd-kind-method">consume</a> and swept opportunistically on
 <a href="#save" class="tsd-kind-method">save</a>, so no timer is held and the store needs no shutdown hook — a
 long-lived <code>setInterval</code> would keep a Node process alive and would be a
@@ -35,7 +36,7 @@ yourself for that; nothing in the SDK assumes this class.</p>
 <ul class="tsd-hierarchy">
 <li><a href="../interfaces/middleware.OidcStateStore.html" class="tsd-signature-type tsd-kind-interface">OidcStateStore</a></li></ul></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ca0701ecf5d9b10440d6260496ebebfc6a4a93a4/src/node/oidcState.ts#L92">src/node/oidcState.ts:92</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/a93397242a6bb1f9e558efe7c6a220c30383d50c/src/node/oidcState.ts#L120">src/node/oidcState.ts:120</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -61,7 +62,7 @@ yourself for that; nothing in the SDK assumes this class.</p>
 <h3 class="tsd-anchor-link" id="constructor"><span>constructor</span><a href="#constructor" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
 <li class="">
-<div class="tsd-signature tsd-anchor-link" id="constructormemoryoidcstatestore"><span class="tsd-signature-keyword">new</span> <span class="tsd-kind-constructor-signature">MemoryOidcStateStore</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">ttlMs</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-class">MemoryOidcStateStore</a><a href="#constructormemoryoidcstatestore" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-signature tsd-anchor-link" id="constructormemoryoidcstatestore"><span class="tsd-signature-keyword">new</span> <span class="tsd-kind-constructor-signature">MemoryOidcStateStore</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">ttlMs</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">maxEntries</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-class">MemoryOidcStateStore</a><a href="#constructormemoryoidcstatestore" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
@@ -71,10 +72,15 @@ yourself for that; nothing in the SDK assumes this class.</p>
 <a href="../variables/middleware.OIDC_STATE_TTL_MS.html" class="tsd-kind-variable">OIDC_STATE_TTL_MS</a> (10 minutes) and is <strong>clamped to it</strong>: a
 shorter TTL is honoured (useful in tests), a longer one is reduced,
 because §12.3 rule 1 fixes 10 minutes as the maximum.</p>
+</div></li>
+<li><span><span class="tsd-kind-parameter">maxEntries</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol"> = OIDC_STATE_MAX_ENTRIES</span></span>
+<div class="tsd-comment tsd-typography"><p>the most entries held at once. Defaults to
+<a href="../variables/middleware.OIDC_STATE_MAX_ENTRIES.html" class="tsd-kind-variable">OIDC_STATE_MAX_ENTRIES</a>; at the bound, saving a new entry evicts
+the oldest. Must be a positive integer.</p>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">MemoryOidcStateStore</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ca0701ecf5d9b10440d6260496ebebfc6a4a93a4/src/node/oidcState.ts#L102">src/node/oidcState.ts:102</a></li></ul></aside></div></li></ul></section></section></details>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/a93397242a6bb1f9e558efe7c6a220c30383d50c/src/node/oidcState.ts#L134">src/node/oidcState.ts:134</a></li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Accessors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="accessors-1">Accessors<a href="#accessors-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -88,7 +94,7 @@ because §12.3 rule 1 fixes 10 minutes as the maximum.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ca0701ecf5d9b10440d6260496ebebfc6a4a93a4/src/node/oidcState.ts#L107">src/node/oidcState.ts:107</a></li></ul></aside></div></li></ul></section></section></details>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/a93397242a6bb1f9e558efe7c6a220c30383d50c/src/node/oidcState.ts#L143">src/node/oidcState.ts:143</a></li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -112,7 +118,7 @@ concurrency must use an atomic primitive such as Redis <code>GETDEL</code>).</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/middleware.OidcStateEntry.html" class="tsd-signature-type tsd-kind-interface">OidcStateEntry</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/middleware.OidcStateStore.html">OidcStateStore</a>.<a href="../interfaces/middleware.OidcStateStore.html#consume">consume</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ca0701ecf5d9b10440d6260496ebebfc6a4a93a4/src/node/oidcState.ts#L126">src/node/oidcState.ts:126</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/a93397242a6bb1f9e558efe7c6a220c30383d50c/src/node/oidcState.ts#L170">src/node/oidcState.ts:170</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="save"><span>save</span><a href="#save" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -128,7 +134,7 @@ concurrency must use an atomic primitive such as Redis <code>GETDEL</code>).</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/middleware.OidcStateStore.html">OidcStateStore</a>.<a href="../interfaces/middleware.OidcStateStore.html#save">save</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/ca0701ecf5d9b10440d6260496ebebfc6a4a93a4/src/node/oidcState.ts#L113">src/node/oidcState.ts:113</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/ilpanich/axiam-typescript-sdk/blob/a93397242a6bb1f9e558efe7c6a220c30383d50c/src/node/oidcState.ts#L149">src/node/oidcState.ts:149</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -151,7 +157,7 @@ concurrency must use an atomic primitive such as Redis <code>GETDEL</code>).</p>
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Methods</summary>
 <div><a href="#consume"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>consume</span></a><a href="#save"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>save</span></a></div></details></div></details></div>
 <div class="site-menu">
-<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK - v1.3.1</a>
+<nav class="tsd-navigation"><a href="../modules.html">AXIAM TypeScript SDK - v1.4.0</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
 <li>Loading...</li></ul></nav></div></div></div><footer>
 <p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>

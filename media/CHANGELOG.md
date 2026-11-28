@@ -1,0 +1,3233 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [1.4.0] - 2026-11-28
+
+### Added
+
+- `requireScope` (Express), `requireScopeHook` (Fastify), `@RequireScope` (NestJS) and
+  `hasAnyScope` (§11.1, contract 1.68); `AxiamIdentity.scopes`.
+- **AMQP authorization requester** (`axiam-sdk/amqp`, §8 "Signed authorization responses", N2,
+  D-9): `AuthzRequester`, built with `createAuthzRequester(channel, options)` or
+  `connectAuthzRequester(amqpsUrl, options)`. `check({ subjectId, action, resourceId, scope? })`
+  publishes a signed `AuthzRequest` (fresh random `correlation_id` and `nonce`) to
+  `axiam.authz.request` on the default exchange with `reply_to` a private, exclusive, auto-delete,
+  broker-named queue (an empty or `axiam.`-prefixed name is refused), and resolves only with an
+  answer that verifies under the tenant subkey and matches that request; forged or mismatched
+  answers are nacked without requeue and the check keeps waiting until `timeoutMs` (default 10 s,
+  then `NetworkError`). `close()` releases every waiter with `AuthzRequesterClosedError`. An
+  unsigned answer is discarded and logged; there is no option to accept one (see "Removed").
+  The requester requires an AXIAM server of 1.68 or later. Also exported: `buildAuthzRequest`, `AUTHZ_REQUEST_QUEUE`,
+  `DEFAULT_AUTHZ_TIMEOUT_MS`. `connectAuthzRequester` listens for its connection's and
+  channel's `'error'` (logged through `logger` as `axiam_sdk.amqp`, message only — never the URL's
+  credentials or a key; a socket error's message can name the broker host and port — so a broker
+  restart or a missed heartbeat is not an uncaught exception that ends the process) and `'close'`
+  (the requester closes: outstanding checks reject at once with `AuthzRequesterClosedError`).
+  With `createAuthzRequester` the caller owns the channel and must do both. A `timeoutMs` that is
+  not finite, not positive or above 2³¹−1 is refused with a `RangeError` at creation (Node would
+  otherwise fire such a timer after 1 ms).
+- `AuthzResponseVerifier`: the verification step on its own — over the received bytes, never a
+  re-serialization, with the tenant subkey, checking `tenant_id`, `correlation_id` and `nonce`
+  against an outstanding request; `settle()` acks or nacks without requeue. Its security events
+  carry the timestamp, the exchange, the routing key, the requester's own tenant and a `reason`
+  (`malformed`, `unsigned`, `signature`, `tenant`, `unknown_request`; CONTRACT §8 consumer
+  obligation 4, contract 1.69, #883), never a signature value or a nonce. The exchange and routing
+  key come from the delivery (`settle()`, or the optional second argument of
+  `verify(body, delivery)`, `AuthzResponseDelivery`); without one they are `''` and the new
+  `replyQueue` option. The four contract
+  vectors are tests. `AuthzResponse` gains the optional `reason_code`, `tenant_id`, `nonce` and
+  `hmac_signature` members.
+- `isSafeReturnTo`, `oidcBindingCookieName`, `OIDC_BINDING_COOKIE_NAME`,
+  `OIDC_BINDING_COOKIE_NAME_LOOPBACK`, `OidcCallbackContext`, `OidcLoginOptions.allowReturnTo`,
+  `OidcStateEntry.bindingDigest`; `assertAccessTokenHeader`, `assertNoPurposeClaim`,
+  `isAccessTokenTyp` (`axiam-sdk/node`).
+- `docs/login-glue-binding.md`: the design of the browser binding (cookie name and fallback,
+  order of consume and compare, store interface, clearing on the error path), for the other
+  SDKs' ports.
+- The §12.4 rule 2 conformance test for the unknown-`kid` re-fetch window
+  (`test/node/jwksRefetchWindow.test.ts`); no code change was needed.
+- **Contract 1.68 (§34.12)**: `CONTRACT.md` (sha256 `1f34656c…`), `openapi.json` and
+  `management-registry.json` re-vendored byte for byte from AXIAM `e502a3b` (spec digest
+  `sha256:badfb480…`); `proto/` is unchanged. The §27 layer is regenerated: `AuditLogEntry` gains
+  the optional `organization_id` (contract 1.67, §34.11 (c)); no operation changes. The 1.67
+  documentation and test updates of §34.11 (a)–(d) are not part of this release; the README's
+  conformance statement says so.
+
+- `oidcBindingClearCookie(redirectUri)` (`axiam-sdk/middleware`), public: the clearing `Set-Cookie`
+  value a direct caller of `completeOidcLogin` must send when it throws (TYP-R3-2). It was an
+  internal helper; the changelog and the TSDoc asked integrators to rebuild it by hand.
+- **Contract 1.69 (§34.13)**: `CONTRACT.md` re-vendored byte for byte from AXIAM; the README's
+  conformance statement is now 1.69. No operation, REST, gRPC or AMQP schema changes.
+- Tests: a server-shaped logout token (header exactly `{alg, typ: logout+jwt, kid}`, a two-key
+  JWKS, the signing key second), the kid-less and unknown-`kid` refusals, and rules 10 and 11 off
+  the logout and ID-token paths (`test/node/logoutServerShaped.test.ts`); the discard event on all
+  five reasons (`test/amqp/authzDiscardEvent.test.ts`); the event consumer over received bytes
+  (`test/amqp/consumerReceivedBytes.test.ts`, axiam#882).
+
+### Changed (behaviour — read before upgrading)
+
+- **The AMQP event consumer is typed and takes its own tenant** (`consume`, `verifyAndDispatch`;
+  CONTRACT 1.69 §8 step 2c and protocol rule 4, owner decisions D-8 and D-9; axiam#883) —
+  **breaking TypeScript change inside the unreleased 1.4.0**: `ConsumeOptions` gains the required
+  `eventType` (`'AuthzRequest'` or `'AuditEventMessage'`, the ONE type the consumer accepts) and
+  `tenantId` (the consumer's own tenant, whose subkey `signingKey` is), and `options` is no longer
+  optional. A body with the layout of any other signed type (the other event type, a signed
+  `AuthzResponse`, a reactor message) is nacked without requeue as `malformed` before the HMAC is
+  computed, never handed to the handler; the check never picks a type from the body. An
+  application consuming both types runs two consumers. A missing or invalid option throws a
+  `TypeError` at `consume()` before any socket opens. *Migration:* pass
+  `{ tenantId, eventType, ... }` as the fifth argument.
+- **Every discard by the event consumer logs one fixed warning event** (D-8): `timestamp`,
+  `exchange`, `routingKey`, `tenantId` (the configured tenant, never one read from the body) and
+  `reason` (`malformed`, `unsigned`, `signature`, `key_version`, `stale`, `replay`), in the
+  normative order of §8 rule 4: not one JSON object starting with `{` → `malformed`; no
+  `hmac_signature` member → `unsigned`; duplicate member, bad signature member or foreign layout →
+  `malformed`; HMAC → `signature`; a verified body that does not decode into the type (wrong JSON
+  type, `issued_at` not RFC 3339, `nonce` not a UUID, `key_version` not a byte) → `malformed`;
+  then `key_version`, `stale`, `replay`. The nonce is recorded only after every gate passed.
+  Before, the event named no tenant or reason, the HMAC and v2 failures carried the body's
+  `tenant_id`, and the layout and parse failures logged a message only. No signature, nonce, key
+  or body reaches a log.
+- **JWKS stale-if-error is bounded, and the cache TTL is at most 300 s** (CONTRACT §12.4 rule 2,
+  contract 1.69, D-10). The verifier no longer uses `jose`'s remote key set (10-minute cache,
+  and a failed refresh made every token fail) but its own cache: the TTL is the response's
+  `Cache-Control: max-age`, 300 s without one, clamped to 300 s; a failed refresh (transport
+  error, any other status, a body that is not a JWKS, an empty `{"keys":[]}`) keeps the held keys
+  and does not move the age; a `304` to the conditional request (`If-None-Match`) counts as a
+  success; held keys verify until exactly TTL + 300 s after the last successful fetch and every
+  token is then refused until a fetch succeeds. An unknown-`kid` refresh is a refresh like any
+  other, in the one 60 s window, and a failing one never extends the stale window.
+- **"Login with AXIAM" binds the callback to the browser that started it (C7, CONTRACT.md
+  §12.8 rules 1–2).** `oidcLoginHandlers` (Express) and `oidcLoginPlugin` (Fastify) now set an
+  `__Host-axiam_oidc_bind` cookie (`HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=600`;
+  `axiam_oidc_bind` without `Secure` only for a plain-HTTP loopback `redirectUri`) and store its
+  SHA-256 on the state entry as `bindingDigest`. The callback consumes the state first, then
+  refuses a missing or different cookie with the same `401` as an unknown state, **without
+  exchanging the code or calling `onSuccess`**, and every callback response clears the cookie.
+  Before, a victim's browser that loaded an attacker's `callback?state=…&code=…` completed the
+  attacker's login (login CSRF).
+  *Migration:* serve the login and callback routes over HTTPS (or plain HTTP on loopback in
+  development) so the browser keeps the cookie. A custom `OidcStateStore` must persist and return
+  the new optional `bindingDigest` member unchanged, or every callback is refused. Sign-ins in
+  flight when you deploy fail once and restart. If you call `completeOidcLogin` directly, pass
+  the presented cookie value (named by `oidcBindingCookieName(redirectUri)`) in the new third
+  `context` argument, and send each outcome's new `setCookie`; without a cookie every callback is
+  refused.
+  The cookie is cleared on the error path too: when the state store's `consume` rejects or
+  `onSuccess` throws, both adapters append the clearing `Set-Cookie` before re-throwing, so the
+  framework's error response carries it and the application's error handler still receives the
+  original error. A direct caller of `completeOidcLogin` must do the same, because such errors
+  propagate unchanged, with the exact `Set-Cookie` value the new public `oidcBindingClearCookie(redirectUri)`
+  returns (a hand-built one is ignored by the browser unless it repeats the name, `Path=/` and
+  `Secure` exactly).
+- **`onSuccess` receives the framework request** as a third argument (§12.8 rule 2), so a session
+  can be created on the request that completed the sign-in. Existing two-argument callbacks keep
+  working. `OidcLoginOptions` gains a type parameter for it (default `unknown`).
+- **`returnTo` is followed only as a same-origin relative path (C6, §12.8 rule 3).** A value that
+  does not start with a single `/`, starts with `//` or `/\`, or contains a backslash or a
+  control character is dropped at login and not followed at the callback, which then falls back
+  to `successRedirect` or the JSON summary. Before, `?returnTo=https://other.example` sent the
+  user to that origin after a genuine sign-in (open redirect).
+  *Migration:* if you legitimately return to other origins, pass `allowReturnTo` (consulted only
+  for values the default rule refuses).
+- **`requireRole` reads only the token's `roles` claim and fails closed (N15, §11.2 rule 11).**
+  `AxiamIdentity.roles` is now the `roles` claim (`undefined` when absent, `[]` kept distinct) and
+  is **no longer** the `scope` claim split on spaces; the type becomes `roles?: string[]`.
+  `requireRole`, `requireRoleHook` and `@RequireRole` refuse `403` a token without a `roles` claim.
+  Before, any user whose client was granted a scope named like a role passed that role's guard.
+  *Migration:* add `roles` to the scope your application requests and to the client's registered
+  scopes (the server emits the claim only then, SA-18); until you do, every `requireRole` route
+  answers `403`. A route that meant "the client was granted scope X" should use the new
+  `requireScope`. Code reading `identity.roles` must handle `undefined`; the scopes are on the new
+  `identity.scopes`.
+- **Access-token verification refuses non-access tokens (N14, §10.1 rules 10–12).**
+  `verifyAccessToken` and `authenticateRequest` (so `axiamMiddleware`, `axiamPlugin` and every
+  guard) refuse a header `typ` other than `at+jwt` (case-insensitive, `application/` allowed), a
+  token whose claims carry `purpose`, and a header with no `kid` — `jose`'s single-key fallback no
+  longer applies on this path. Before, an MFA-challenge token (after the password step only) or
+  the anonymous WebAuthn discoverable-state token verified as an access token when no expected
+  audience was configured. A token from a server before 1.67 (`typ: JWT`) is refused; its holder
+  refreshes.
+
+### Changed
+
+- Monthly dependency refresh (2026-11): runtime floors `amqplib` ^2.4.0 and `jose` ^6.2.18; dev tooling `vitest` / `@vitest/coverage-v8` ^5.1.1, `msw` ^3.0.7, `ts-proto` ^2.23.5, `@nestjs/common` / `@nestjs/core` ^12.6.0. Node support unchanged (22 floor, 26 newest); TypeScript stays on 6.0.x until typedoc accepts 7.x.
+
+- re-vendor CONTRACT.md 1.69 (§9 rule 7: oidc_refresh single-flight per tenant and token)
+
+- re-vendor CONTRACT.md after the server merged ilpanich/axiam#893
+
+- re-vendor CONTRACT.md 1.69 (typed consume, BOM refusal, bounded JWKS stale-if-error; axiam#883)
+
+- re-vendor CONTRACT.md 1.69 wire-form clarification (axiam#883)
+
+- re-vendor CONTRACT.md, openapi.json and the management registry
+
+- Bump the minor-patch group across 1 directory with 2 updates
+
+- Update codeql.yml
+
+- Bump github/codeql-action/init from 4.39.3 to 4.39.4
+
+- Bump github/codeql-action/analyze from 4.39.3 to 4.39.4
+
+- Monthly dependency and toolchain update (2026-11)
+
+- Bump the minor-patch group with 9 updates
+
+### Removed
+
+- **The AMQP authz requester's unsigned-response opt-out** (`acceptUnsignedResponses` on
+  `AuthzRequesterOptions` and `AuthzResponseVerifierOptions`, and `AuthzDecision.unsigned` and the
+  verdict's `unsigned` flag; added earlier in 1.4.0 and never released): no AXIAM server sends an
+  unsigned response to a reply queue, so the option could admit only a forged response (CONTRACT
+  1.69 §8, axiam#881). The requester requires a 1.68 server; a server older than 1.68 answers only
+  on the shared queue the requester never reads, so every check times out whatever the option said.
+- **`ConsumeOptions.strict`, the lenient (accept-unsigned) mode of the AMQP event consumer**
+  (`verifyAndDispatch`, `consume`) — **breaking TypeScript change**: the property no longer exists
+  on `ConsumeOptions`, so passing it is a compile error. An unsigned `AuthzRequest` or
+  `AuditEventMessage` is always nacked without requeue (CONTRACT 1.69 §8 rule 3). A JavaScript
+  caller still passing it has it ignored. *Migration:* delete `strict`; `false` is no longer
+  possible — contract §8 rule 3.
+
+### Fixed
+
+- **`oidcRefresh` no longer hands one grant's token set to a caller holding a different refresh
+  token** (#177). The §12 `oidc_refresh` single-flight was one slot per client, so a call with token
+  B made while token A was refreshing joined A's flight and returned A's tokens, and B was never
+  sent. The flight is now keyed per refresh token (a SHA-256 digest of the token and the tenant,
+  never the raw token), with the tenant resolved and lower-cased once for both the key and the wire
+  request: callers presenting the same token still share one wire call (§9 rule 2), a different
+  token gets its own call and result, and a key's slot is removed once settled. The wire call no
+  longer runs under the session-wide refresh guard, so flights of different tokens run concurrently
+  and neither wait for nor fail one another or the §1 cookie-session refresh (before, 17 of 20
+  concurrent distinct-token calls failed with "could not acquire the single-flight refresh guard").
+  `AxiamClient.refresh()` is unchanged.
+
+- **The JWKS response body is capped, and the REST `customCa` adds to the trust store** (#176).
+  Neither Node JWKS fetch path (the global `fetch`, and the `node:https` path used with TLS
+  material) limited the body: a hostile endpoint could be buffered until the 5 s deadline. The body
+  is now read through a 50 KiB cap (the Java SDK's figure; CONTRACT.md §12.4 states none): a
+  `Content-Length` over it is refused before any byte is read, and a stream past it is cancelled,
+  closing the connection; either is a failed refresh. Separately, the REST agent passed `customCa`
+  as Node's `ca`, which REPLACES the process trust store (bundled roots, `NODE_EXTRA_CA_CERTS`,
+  OpenSSL's store under `--use-openssl-ca`), so with `customCa` set a call to any other publicly
+  trusted host failed. The agent now uses a secure context that keeps that store and adds the CA
+  (CONTRACT.md §6), with the client identity unchanged; verification and hostname checks stay on.
+  Because that context is built at construction, an unparsable client certificate or key now fails
+  at client construction (when `customCa` and a client identity are both set) rather than at the
+  first connection.
+
+- **The Node JWKS fetch honours `customCa` and the client identity** (#175). `createNodeSession`
+  and the OIDC client's ID-token and logout-token verification fetched the key set with the global
+  `fetch`, which carries neither, so against a private-CA server every `verifyAccessToken` /
+  `verifyIdToken` was refused ("the JSON Web Key Set is unavailable") while REST calls worked.
+  `createVerifier(baseUrl, tlsOptions?)` and `createJwksVerifier(jwksUri, tlsOptions?)` take an
+  optional `JwksTlsOptions` (`ca`, `cert`, `key`); when given, an `https:` key-set fetch goes
+  through `node:https` with it. The process trust store (bundled roots, `--use-openssl-ca`,
+  `NODE_EXTRA_CA_CERTS`) is kept and `customCa` is added to it; the client identity goes only to the
+  client's own origin. Strict server verification is unchanged, redirects are still
+  refused, and the timeout and single-flight behaviour are unchanged. No new dependency.
+- **Byte-order mark and every other body, in the event consumer and the requester** (CONTRACT §8
+  step 2a and "No body escapes the consumer", D-10). The first byte of a body must be `{`: a
+  UTF-8 byte-order mark or whitespace before it is `malformed` and is never stripped. The
+  requester accepted a body with leading whitespace (signed over it); it no longer does. A closed
+  channel or a throwing logger can no longer let an exception out of either delivery loop.
+- **`verifyLogoutToken` refuses a kid-less or unknown-`kid` token as `unknown_kid`** (`AuthError`
+  with `reason: 'unknown_kid'`; CONTRACT §12.7.3 rule 1, contract 1.69, axiam#880). The key was
+  already selected by `kid`, so a genuine server logout token verifies; an unknown `kid` used to
+  surface `jose`'s own error rather than an `AuthError`.
+- **The Fastify login adapter percent-encodes the redirect `Location`** (TYP-R3-1,
+  `docs/login-glue-binding.md` Decision 7). A `returnTo` holding a non-ASCII character made
+  `writeHead` throw after `onSuccess` had run, answering a bare `500` without the clearing
+  `Set-Cookie`; a latin1 character went out as a raw byte. The adapter now encodes as Express's
+  `res.redirect` does (`encodeurl`), for `returnTo`, `successRedirect` and a CR/LF an
+  `allowReturnTo` predicate admitted. Both adapters run the same
+  `encodeRedirectLocation` first, because `encodeurl` double-encodes `/%%41`, keeps a truncated
+  `%2` and throws on two adjacent lone surrogates.
+- **The AMQP event consumer verifies over the received bytes** (`verifyAndDispatch`, `consume`;
+  axiam#882). It re-serialized the parsed body, so a genuine serde_json body holding a float
+  `1.0`, integer-like keys or an integer above 2^53 was nacked. It now removes the trailing
+  `hmac_signature` member from the received bytes, verifies those, and hands the handler the value
+  parsed from the same bytes. A duplicate key anywhere, trailing content, or a body that is not
+  one JSON object is nacked without requeue, explicitly. A body whose `hmac_signature` is present
+  but not the trailing member is nacked (nothing is re-serialized).
+- **The event consumer enforces CONTRACT 1.69 §8 step 2b-2c exactly.** The body must end in
+  `,"hmac_signature":"<64 hex>"}` with nothing after the `}` (whitespace included) and be valid
+  UTF-8; the canonical bytes' top-level member names must be exactly the `AuthzRequest` or the
+  `AuditEventMessage` members in declaration order (optional ones present in place or absent,
+  nothing else), so a validly signed `AuthzResponse`, reactor message or cache-invalidation
+  broadcast under the same tenant subkey is nacked instead of dispatched. Tests feed the
+  server's `wire_json` reference vectors (`test/amqp/consumerLayout.test.ts`).
+- **The AMQP authz requester discards in the normative reason order** (CONTRACT 1.69 §8
+  consumer obligation 4; `AuthzResponseVerifier`, `AuthzRequester`). A body with a bad signature
+  member, or a missing or ill-typed `allowed`/`tenant_id`/`nonce`/`correlation_id`, is `malformed`
+  before the HMAC is computed; it was reported as `signature` when its signature was also wrong.
+  An answer delivered after `close()` is no longer decoded: it is nacked without requeue and logs
+  no event (it was logged as `unknown_request`). The `AuthzRequest` the requester publishes is
+  pinned byte for byte to the reference vector's `wire_json`
+  (`test/amqp/authzReasonOrder.test.ts`).
+- A body that starts with a UTF-8 byte-order mark, or whose cut canonical bytes do not parse,
+  is nacked without requeue by the event consumer instead of throwing out of `verifyAndDispatch`
+  (which, called unawaited from `consume()`, was an unhandled rejection a publisher could use to
+  crash the process); `consume()` also catches any rejection and nacks; the event consumer nacks before it logs, and an integrator logger that throws cannot leave a delivery unacked. The requester checks an
+  ill-typed `reason`/`reason_code` after the HMAC, so a wrong signature is `signature`.
+- `MemoryOidcStateStore` is bounded: at most `OIDC_STATE_MAX_ENTRIES` (10 000) entries by
+  default, oldest evicted first (new optional second constructor argument).
+- A non-finite ID-token clock skew (`NaN`, `±Infinity`) is refused with a `TypeError` —
+  `resolveClockSkewSec`, and `createOidcClient` at construction — instead of `NaN` disabling the
+  `exp`/`iat` checks. Finite values are still clamped into `[0, 60]`.
+- `SharedSession.isForeignHost` compares the origin, not the host, so a same-host URL on another
+  scheme no longer receives the tenant header or the CSRF token.
+
+- Run oidc_refresh flights outside the session guard and resolve the tenant once (#177)
+
+- Key the oidc_refresh single-flight per refresh token (#177)
+
+- Cap the JWKS body and add REST customCa to the trust store (#176)
+
+- Keep the process trust store on the JWKS TLS path (#175)
+
+- Review follow-ups for the JWKS TLS fetch (#175)
+
+- JWKS fetch honours customCa and the client identity (#175)
+
+- OI-32 review round 1 (axiam#883)
+
+- Typed consume, discard event fields, BOM refusal, bounded JWKS stale-if-error (OI-32, axiam#883)
+
+- Nack before logging, throwing logger cannot strand a delivery (OI-10 alignment, round 2)
+
+- BOM body no longer crashes the consumer, reason order, Decision 7 wording (OI-10 alignment, round 1)
+
+- Align with contract 1.69 §8 (OI-10 alignment, axiam#882, axiam#883)
+
+- Nack a non-trailing signature, Decision 7 rule 3 for all invalid Unicode (OI wave B, round 2)
+
+- Consumer over received bytes, normative redirect encoding, event routingKey (OI wave B, round 1)
+
+- Encode the Fastify redirect, drop the unsigned opt-out, logout kid, discard event (OI-10, #167, axiam#880, axiam#881, axiam#882, axiam#883)
+
+- Requester connection errors, cookie cleared on error paths, log context, refetch-window test (wave 3, round 2)
+
+- Bound login glue, safe return_to, access-token rules, roles claim, authz requester (SA-20, C7/C6/N14/N15/N2)
+
+## [1.3.1] - 2026-11-11
+
+### Changed
+
+- Update CodeQL action versions in workflow
+
+- Update CodeQL action version to 4.38.1
+
+- Update CodeQL action version to v4.38.1
+
+- Update CodeQL initialization action version
+
+- Bump jsdom from 30.1.3 to 31.0.0
+
+- Bump the minor-patch group with 10 updates
+
+- Bump github/codeql-action/analyze from 4.39.1 to 4.39.3
+
+- Bump github/codeql-action/init from 4.39.1 to 4.39.3
+
+- Bump bufbuild/buf-action from 1.6.0 to 1.7.0
+
+## [1.3.0] - 2026-11-08
+
+### Changed
+
+- Maintenance release — no notable changes since v1.2.5.
+
+## [1.2.5] - 2026-11-06
+
+### Changed
+
+- re-vendor openapi.json and the management registry (axiam 1.2.3)
+
+## [1.2.2] - 2026-11-04
+
+### Added
+
+- **Contract 1.66 (§34.10)**: `CONTRACT.md` (sha256 `c98f9d56…`), `openapi.json` and
+  `management-registry.json` re-vendored byte for byte from AXIAM `5f9d079` (spec digest
+  `sha256:09419a6e…`); `proto/` is unchanged and the §27 layer regenerates identically (202
+  operations). **No API change.** The optional `reauthenticate` start input (§12.1 rule 12c) is not
+  ported.
+- A test confirming §12.1 rule 12b (#837) against a real loopback server: the
+  `axiam_fed_bind` cookie an `ssoStart` response sets is presented on the following `ssoComplete`
+  of the same client and absent from a second client's
+  (`test/node/ssoFederationBinding.test.ts`). No §4 change was needed.
+- **Contract 1.65 (§34.9)**: `CONTRACT.md`, `openapi.json` (1.2.0) and `management-registry.json`
+  re-vendored byte for byte from AXIAM `76d35d9`; `CONTRACT.md` re-vendored again from `d93976b`
+  (the 2026-10-31 amendments: §12.1 rule 3 redirects, §26.2 rule 8 / D-N36, §37.2 rules 9 and 12,
+  §34.9 server floor).
+- **Native sign-in with a provider ID token (§37)**: `OidcClient.loginWithProviderIdToken(provider,
+  idToken, nonce, options?)` (`POST /oauth2/token`, grant
+  `urn:axiam:params:oauth:grant-type:provider-id-token`; never retried; no `openid` added; the
+  token and the raw nonce are never logged or kept) and the helper `nativeNonce()` returning
+  `ProviderNonce { raw: Sensitive<string>, hashed }`, all from `axiam-sdk/node`. The thirteen §37.9
+  tests are ported.
+- **`idpHint`** on `oidcBegin` (emitted once as `axiam_idp_hint`) and `oidcPar` (pushed body only)
+  (§12.1, §26.2 rule 8).
+- **Regenerated §27 members**: `default_idp` on the OAuth2 client types, `refresh_reuse_response` on
+  the settings bodies (preserved by the read-modify-write `update` forms) and `native_login`
+  (`NativeLoginTrustRequest`/`NativeLoginTrustResponse`) on the federation config types.
+- A test confirming that a burst of `oidcRefresh` calls answered `400 invalid_grant` is one wire
+  call with one shared error (§9).
+
+- Native sign-in with a provider ID token and idp_hint (contract 1.65 §37)
+
+### Changed
+
+- **Server floor (D-N33):** federation-config admin calls (`federation.createConfig`, `getConfig`,
+  `listConfigs`, `updateConfig`) of this 1.2-line SDK need an AXIAM server **1.2.0 or later**:
+  `FederationConfigResponse.native_login` is required from 1.2.0. This SDK does not validate
+  responses at runtime, so a response from an older server decodes with `native_login` `undefined`
+  despite the type.
+- **No redirect is followed on an `/oauth2/*` POST (§12.1 rule 3, C165-14).** Every `OidcClient`
+  form POST (token, refresh, introspect, revoke, PAR, device authorization and poll, token
+  exchange, UMA ticket, CIBA, and `loginWithProviderIdToken`) now sets `maxRedirects: 0`; a `3xx`
+  is a `NetworkError` that names the status only. Previously Node followed a 307/308 and re-sent the
+  form (client secret, provider ID token, raw nonce) to the `Location` target, cross-host included.
+- **Browser persona follows no redirect on `/oauth2/*` (§12.1 rule 3, C165-26).** The fetch config of
+  an `/oauth2/*` request now sets `redirect: 'error'`, and the RFC 7592 bare transport maps a redirect
+  handed back as a response (opaque-redirect, status 0, or any `3xx`) to a `NetworkError` that names
+  neither the `Location` nor the request. A browser no longer follows a `307`/`308` on
+  `/oauth2/register*` or an `/oauth2/*` call through the client.
+- **`oidcPar` pushes the begin URL's `axiam_idp_hint` (D-N36, C165-11)** when its own `idpHint` is
+  unset; the argument wins when both are set. Before, `oidcBegin({ idpHint })` followed by
+  `oidcPar({ request })` pushed no hint.
+
+- re-vendor CONTRACT.md 1.66 as amended at ilpanich/axiam 5f9d079
+
+- re-sync contract 1.66 and openapi.json; confirm the federated sign-in cookie binding (§12.1 rule 12b)
+
+- Bump the minor-patch group with 3 updates
+
+- re-vendor openapi.json and the management registry (logout/reset-mfa 500, D-N44)
+
+- re-vendor openapi.json and the management registry (end_session 500, D-N42)
+
+- re-vendor contract 1.65, openapi 1.2.0 and the management registry
+
+### Fixed
+
+- Contract 1.65 review sweep 2 (C165-32)
+
+- Contract 1.65 review sweep 2 (C165-26)
+
+- Contract 1.65 review findings (C165-14, C165-17, C165-04, C165-08, C165-11)
+
+### Added (additive, C165-17)
+
+- `OAuthProtocolError.retryAfterMs?: number`: the `Retry-After` (delta-seconds) of a `429`
+  (native sign-in, CIBA, the other `/oauth2/*` form calls, device poll). Absent otherwise.
+
+### Source compatibility
+
+- `FederationConfigResponse` gained the required `native_login: NativeLoginTrustResponse`; code that
+  builds one (test fixtures, mocks) must supply it (D-N32, C165-08).
+
+### Changed (continued)
+
+- **A replayed refresh token now ends the session server-side by default** (platform setting
+  `oauth2.refresh_reuse_response = revoke_session`): presenting an already-rotated refresh token is
+  still `400 invalid_grant`, and now also invalidates the session and every refresh token under it.
+  `oidcRefresh` is single-flight and never retries, so this SDK does not cause it; do not refresh
+  the same token from two places.
+
+## [1.1.3] - 2026-10-29
+
+### Changed
+
+- **Runtime dependency floors raised** to the current releases: `axios` ^1.21.0, `jose` ^6.2.13,
+  `@grpc/grpc-js` ^1.14.6, `amqplib` ^2.2.0. All are semver-compatible; no export changes.
+- **Built and typechecked with TypeScript 6.0** (was 5.9). TypeScript 7 stays held back until
+  typedoc supports it (its peer range ends at 6.0.x).
+- Dev tooling refreshed within its major lines (vitest 5.0.5, msw 3.0.3, ts-proto 2.18.3,
+  `@types/node` 26.6.5, esbuild 0.28.2, NestJS 12.3.2, fastify 5.12.7, express 5.3.0, jsdom 30.1.3).
+- Node support is unchanged: the floor stays 22 (end of life 2027-04-30) and the newest CI leg stays
+  26, the current line, which enters LTS in October 2026. Node 27 is still in alpha under the new
+  one-major-a-year schedule.
+
+- Move TypeScript from 5.9 to 6.0
+
+- Update dependencies within their semver ranges
+
+- Update CodeQL action to a newer version
+
+- Update CodeQL analysis action version
+
+- Bump github/codeql-action/analyze from 4.39.0 to 4.39.1
+
+- Bump github/codeql-action/init from 4.39.0 to 4.39.1
+
+- Bump the minor-patch group with 4 updates
+
+- Bump fast-uri
+
+## [1.1.2] - 2026-10-23
+
+`axiam-sdk` 1.1.2 conforms to **contract 1.64**. `CONTRACT.md` is vendored byte for byte from axiam
+`b3f8687` (contract 1.64 as amended twice, W7.1b and W7.1c); `openapi.json`, `management-registry.json`
+and `proto/` from `356a6da` (the platform PR #793 merge; `proto/` is unchanged; the registry
+differs from 1.1.1 only in its spec digest and `spec_version` 1.1.2, so no generated source changes).
+Nothing here is source-breaking: no export is removed or retyped, so this is a patch release. It
+closes #148.
+
+### Fixed
+
+- **A `429` on a device-code poll is waited out** (§14.2 rule 9, contract 1.64 (b), as amended). The
+  status decides, not the body: `devicePoll` raises any `429` (the server's `{"error":"rate_limit_exceeded"}`,
+  a bodiless proxy `429`, one saying `slow_down`) as an `OAuthProtocolError` with
+  `error == "rate_limit_exceeded"`; `deviceLogin` waits `Retry-After` as a minimum, counts the wait as one
+  interval, does not raise the interval (only the `400 slow_down` does), and polls again. A wait past
+  the deadline ends in the typed `expired_token` without a request after it. A `500
+  {"error":"server_error"}` mid-poll is retried, as every `5xx` is (§14.2 rule 6).
+- **A `5xx` or transport failure on a device poll is §16-retried inside the poll** (§14.2 rule 6,
+  §16.2, C164-25): three requests in all, `Retry-After` a floor, before the failure surfaces and the
+  loop takes its next interval; a `429` is never retried there, and with `retryEnabled: false` a `5xx`
+  makes one request. Until now a single `devicePoll` made one attempt.
+- **A §16 retry inside a poll never passes the deadline** (§14.2 rule 4, §34.2 P10, C164-36): the
+  waits of the retry inside `deviceLogin`'s poll and inside `cibaAwait`'s `cibaPoll` are served on the
+  loop's clock, and a wait that would reach the deadline (a 5xx's `Retry-After` included) is not
+  served: nothing is sent after it and the typed `expired_token` is raised at once. Before, a `503`
+  with `Retry-After: 120` and `expires_in: 30` sent requests at 125 s and 245 s, and could return
+  tokens 95 s after the deadline. A standalone `devicePoll` / `cibaPoll`, which has no deadline, keeps
+  the unbounded §16 behaviour. A refused wait is refused before the `retry` telemetry event is
+  announced: `RetryOptions` (exported, next to its `sleepFn` and `randomFn` test seams) gains an
+  optional `admit(delayMs)` hook, called before a retry is announced or served, and throwing refuses
+  the retry. A caller counting retries does not count one that was never sent (C164-48, C164-54).
+- **The `expires_in` deadline is measured on the clock** (§14.2 rule 4, C164-05): it is a point taken
+  when the authorization arrives, so the time a poll or `onUserCode` takes counts against it, not only
+  the sleeps. `DeviceLoginParams.clock` (optional, the clock `cibaAwait` takes) makes it testable.
+- **RFC 7592 registration calls no longer send same-origin cookies in the browser** (§12.1 rule 3,
+  C164-06): the bare transport uses the same fetch-adapter config as an `/oauth2/*` request.
+- **A `429 {"error":…}` from an OAuth2 form endpoint is an `OAuthProtocolError` on the other token
+  requests too** (`oidcRefresh`, `loginClientCredentials`, `deviceAuthorize`, introspection, revocation,
+  PAR, token exchange), where it was a `NetworkError` (§2, C164-23). The thrown class changes for that
+  status only; no signature does. A `5xx` stays a `NetworkError` whatever its body, and a `429` from
+  discovery, the federation routes (`ssoProviders`, ...) or UMA stays a `NetworkError` (C164-31).
+- **Browser persona: `/oauth2/*` no longer sends same-origin cookies** (§12.1 rule 3, C163-12). The
+  request goes through the fetch adapter with `credentials: 'omit'`; the XHR adapter sent a same-origin
+  cookie whatever `withCredentials` said. The Node persona is unchanged.
+
+### Tests and documentation
+
+- The contract 1.63 §14.6 test now signs in through `login()` against a mock that sets `axiam_access`
+  and `axiam_csrf`, and its control, a management `POST`, comes after the `/oauth2/*` calls
+  (C163-08). The C162-07 "states the member" test asserts the stated values in the `PUT` body
+  (C163-09). The README's two manifest rows of the §34.7 table lead with C162-07 and C162-08 and give
+  the §34.6 letter as the parenthetical (C163-18, C164-22). The wall-clock `deviceLogin` tests record
+  their sleeps instead of sleeping (C164-23); the browser `/oauth2/*` test also asserts the `Request`
+  that reaches `fetch` carries `credentials: 'omit'` (C164-19). `devicePoll`'s documentation says the
+  `Retry-After` of a `429` is not exposed (C164-20). The in-poll retry tests gain the contract's
+  transport-failure case (two failures then a `200` = three requests; three = `NetworkError`; retry
+  off = one request) and the two deadline cases (C164-38, C164-36); the README states what the
+  deadline bound covers (C164-41). The deadline tests for the in-poll retry pin the jitter instead of
+  `Retry-After` (a bare `500` 100 ms before the deadline with `Math.random` at its maximum sends no
+  retry; at 0.25 the retry before the deadline is sent and the next wait is refused), cover the
+  `>=` boundary (a wait landing exactly on the deadline is refused) and have a CIBA twin; the
+  `Retry-After: 120` cases fail by assertion, not by vitest's timeout, if a wait escapes the bound
+  (C164-45, C164-48).
+
+## [1.1.1] - 2026-10-20
+
+`axiam-sdk` 1.1.1 conforms to **contract 1.63** (axiam `d919ba0cc`, the release 1.1.1 plan branch).
+`CONTRACT.md`, `openapi.json`, `management-registry.json` and `proto/` are vendored byte for byte
+from that commit (the registry differs from 1.1.0 only in its spec digest, `spec_version` 1.1.1 and the wording of one
+namespace doc; the generated `network` sources follow). Nothing here is source-breaking, so this is a
+patch release. It closes #142.
+
+### Fixed
+
+- **No `axiam_*` session cookie and no `X-CSRF-Token` on any `/oauth2/*` request** (§6.1 rule 11,
+  §12.1 rule 3, §14.6). Contract 1.62 withheld the adopted bearer; a client whose jar held a session
+  still sent the cookies, and the `X-CSRF-Token`, with a device authorization, a device poll and a
+  token request. They now go on the jar-free agent pair and carry no CSRF header. The test is a
+  path-prefix match on the request path relative to the base URL, so the federation routes
+  (`/api/v1/auth/federation/oauth2/start|callback`), which are ordinary session endpoints, keep
+  their cookies and CSRF header and their `Set-Cookie` still reaches the jar (C163-01).
+- **A manifest `network` profile `Update` no longer re-sends a value it read as unknown**
+  (§27.6.2 item 4, C162-07): when the read returns a `termination_action` or `service_type` this SDK
+  does not know and the manifest does not state that member, `plan` raises a `ValidationError` naming
+  the member and the value, before any write. Stating the member resolves it; a profile with no
+  other drift is still `NoChange`.
+- **A stated `terminationAction: null` in a manifest profile is refused at `plan`** with zero wire
+  calls (§27.6.2 item 4, C162-08). It has no "none"; it used to be dropped, so the server wrote its
+  default. Leave the member out to keep the default.
+
+### Notes
+
+- Contract 1.63 (c), the AMQP producer's local refusal of `tenants.` / `gdpr.` actions, is a MAY.
+  This SDK ships no helper that builds or signs an `AuditEventMessage` (the `amqp` entry consumes
+  and verifies events and publishes only reactor replies), so there is nothing to guard.
+- `DeviceAuthorizationRequest.client_id` becoming optional in the spec needs no change: the device
+  grant takes its `client_id` from the `OidcClient` configuration and has no request model.
+- This SDK generates no DPoP proofs, so the §21.7.4 key-lifetime rule does not apply to it.
+
+## [1.1.0] - 2026-10-16
+
+`axiam-sdk` 1.1.0 conforms to **contract 1.62** (axiam `d25413506`, the release plan branch for
+platform 1.1.0). It carries everything the never-tagged 1.0.1 prepared (contract 1.61, marked
+below) together with contract 1.62: one new management namespace, `network`, a device grant whose
+client authenticates, a change-taking read-modify-write form for an SSF stream, and the rule that an
+assigned `null` is "none". `CONTRACT.md`, `openapi.json`, `management-registry.json` and `proto/`
+are vendored byte for byte from that commit. The management surface is now **202 operations in
+29 namespaces** (it was 190 in 28).
+
+### Breaking changes
+
+The first is a source-level break; the other two change what a call sends.
+
+- **`Target` (a manifest `PlannedAction`'s kind) gains `network-policy`, `network-segment` and
+  `network-profile`.** An exhaustive `switch` over `action.target` with no `default` branch no
+  longer compiles. *Migration:* add the three cases, or a `default`.
+- **A `null` you assign to `user_id` (on `certificates.generate` and `certificates.signCsr`) or to
+  `expected_updated_at` (on `ssf.createStream`, `ssf.updateStream`, `scimTargets.create` and
+  `scimTargets.update`) is no longer sent** (§27.11 rule 5, §32.2): it means the same as leaving
+  the member out, and the key is absent from the body. It used to reach the server as `null`.
+  *Migration:* none needed; to ask for the server's version-at-request, `null` now does what
+  deleting the member always did.
+- **A confidential device-grant client now authenticates** (§14.1): a `deviceAuthorize` and a
+  `devicePoll` on an `OidcClient` built with a `clientSecret` send `client_secret` in the form body,
+  where 1.0.x sent none. A public client is unchanged. A 1.1.0 platform refuses a confidential
+  client that sends no credential and a public one that sends one (§14.1), so a deployment upgrading
+  its platform finds out at its devices' next request.
+
+### Added
+
+- **The `network` management namespace** (§36, contract 1.62 item (l)): twelve operations, from the
+  regenerated §27 surface. `client.network.listSegments(site?, page)` (+ `listSegmentsAll`),
+  `createSegment`, `getSegment`, `replaceSegment`, `deleteSegment(id, version)`,
+  `listProfiles(page)` (+ `listProfilesAll`), `createProfile`, `getProfile(segmentId)`,
+  `replaceProfile`, `deleteProfile(segmentId, version)`, `getPolicy` and `replacePolicy`. Every
+  write is conditional on the `version` you read and is sent exactly as given; the delete methods
+  cannot be called without one (a `number`, sent as `?version=`). The decision route
+  `POST /api/v1/network/decide` is not SDK work and has no method. The records are closed: an unset
+  optional member is absent from the body, never `null`.
+- **`ConflictError.reasonCode`** (§36.4): the `reason_code` of a `409` (`stale_version`,
+  `strands_profile`, `has_children`, `site_gone`, `duplicate_name`, `duplicate_vlan`,
+  `duplicate_rank`, `profile_exists`, `other`), as the server spelled it. The vocabulary is open: an
+  unknown value is surfaced verbatim, and a body without one leaves it `undefined`. Branch on it,
+  never on `message`.
+- **`AuthzError.action` and `.resourceId` on a management `403`** (§36.3 rule 1, §2's SDK-Q02
+  members): the management request path did not hand the response body to the error mapper, so a
+  `403` such as `{"action":"network:grant","resource_id":"…"}` reached the caller without them. It
+  does now.
+- **`network` in the declarative manifest** (§27.6.2): `ManagementManifest.network` with `policy`
+  (a singleton), `segments[]` (natural key site + kind + name, `kind` the wire spelling `access` or
+  `quarantine`) and `profiles[]` (natural key: its segment). `plan` reads `getPolicy`,
+  `listSegments` and `listProfiles` and nothing else for a manifest that states only `network`, and
+  judges every stated member on the value as read — a profile's effective (clamped) timeout, a
+  segment's `filter_ids` as a **set** (a reorder is `NoChange`; a name listed twice is refused at
+  `plan` and `apply` with zero wire calls). Actions are ordered policy, segments, profiles. An
+  `Update` is the version-conditional full replacement built from the read (an unstated member
+  carried, a stated `null` left out, no `kind`/`site_key`/`name`); a profile's `segment_version` is
+  the version of **this apply's** segment write when there was one. A stated timeout above the cap
+  is an `Update` whose `apply` the server refuses with `403`; `apply` reports it and stops. A `409`
+  is that action's failure and `failure(report).reasonCode` / `outcome.reasonCode` carry the code.
+  Nothing is retried or re-read. New targets: `network-policy`, `network-segment`,
+  `network-profile`. This SDK offers no pruning for any namespace, so none for `network`.
+- **`ssfStreamInputWith(stream, changes)`** (§32.2, contract 1.62 item (e)): the change-taking
+  read-modify-write form for `ssf.updateStream`. It applies `changes` over the read, sends
+  `events_requested` (`[]` as `[]`) and `expected_updated_at` **as read** — the stream's own
+  `updated_at` string, byte for byte — and **cuts `events_requested` to the new `events_allowed`**
+  when `changes` lowers the ceiling and does not name `events_requested`. `ssfStreamInputFrom`
+  remains.
+- **Device grant client authentication** (§14.1 rule 2, contract 1.62 item (m), the maintainer's
+  option (a) and the 2026-10-16 "same rules" reading): `deviceAuthorize` and every `devicePoll` send
+  the configured `clientSecret` as `client_secret` in the **form body** — never `Authorization:
+  Basic`, whatever the client is registered for — and a client with a §6.1 certificate presents it
+  (through the `mtls_endpoint_aliases` entry). A public client sends no credential and is not
+  refused client-side. The poll sends `client_id` on every poll. `private_key_jwt` client
+  authentication and DPoP proof generation are not implemented by this SDK.
+
+- **`Certificate.user_id`** (contract 1.61, §27.11 rule 5): optional and nullable on `Certificate`
+  and `GeneratedCertificate` — a UUID, `null` and an absent member all decode, the last two as "no
+  account named", never coalesced or synthesised from `metadata` — and an optional request
+  member on `certificates.generate` and `certificates.signCsr`, sent exactly as given and
+  absent when unset (never `null`). The SDK does not judge it; the server answers `400`.
+- **`SsfStreamInput.expected_updated_at`** (contract 1.61, §32.2, §32.3 rule 4): optional, sent
+  exactly as the stream's `updated_at` was read and absent when unset. A `409` on the update is a
+  `ConflictError` and is not retried.
+
+### Changed
+
+- **Re-vendored the contract 1.62 corrections from axiam `d25413506`** (`CONTRACT.md`,
+  `openapi.json` and `management-registry.json`, byte for byte; `proto/` is unchanged; the spec is
+  now version 1.1.0, digest `sha256:cf0fc71c…59a7`), and **no session or adopted bearer reaches any
+  `/oauth2/*` request** (§6.1 rule 11, §12.1 rule 3, §14.6; review finding C162-05): the §6.1
+  device credential `authenticateDevice()` adopts used to ride every same-origin request,
+  `device_authorize`, `device_poll` and the token requests included. It now rides none of them
+  (the session cookie stays out as before); the RFC 7591/7592 registration token the caller passes
+  to one call is unchanged.
+- **Re-vendored `openapi.json` and `management-registry.json` from axiam `e8722b668`** (release PR
+  #716, the atomicity-race fixes): the spec documents the `409` responses (and `403`/`404` on the
+  account-deletion cancel) the server gained; digest
+  `sha256:7c3a5091d9d515b1aa3e157e74d342faf64a2c88e735f3c873b66951b3fac8a1`. `CONTRACT.md` and
+  `proto/` are unchanged, the generated management surface is unchanged
+  (`node scripts/gen-management.mjs --check` is clean), and no source changed.
+- **`/oauth2/device_authorization` is a `SKIP_REFRESH` url** (§14.2 rule 5): a `401
+  invalid_client` there is an `OAuthProtocolError`, made once, and does not enter the §9 refresh
+  guard even for a client whose session is authenticated (the poll's `/oauth2/token` already was).
+- **The `update_stream` documentation repeats the three meanings of `events_requested`** (§32.2,
+  item (h)): absent resets the stream to every event of `events_allowed`; `[]` is the receiver's
+  "none"; a list is stored as given and refused (`400`) outside `events_allowed`. The plain
+  converter `ssfStreamInputFrom` documents the caller's duty to cut `events_requested` when it
+  lowers `events_allowed`, and points at `ssfStreamInputWith`.
+- **The generator** types a required integer query parameter (the `version` of a conditional
+  `DELETE`) as a `number`, and forwards an optional filter that rides beside a `PageRequest`
+  (`listSegments`' `site`) through the auto-pager.
+- **A manifest that states only `network` reads only the network**, not the tenant's resources,
+  permissions, roles, groups and users: the namespace is human-only and has its own permissions.
+  Every manifest with another section reads exactly what it did before.
+- **`ssfStreamInputFrom` sends `expected_updated_at`** (contract 1.61) — the read's `updated_at` —
+  so a read-modify-write of a stream written since (a receiver's pause or narrowing) answers `409`
+  instead of putting the old value back; delete it from the body for the previous
+  last-writer-wins. It already sent `events_requested` as read; `[]` stays `[]` (§32.2: absent
+  would reset the receiver's narrowing to every allowed event).
+
+### Verified, already holding
+
+- **The request `user_id` is an untyped string** (§27.11 rule 5, item (i)): it is
+  `string | null` on `CreateCertificateRequest` and `SignCertificateCsrRequest`, so a value that is
+  not a UUID reaches the server and its `400` is surfaced. Nothing changes here, and nothing is
+  source-breaking. The **response** `Certificate.user_id` stays `string | null | undefined`.
+- **`expected_updated_at` is the server's own string** (§32.2, item (g)): `SsfStream.updated_at` is
+  a `string`, never parsed, and both converters send it unchanged.
+
+### Notes
+
+- `CibaPendingList.total_pending` and `truncated` (contract 1.61, §33.3 rule 16; contract 1.62
+  item (d): "SDK work: no") are not modelled: the type belongs to a console route no operation
+  returns and no SDK drives.
+
+## [1.0.0] - 2026-10-10
+
+`axiam-sdk` 1.0.0 is the first stable release: from here the SDK follows semantic versioning,
+and a breaking change to its public API waits for a new major version. One package serves
+Node (`axiam-sdk`, `axiam-sdk/node`) and the browser (`axiam-sdk/browser`, `axiam-sdk/rest`),
+with three transports — REST, gRPC (`axiam-sdk/grpc`) and AMQP (`axiam-sdk/amqp`, with the
+§8 HMAC verifier) — and Express, Fastify (`axiam-sdk/middleware`) and NestJS
+(`axiam-sdk/nestjs`) integrations. It conforms to **contract 1.60** (axiam `8df0e11`):
+CONTRACT.md §1 – §13 and §12.7, §14, §15, §17, §19, §20, §21, §22, §23, §24, §25, §26, §27 (the
+190-operation management surface and the §27.6 declarative manifest), §28, §28.12, §29, §30,
+§31, §32 with the §32.7 receiver helper, and §33 with §33.2's signed request — and every §34.4
+row contract 1.60 assigns to TypeScript. `CONTRACT.md`, `openapi.json`,
+`management-registry.json` and `proto/` are vendored from that commit.
+
+### Breaking changes
+
+Since `v1.0.0-beta17`. Everything else below is additive, or new since that release.
+
+- **A `401` on a management operation is an `AuthError`**, as §29.4 – §32.4 require, not a
+  `NetworkError` wrapping the `AuthError` the refresh interceptor produced. *Migration:*
+  handle an expired or refused credential on `AuthError`.
+- **`TelemetryEvent` gains `ssfUnjudged`** (§19.1). An exhaustive `switch` over
+  `event.type` with no `default` branch no longer compiles. *Migration:* add the case, or a
+  `default`.
+- **Two response types gain required members** (§27.15): `FederationConfigResponse`
+  carries `allow_sha1_signatures` and `NotificationRuleResponse` carries `window_minutes`.
+  Responses need nothing — the SDK fills `allow_sha1_signatures: false` for a server before
+  1.0.0 — but an object literal typed as one of them (a test double) no longer compiles
+  without the member. *Migration:* add it.
+
+### Added
+
+- **Management members of contract 1.60** (§27.15, §31), from the regenerated surface:
+  `ScimTargetInput.expected_updated_at`, sent exactly as given and only when set, which
+  `scimTargetInputFrom` fills with the read's `updated_at` so that a read-modify-write of a
+  target written since answers `409` (`ConflictError`) instead of overwriting it (delete it
+  from the body for last-writer-wins); `window_minutes` on the `notificationRules` create,
+  update and response models, passed through and never clamped (the server answers `400`
+  outside 1 – 1440); `allow_sha1_signatures` and `idp_metadata_signing_cert_pem` on the
+  federation configuration models, sent only when set.
+- **`OidcConfiguration` reads the four revocation and introspection discovery members**
+  (§21.5): `revocation_endpoint_auth_methods_supported`,
+  `introspection_endpoint_auth_methods_supported` and their two
+  `…_auth_signing_alg_values_supported`, all optional — a server before 1.0.0 omits them.
+- **The `ssfUnjudged` telemetry event** (§19.1): emitted when `SsfReceiver.poll` returns with
+  SETs unjudged, one per failure category (`key_fetch`, `replay_store`) with a count and no
+  `jti`.
+- **The SSF receiver helper** (§32.7, `axiam-sdk/node`): `SsfReceiver.verifySet` (the nine
+  steps, a `SetRefusedError` with a typed `reason`) and `SsfReceiver.poll`, with
+  `pushErrorCode`, `setErrFromReason`, `SSF_EVENT_TYPES`, `MemoryReplayStore` and
+  `JWKS_CACHE_MAX_AGE_MS`. What an integrator must know:
+  - **`poll` never keeps a `jti` it does not return** (§34.2 P1). A SET it cannot judge — the
+    JWKS or discovery fetch failed, or the replay store could not answer — is left
+    unrecorded and listed in `SsfPollResult.unjudged`: neither acknowledge nor refuse it, the
+    transmitter offers it again. The SETs judged in the same batch are returned; when none was
+    accepted, `poll` records nothing and throws. After the replay store fails once in a batch
+    it is not asked again, so every later SET that verifies is unjudged too.
+  - **A replay store has three answers** (§34.2 P3, P4): `true`, `false`, and *cannot
+    answer* — a throw, a rejection or any other value — which gives no verdict: `verifySet`
+    raises a `NetworkError` with the store's failure on `cause` and no reason code (a
+    `SetRefusedError` thrown by a store is wrapped too), never `replayed`. Never answer
+    `false` for "I do not know". The default `MemoryReplayStore` is unbounded in count.
+  - **The key cache** (§34.2 P6) expires after ten minutes; filling an empty or expired cache
+    is not a refetch, but a **failed** fill or refresh counts toward the once-a-minute limit,
+    so a transmitter outage costs one fetch a minute and a SET inside that minute is left
+    unjudged; an unknown `kid` is refetched once a minute at most.
+  - `poll` is retried on a transport failure, `408`, `429` and `5xx`, never on another `4xx`
+    (P7); a `replayed` SET was accepted earlier and is acknowledged, not reported (P2).
+- **CIBA** (§33, `axiam-sdk/node`): `OidcClient.cibaInitiate`, `cibaPoll`, `cibaAwait`
+  (injectable clock) and `cibaHandlePing`; `isAccessDenied` / `isExpiredToken`; the signed
+  request form through `CibaRequestSigner` (PS256, ES256, EdDSA). `cibaInitiate` is never
+  retried; `cibaPoll` treats a `5xx` as transient whatever its body, the server's own
+  `500 {"error":"server_error"}` included (§33.8 test 8, P8).
+- **RFC 7592 client configuration** (§28.12): `AxiamClient.readClientRegistration`,
+  `updateClientRegistration` and `deleteClientRegistration`, and the tolerant
+  `ClientRegistration` (unknown members in `extra`; `registration_access_token` and
+  `client_secret` `Sensitive`; `redirect_uris`, `grant_types` and `response_types` optional,
+  absent when the read did not carry a list of strings). Origin-checked before any request,
+  bearer-only on a session-free transport (no cookie, no SDK token, no redirects, no §9
+  refresh); update and delete never retried. The update sends what the read carried: no `[]`
+  for a list the read lacked, and a list of an unexpected shape as read (§28.12.2 rule 4).
+- **Four management namespaces** — `directory` (§30), `saml` (§29), `ssf` (§32) and
+  `scimTargets` (§31), 28 operations: 190 across 28 namespaces in all. `bind_secret`,
+  `authorization_header` and `credential` are `Sensitive`; every response of the four keeps
+  only the members its type declares, at every depth (§29.5, §31.2, §34.2 P12.1), so a key or
+  credential the server should not have sent never reaches you, an unknown `auth` / `scope`
+  arm keeps only `type`, and a page keeps only `Page`'s members; `directory.update` sends
+  `null` to clear `group_base_dn` / `group_filter`; `saml.parseSpMetadata` refuses both or
+  neither of `metadata_url` / `metadata_xml` locally. The call-site rules the contract makes
+  an SDK repeat are in the generated TSDoc.
+- Read-modify-write helpers `setDirectoryConfigFrom`, `samlServiceProviderInputFrom`,
+  `ssfStreamInputFrom`, `scimTargetInputFrom`, and `parseSpMetadataFromUrl` / `FromXml`.
+- `OidcConfiguration` gains the four CIBA discovery members, and `MtlsEndpointAliases` the
+  seventh alias, `backchannel_authentication_endpoint` (§21.3.1 vector A).
+- `oauth2ErrorFromBody`, the `/oauth2` error decoder that dispatches on a non-empty `error` at
+  any status, `error_description` optional.
+
+- Contract 1.60 — no store asked after a store failure, ssfUnjudged, refresh scope, discovery members
+
+- Contract 1.60 §27.15 and §31 members — null clears on federation update, absent SHA-1 flag reads false
+
+- CIBA initiation, polling and ping helpers, signed form (CONTRACT §33, §21.3.1)
+
+- SSF stream management tests and the receiver helper (CONTRACT §32, §32.7)
+
+- Directory namespace semantics and generator infrastructure (CONTRACT §30)
+
+- RFC 7592 client configuration operations (CONTRACT §28.12)
+
+### Changed
+
+- **`federation.updateConfig`: `null` clears** (§27.15 note 8). Each of the ten nullable
+  members of `UpdateFederationConfigRequest` — `metadata_url`, `idp_signing_cert_pem`,
+  `idp_metadata_signing_cert_pem`, `provider_slug`, the three OAuth2 endpoints,
+  `apple_team_id`, `apple_key_id` and `button_icon` — is sent as `null` when you set it to
+  `null`, which a 1.0.0 server reads as "clear", and left out when `undefined`, which leaves
+  it unchanged. The SDK always sent what you set; a server before 1.0.0 read `null` as absent
+  for all but `idp_metadata_signing_cert_pem`, so a `null` that changed nothing there clears
+  the value now. The TSDoc of each member says so.
+- **A federation configuration read from a server before 1.0.0 reads
+  `allow_sha1_signatures: false`** (§27.15 note 6), filled in by the SDK, so the declared
+  `boolean` holds on every response.
+- **`oidcRefresh`'s `scope` is the refresh response's** (§12.1): the server intersects a
+  grant with the client's current registration, so it may be narrower than the grant — and
+  carry no ID token once `openid` is gone — and the TSDoc of `OidcTokenSet.scope` says so.
+- `OAuthProtocolError`'s `errorDescription` may be empty (the server sent none); its message
+  is then just the code.
+- `PATCH` joins the management verbs (`directory.update`); like every write it is not retried.
+- **Documentation:** the README states conformance at contract 1.60 with every §34.4 row this
+  SDK holds, installs `axiam-sdk@^1.0.0` from npm's `latest` dist-tag, and no longer calls the
+  SDK a prerelease. It also says that the `actorToken` of §15 is the same client's
+  `client_credentials` token (§15.2 rule 9, with `examples/token-exchange.ts`; an
+  `actor_token` the server refuses `400 invalid_request` surfaces unchanged, after one
+  request), and that a broker confirm is not evidence that AXIAM saw a message — a
+  minimal-profile server reads no AMQP queue (§8). The generator no longer calls
+  every replacement body all-required or every all-optional type sparse, and the mTLS section
+  counts seven aliases.
+
+- re-vendor at axiam 8df0e11 (the R1W1 tls_client_auth note, the spec digest)
+
+- README at contract 1.60; the 1.0.0 changelog
+
+- re-vendor contract 1.60, the spec and the registry (axiam 3ed6547)
+
+- A broker confirm is not evidence that AXIAM saw a message (contract 1.60 §8); README for the SSF store and key cache, and the actor token
+
+- The actor token is the same client's client_credentials token (contract 1.60 §15.2 rule 9)
+
+- re-vendor CONTRACT.md at contract 1.60
+
+- Contract 1.59 conformance statement and changelog (F-59-02)
+
+- Generated docs agree with the types; seven mTLS aliases (R-28, F-13, F-14)
+
+- Poll is retried on 408 and 429; a replayed SET is acknowledged (R-7, F-9, P7, P2)
+
+- re-vendor CONTRACT.md at contract 1.59 (axiam fe369eb)
+
+- Contract 1.58 conformance statement, usage, changelog
+
+- scim_targets namespace required tests (CONTRACT §31)
+
+- Saml namespace required tests (CONTRACT §29)
+
+- re-vendor contract 1.58 artifacts and regenerate §27 surface
+
+- Migrate the suite to msw 3
+
+- Bump msw from 2.15.0 to 3.0.2
+
+- Bump fast-uri
+
+- Bump markdown-it from 14.3.0 to 14.3.2
+
+- Bump brace-expansion from 5.0.7 to 5.0.12
+
+- Bump the minor-patch group with 6 updates
+
+- re-vendor openapi.json + management-registry.json after utoipa 6
+
+- Update CodeQL action version in workflow
+
+- Update CodeQL analysis action version
+
+- Bump github/codeql-action/init from 4.38.1 to 4.38.2
+
+- Bump bufbuild/buf-action from 1.5.0 to 1.6.0
+
+- Bump github/codeql-action/analyze from 4.38.1 to 4.38.2
+
+### Fixed
+
+- **`federation.updateConfig` documentation** no longer describes a clear as `Some(None)` (the
+  server's Rust spelling): each nullable member's TSDoc says that `null` clears it and
+  `undefined` leaves it.
+
+- A failed JWKS fill counts, the key cache expires, a store that cannot answer gives no verdict (contract 1.60 A3, B1)
+
+- Sanitize a transport failure's cause like every other REST path (R-18)
+
+- A 5xx on cibaPoll is transient whatever its body (§33.8 test 8 as amended, P8)
+
+- The update sends no list the read lacked, and a mistyped one as read (R-23, F-5b, P12.4)
+
+- §29 – §32 responses keep only declared members, in every union arm (R-20, F-3, P12.1)
+
+- Poll returns what it judged and leaves an unjudged SET unrecorded (R-1, F-2, P1)
+
+- Rebuild NetworkError.cause from an allow-list so a failed write cannot carry its secret (R-18, F-1)
+
+- Trim the poll URL's trailing slashes without a polynomial regex
+
+### Security
+
+- **A failed management write no longer carries its secret** (§30.5, §31.5, §32.5, §7 rule 1).
+  A write that failed with a `5xx` or a transport error threw a `NetworkError` whose `cause`
+  was the axios error with only its response headers redacted, so its `config.data` — the
+  serialized body with the plaintext `bind_secret`, `credential`, `authorization_header`, or
+  a §27.5 `password` / `secret` / `client_secret` / `private_key_pem` — printed with
+  `console.log(err)`. The cause is now rebuilt from an allow-list of diagnostics; `config` and
+  `request` never survive, on every REST path.
+
+## [1.0.0-beta17] - 2026-09-25
+Contract 1.51 — the dogfooding remediation (`claude_dev/dogfooding-findings-fix-plan.md`
+in the `axiam` repository, task C-2). Ported from the reference implementation,
+`ilpanich/axiam-rust-sdk#115`.
+
+### Added
+
+- Metadata, two-shape role bindings, service accounts (CONTRACT §27.6.1, contract 1.51)
+
+- ValidateToken/introspectToken (CONTRACT §1.1.1, §10.3, contract 1.51)
+
+- AuthenticateDevice(), the mTLS device login (CONTRACT §6.1 rules 6-10)
+
+- Acting tenant, X-Axiam-Tenant (CONTRACT §5.2 rule 1, contract 1.51)
+
+- Re-vendor contract 1.51 and regenerate the §27 surface
+
+- **The acting tenant, `X-Axiam-Tenant`** (CONTRACT.md §5.2 rule 1). `AxiamClientOptions.actingTenantId`
+  at construction, and `client.actingTenant(tenantId)` / `client.clearActingTenant()` on an
+  existing client — both return a **new handle** over the same session (the §9 refresh guard,
+  the §17 decision memo, the cookie jar all stay shared), so two tasks can act on two
+  tenants concurrently without either rewriting the other's header. Sent on management
+  calls, `checkAccess`/`batchCheck`, `refresh`, `logout`, and the self-service/WebAuthn
+  posts; omitted everywhere a client never calls it — byte-for-byte what every call sent
+  before this release. Refused client-side (`NetworkError`, zero wire calls) for a
+  non-UUID value, and (`AuthzError`, zero wire calls) once a login result shows the
+  principal is not organization-level, or names a tenant outside `reachableTenantIds`.
+  REST-only — the gRPC interceptor is unaffected. The §17 decision memo is now keyed on
+  the acting tenant too, so two handles sharing one memo cannot answer one tenant's
+  question with another's cached decision.
+
+- **`authenticateDevice()`, the mTLS device login** (CONTRACT.md §6.1 rules 6–10).
+  `POST /api/v1/auth/device`, no body; returns `DeviceToken { accessToken, tokenType,
+  expiresIn }` and adopts it as the client's bearer credential — every subsequent
+  same-origin request carries it as `Authorization: Bearer`, and withholds any cookie an
+  earlier session on the same client left behind. Reachable only on a client built with a
+  `clientCert`/`clientKey`; elsewhere it fails client-side with `AuthError` and zero wire
+  calls. There is no refresh token: a later `401` on the adopted token surfaces as
+  `AuthError` without a refresh attempt, and a `429` (the route is rate-limited) maps to
+  `NetworkError`, not `AuthError`, and is never retried.
+
+- **`TokenGrpcClient.validateToken`/`.introspectToken`** (CONTRACT.md §1.1.1, §10.3), on
+  `axiam-sdk/grpc`. Wraps `axiam.v1.TokenService`; the caller's own token authenticates
+  the call through the existing interceptor, and the token being inspected travels as a
+  required message argument that can never silently default to the caller's own. Every
+  response field is modelled, including `cnf`, `scope`, `clientId`, `permissions` and
+  `extExchangeIss`. `cnf` converts to the same `CnfClaim` shape the REST §10 middleware
+  already consumes (`verifyTokenBinding`/`verifyCertificateBinding`), so gRPC validation
+  and local REST verification cannot disagree about whether a token is a bearer token.
+
+- **The declarative manifest, three additions** (CONTRACT.md §27.6.1): `resources[].metadata`
+  (JSON-equality drift, never a merge); a role binding's resource-scoped shape,
+  `{ role, resource?, inherit? }`, alongside the existing plain-key form, with `inherit`
+  sent only when `false`; and a new `serviceAccounts` manifest section, reconciled by
+  `name` (which the server does not enforce as unique — `plan()` fails client-side before
+  any write when a name is ambiguous). A binding `Update` is `unassign` then `assign`
+  (there is no update endpoint); the server's `tenant_scope` carries across unchanged, and
+  a failed re-assign restores the previous binding, reported as a new `'rebind-failed'`
+  step outcome carrying both results. A `service_accounts` `Create` step's outcome carries
+  the one-time `client_secret` (`StepOutcome.serviceAccountSecret`) — `apply()` never
+  calls `rotate_secret` to reconcile anything, so this is the only place a
+  manifest-created account's secret is ever surfaced. `@AxiamServiceAccount` joins the
+  existing decorator set.
+
+- `scripts/gen-management.mjs`: an externally-tagged `oneOf` (`SubjectAltName`'s
+  `{"dns": …} | {"ip": …}` shape) is now recognised and emitted as a proper union type,
+  rather than falling through to an interface with no fields at all; and `inherit` on the
+  three role-side listings (`RoleUserAssignment`, `RoleGroupAssignment`,
+  `RoleServiceAccountAssignment`) is generated as optional despite being `required` in
+  `openapi.json`, with a new `roleAssignmentInherits()` helper (`assignment.inherit ??
+  true`) as the one place this SDK reads it — an older server's response simply omits the
+  field, and absence means `true`, never a decode failure and never `false`.
+
+### Changed
+
+- Re-vendor CONTRACT.md at contract 1.52
+
+- Document reach's UUID comparison and that logout() keeps the acting tenant
+
+- README's "named rather than folded" list omits five landed sections
+
+- The §27 imperative surface is 162 operations
+
+- README conformance at contract 1.51, CHANGELOG, docs-gate fixes
+
+- Update CodeQL initialization action version
+
+- Bump github/codeql-action/analyze from 4.38.0 to 4.38.1
+
+- Bump the minor-patch group with 9 updates
+
+- **CONTRACT.md re-vendored at contract 1.52.** Copied byte for byte from axiam `80bc7aa`
+  (sha256 `c7954eec…`), the merge of the C-12 cross-SDK conformance review
+  (ilpanich/axiam#500). 1.52 changes no wire behaviour: it writes rules N1–N6, which
+  this SDK's C-12 fixes (#119) already implement. The README's conformance line
+  moves to 1.52.
+
+- Re-vendored `CONTRACT.md`, `openapi.json` and `management-registry.json` from `axiam`
+  commit `56fbe44` (contract 1.51); `proto/` was already identical. `CertificateType`
+  gains `"Server"` (already decoded openly — no SDK change needed); `subject_alt_names` on
+  `certificates.generate`/`.signCsr`; `server_cert_allowed_names` on the settings DTOs.
+
+- `AxiamClient`'s `decisionMemo`, `telemetry` and the §16.1 retry switch now live on
+  `SharedSession` rather than on `AxiamClient` itself, so that `actingTenant()`'s new
+  handle shares one memo/dispatcher instead of getting an empty one of its own — pure
+  internal refactor, `client.decisionMemo`/`client.telemetry` read identically.
+
+### Fixed
+
+- A plain binding with inherit: false and no resource is refused client-side
+
+- Client-credentials adoption resets the acting-tenant gate to unknown
+
+- ActingTenant() compares reachableTenantIds as UUIDs, not raw strings
+
+- OPAQUE, WebAuthn, SSO and client-credentials adoption replace the device credential
+
+- A refused device re-authentication no longer drops the held credential
+
+- SubjectAltName refuses neither/both of its keys, client-side
+
+- Manifest metadata drift ignores key order
+
+- GRPC sends the device credential after adoption, and never refreshes it
+
+- A 401 on the device POST never enters the refresh guard, even with a prior session
+
+- VerifyAccessToken now applies CONTRACT.md §10.1 rule 9 itself
+
+- A federation completion resets the §5.2 gate and the decision memo
+
+- AuthenticateRequest enforces §10.1 rule 9 (contract 1.51)
+
+- **`actingTenant()` compares `reachableTenantIds` as UUIDs, not as raw strings**
+  (CONTRACT.md §5.2.3 rule 4, CONTRACT 1.52 N5.6, C-12). Send-back after C-12: found by a
+  coordinator review of `78f33d9`, identical to a defect PHP and Swift also carried.
+  `requireUuid`'s `UUID_RE` is deliberately case-insensitive — `actingTenant()` accepts an
+  upper-case `tenantId` — but the reach check, `scope.reachableTenantIds.includes(tenantId)`,
+  was a plain, case-SENSITIVE `Array.prototype.includes`. An upper-case UUID naming a
+  tenant the server's own (lower-case canonical) `reachable_tenant_ids` already listed was
+  refused as though it named a different tenant. `src/rest/client.ts`'s new
+  `uuidListIncludes` helper lower-cases both sides before comparing.
+
+- **`loginClientCredentials({ adoptAsCredential: true })` now resets the acting-tenant
+  gate to unknown** (CONTRACT.md §5.2 rule 1, CONTRACT 1.52 N5.5, C-12). Found finishing
+  the N5/N6 audit the coordinator asked for. `#adoptCredential` never touched
+  `session.principalScope`, so a session that had recorded an earlier login's
+  (possibly non-organization-level) report kept `actingTenant()` gating on that STALE
+  human principal after adopting an unrelated service-account credential, instead of
+  letting the server's `403` decide as the rule requires — matching how a WebAuthn
+  authentication, an SSO completion, and a device login already reset it.
+
+- **A plain role binding with `inherit: false` and no `resource` is refused client-side**
+  (CONTRACT.md §27.6.1 item 2, CONTRACT 1.52 N6.2, C-12). Found finishing the N5/N6 audit.
+  `inherit` names which of a *resource's* descendants a binding reaches; with no resource
+  stated there is nothing for `inherit: false` to mean, yet `plan()`/`apply()` sent it
+  anyway. A stated `inherit: true` with no resource is unaffected — CONTRACT 1.52 N6.2's
+  other clause already treats it as a plain (tenant-wide) binding, planned exactly like an
+  omitted one.
+
+- **OPAQUE, WebAuthn, SSO/federation, and client-credentials adoption all now replace a
+  previously-adopted device credential** (CONTRACT.md §6.1 rule 11, CONTRACT 1.52 N4.4,
+  C-12). Found while auditing this SDK against every C-12 rule, not in the review's own
+  findings list. `session.deviceAccessToken` was cleared by `login()`, `verifyMfa()` and
+  `logout()`, but by none of `loginOpaque()`, the WebAuthn authentication ceremonies
+  (`webauthnAuthenticateFinish`/`webauthnDiscoverableFinish`), the three SSO/federation
+  completions (`ssoComplete`/`ssoCompleteOauth2`/`ssoCompleteHandoff`), or
+  `loginClientCredentials({ adoptAsCredential: true })`. A client that had previously
+  called `authenticateDevice()` and then completed one of those calls kept riding the
+  STALE device credential on every later same-origin request:
+  `installDeviceTokenInterceptor` attaches it — and strips the cookie jar — unconditionally
+  whenever `session.deviceAccessToken` is set, regardless of what new session had just been
+  established, silently overriding it. All five now clear the device credential on success,
+  matching `login()`/`verifyMfa()`.
+
+- **A refused re-authentication over `authenticateDevice()` no longer drops the previously
+  adopted device credential** (CONTRACT.md §6.1 rule 11, CONTRACT 1.52 N4.2, C-12). Found
+  while auditing this SDK against every C-12 rule, not in the review's own findings list.
+  `authenticateDevice()` cleared `session.deviceAccessToken` unconditionally before
+  issuing the POST, so that a stale device credential would not ride along on the new
+  attempt's own request — correct on its own, but the code never restored it when the
+  attempt failed, so a client re-authenticating into a refusal (e.g. a revoked
+  certificate) was left with **no** credential instead of the one it already had. The
+  previous token is now held locally and restored in the `catch` branch, so a refused or
+  malformed device login changes no client state beyond the §17 decision memo (which §17
+  rule 8 always allows dropping).
+
+- **`SubjectAltName` refuses neither/both of its keys, client-side, before any request**
+  (CONTRACT.md §27.13, CONTRACT 1.52 N3, C-12). `SubjectAltName`'s externally-tagged
+  `{"dns": …} | {"ip": …}` union type does not itself stop a value built up field-by-field
+  (rather than as an object literal) from holding neither key or both — TypeScript's
+  excess-property check only fires on a literal assigned directly. `certificates.generate`
+  and `.signCsr` now validate every element of `subject_alt_names` before issuing the
+  request (`models.assertValidSubjectAltNameList`, generated by
+  `scripts/gen-management.mjs` alongside the type itself, so the drift check stays green),
+  throwing `NetworkError` (§27.4 rule 2's client-side "SDK programming error") rather than
+  silently dropping the malformed element or sending it to the wire.
+
+- **Manifest metadata drift is independent of key order** (CONTRACT.md §27.6.1 item 1,
+  CONTRACT 1.52 N6.5, C-12). `deepEqual` (`src/management/manifest/engine.ts`) compared
+  a resource's `metadata` via `JSON.stringify`, which is key-order-dependent: a manifest
+  literal whose metadata object happened to be written in a different key order than the
+  server returned it in reported spurious drift (`plan()`/`apply()` sent an `update` for a
+  resource whose metadata had not actually changed). Now a real structural comparison —
+  same keys with equal values for objects (order-independent), same length with equal
+  values at each index for arrays (order-significant, as JSON array order always is).
+
+- **gRPC now sends the device credential after `authenticateDevice()` adoption, and never
+  refreshes it** (CONTRACT.md §6.1 rules 6 and 11, CONTRACT 1.52 N4.3/N4.5, C-12). Two
+  related defects in the gRPC transport, both about the same device-adopted session:
+  - `authInterceptor` (`src/grpc/interceptor.ts`) always sent
+    `tokenManager.cachedAccessToken()` — the cookie-jar-synced token — never
+    `session.deviceAccessToken`. A caller that adopted a device credential over REST and
+    then made a gRPC call rode whatever cookie session happened to be cached from before
+    the device login (or no credential at all), rather than the one it had just adopted.
+    `session.deviceAccessToken` now takes priority.
+  - `callWithRefresh` (`src/grpc/callWithRefresh.ts`) refreshed unconditionally on gRPC
+    `UNAUTHENTICATED`. A device credential has no refresh token behind it (§6.1 rule 6);
+    `UNAUTHENTICATED` on one now surfaces `AuthError` immediately, with no refresh call,
+    mirroring the `isDeviceSession` check `rest/interceptors.ts` already applied on REST.
+
+- **An SSO/federation completion resets the acting-tenant gate** (CONTRACT.md §5.2 rule 1,
+  C-12 question 5). `OidcClient.ssoComplete`, `.ssoCompleteOauth2` and `.ssoCompleteHandoff`
+  establish a new session, possibly as a different principal, and carry no `LoginUserInfo`,
+  but left the previous login's `principalScope` in place. After a non-organization-level
+  login followed by a federation sign-in, `actingTenant()` therefore still refused
+  client-side on the previous principal's report. Each completion now clears it, and the §17
+  decision memo, on success, as WebAuthn authentication and the device login already did. A
+  refused completion changes nothing.
+
+- **`memoKey()`** (§17) now takes the acting tenant as an optional parameter; without it a
+  memoized decision for one acting tenant would have been returned for another within the
+  TTL once `actingTenant()` existed to make that possible.
+
+- **`Verifier.verifyAccessToken` now enforces CONTRACT.md §10.1 rule 9 (C-12).** This is a
+  second, independent instance of the same class of defect the previous `authenticateRequest`
+  fix above closed, found this time at the raw entry point rather than the middleware built on
+  it. `verifyAccessToken`'s own doc says "anything guarding a route MUST use
+  `Verifier.verifyAccessToken` (or, better, the §10 middleware built on it)" — but
+  `verifyAccessToken` itself applied §10.1 rules 1–8 only and never read `cnf`, because it has
+  no transport of its own to ask for a peer certificate. A guard written directly on it, per its
+  own documentation, therefore accepted a certificate- or DPoP-bound token — every device token
+  `authenticateDevice()` (§6.1) mints — as an ordinary bearer credential, even on a build where
+  `authenticateRequest` was already safe. `verifyAccessToken` now takes an optional third
+  `proofs` argument (the same `PresentedProofs` shape `authenticateRequest` already took) and
+  defaults it to `{}` — no evidence — so a bound token is refused unless the caller supplies
+  matching evidence. It reuses the existing `verifyTokenBinding` implementation rather than
+  duplicating it, so this entry point can never disagree with `authenticateRequest` about
+  whether a token is a bearer token. `authenticateRequest` now forwards its own `proofs`
+  argument into this single call instead of separately re-running `verifyTokenBinding`
+  afterward, so the same evidence is read exactly once rather than checked twice with
+  potentially different inputs; its observable behaviour (accept with matching evidence, refuse
+  without or with mismatching evidence, unbound tokens unaffected) is unchanged.
+
+- **`/api/v1/auth/device` is now in `SKIP_REFRESH`** (CONTRACT.md §6.1 rule 11, CONTRACT 1.52
+  N4.5, C-12). A client that had already completed a password login
+  (`session.authenticated === true`) and then called `authenticateDevice()` into a refused
+  device login had that `401` misread as an ordinary authenticated-session `401`: the
+  reactive `§9` refresh guard fired a spurious `POST /auth/refresh` and retried the device
+  POST itself instead of surfacing the server's refusal directly. The device login is now
+  never routed through the refresh guard regardless of what session state preceded it,
+  matching the already-correct no-prior-session case.
+
+### Breaking
+
+- **`authenticateRequest` (`axiamMiddleware`/`axiamPlugin`, and everything built on them —
+  `requireAuth`/`requireAccess`/`requireRole`, the NestJS `AxiamGuard`) now enforces
+  CONTRACT.md §10.1 rule 9.** This is a real defect fix, not a policy tightening: the
+  documented §10 guard entry point never applied rule 9 at all before this release, so a
+  `cnf`-bound token — every device token `authenticateDevice()` mints — was accepted as an
+  ordinary bearer credential by every route this SDK's own guards protect. A resource
+  server whose application previously relied on that now gets a `401` for such a token
+  unless it presents the client certificate on the same Node process (which
+  `axiamMiddleware`/`axiamPlugin` now detect automatically from the request's own raw
+  socket, via the new `certificateProofFromSocket`) or stops sending a token that was
+  never meant to be used bearer-style there. An unbound (ordinary) token is completely
+  unaffected. `authenticateRequest` gains an optional third `proofs` parameter for a
+  caller building a custom guard directly on it.
+
+- **`Verifier.verifyAccessToken` (`createVerifier`/`createJwksVerifier`, and anything built
+  directly on it) now enforces CONTRACT.md §10.1 rule 9 (C-12).** A caller who called
+  `verifyAccessToken(token, expectations)` on a certificate- or DPoP-bound token with no
+  third argument previously got back a usable identity for that token; it now rejects with
+  the same "no client certificate was presented" / "no verified DPoP proof was presented"
+  errors `verifyTokenBinding` already raised for `authenticateRequest`. To keep accepting
+  such tokens, pass the transport evidence as the new optional third `proofs` argument —
+  `PresentedProofs`, the same shape `authenticateRequest`/`verifyTokenBinding` already
+  use. `authenticateRequest` itself forwards its own `proofs` argument straight into this
+  call and no longer re-checks the binding separately afterward — its own observable
+  behaviour is unchanged, so `axiamMiddleware`/`axiamPlugin`/`requireAuth`/`requireAccess`/
+  `requireRole`/the NestJS `AxiamGuard` need no caller-side change. An unbound (ordinary)
+  token is completely unaffected, with or without `proofs` supplied.
+
+- **`loginOpaque()`, a WebAuthn authentication, an SSO/federation completion, and
+  `loginClientCredentials({ adoptAsCredential: true })` now replace a previously-adopted
+  device credential** (CONTRACT.md §6.1 rule 11, CONTRACT 1.52 N4.4, C-12). Before this
+  release, a client that had called `authenticateDevice()` and then completed one of these
+  calls silently kept sending the OLD device credential (and no cookie) on every later
+  same-origin request instead of the new session — `installDeviceTokenInterceptor` acts
+  unconditionally on `session.deviceAccessToken` regardless of what else the client had
+  just done. A caller whose code happened to depend on that (unintended) persistence — most
+  plausibly, a device client that adopts client-credentials as a secondary identity and
+  expected both to coexist — now sees the newer session win, as `login()`/`verifyMfa()`
+  already behaved. No change for a client that never calls `authenticateDevice()`.
+
+## [1.0.0-beta16] - 2026-09-19
+
+### Added
+
+- MCP resource-server helpers (CONTRACT.md §28, contract 1.48)
+
+- MCP resource-server helpers — RFC 9728 protected-resource metadata and the RFC 6750
+  bearer challenge (CONTRACT.md §28, contract 1.48)
+
+- **The resource-server half of the Model Context Protocol authorization handshake,
+  on both framework surfaces.** Three operations on `axiam-sdk/middleware` —
+  `protectedResourceMetadata`, `serveProtectedResourceMetadata`, `bearerChallenge` —
+  plus one middleware option, `VerifiableSession.resourceMetadataUrl`. AXIAM is the
+  authorization server and implements none of this; your MCP server is the resource
+  server, and this is its side.
+
+  ```ts
+  const metadata = protectedResourceMetadata({
+    resource: 'https://mcp.example.com/mcp',
+    authorizationServers: ['https://axiam.example.com'],
+    scopesSupported: ['mcp:read', 'mcp:tools'],
+  });
+  const session = {
+    jwksVerifier: createVerifier(baseUrl),
+    tenantHeaderValue: tenantId,
+    expectedAudience: metadata.document.resource,
+    resourceMetadataUrl: metadata.metadataUrl,
+  };
+  app.use(axiamMiddleware(session));
+  serveProtectedResourceMetadata(app, metadata, session);
+  ```
+
+  Fastify is the same three calls with `axiamPlugin` and the Fastify instance;
+  `serveProtectedResourceMetadata` takes either app object.
+
+  **No operation performs network I/O**, so §16's retry policy and §9's single-flight
+  refresh do not apply and nothing here touches the SDK client's own session — all
+  three are pure local computation, like `oidcBegin` and `umaParseChallenge`. The
+  *client* half of the handshake is deliberately not shipped: a helper that read a 401
+  and acted on it would send a credential to whatever host the 401 asked it to.
+
+- **Opt-in and off by default, and the regression proves it.** With
+  `resourceMetadataUrl` unset every guard behaves byte-for-byte as it did before: no
+  `WWW-Authenticate` on any response, no status changed, no body changed, and no path
+  exempted. The two framework test files assert the header's *absence* explicitly
+  rather than asserting the status, because a 401 that grew a header is still a 401 —
+  an implementation that emitted a bare challenge unconditionally would pass every
+  other test in the suite.
+
+- **`expectedAudience` is now mandatory when `resourceMetadataUrl` is set**, and every
+  guard factory — `axiamMiddleware`, `requireAuth`, `requireAccess`, `requireRole` and
+  their four Fastify counterparts — refuses the configuration at construction, naming
+  both options. A resource server that publishes "tokens for me carry this `aud`" and
+  then does not check `aud` has published a claim it does not honour, and a token
+  minted for a *different* MCP server opens it. That is the confusion RFC 8707 exists
+  to prevent, so it is impossible to configure rather than merely discouraged.
+
+  This changes nothing for an existing deployment: `resourceMetadataUrl` is new, so
+  there is no configuration that was valid before and is refused now.
+
+- **The document's path is derived from the resource, not chosen**, and exactly one
+  route is registered — RFC 9728 §3.1's insertion between the authority and the path,
+  with a trailing slash carried through rather than trimmed. It is served `200
+  application/json` with `Cache-Control: public, max-age=3600` and
+  `Access-Control-Allow-Origin: *` (never `Access-Control-Allow-Credentials`), and
+  **without authentication**: where the guard is mounted globally it exempts that one
+  path itself, from the `resourceMetadataUrl` it was configured with. That is the only
+  thing that works on Fastify, where a `preHandler` hook applies to every route in its
+  context regardless of registration order.
+
+- **One class of 403 gains a header, and only one.** A
+  `requireAccess`/`requireAccessHook` that named a `scope` whose decision came back
+  `allowed: false` with `reasonCode: "no_grant"` now carries `error="insufficient_scope",
+  scope="…"`. The JSON body does not change — it is still `authorization_denied`, and
+  `insufficient_scope` appears only in the header. A `denied_by_rule` decision, an
+  absent or unrecognised `reasonCode`, a denial with no `scope` argument, a
+  `requireRole` failure and a CSRF refusal all carry no header: `no_grant` means *ask
+  for more*, which is what a challenge invites a client to do, and `denied_by_rule`
+  means *an administrator has already decided*. Where a route also carries a §20.3
+  `umaChallenge`, the UMA challenge wins and exactly one value is emitted.
+
+  `CheckOutcome`'s `denied` arm gains a `reasonCode` field, surfaced verbatim from the
+  decision. Additive: nothing reads it but the new rule.
+
+- **The challenge never says why.** Expired, not yet valid, wrong tenant, wrong
+  audience, bad signature, `alg` confusion, an unsatisfiable `cnf`, a revoked `sid` —
+  all of them are `invalid_token`, indistinguishably, and the guard adds no
+  `error_description`, no header and no body field that tells them apart. A request
+  that carried *no* credential gets a challenge with no `error` parameter at all, which
+  is a different answer and deliberately so. `bearerChallenge` **refuses rather than
+  escapes** any value outside RFC 6750's character sets, raising `ValidationError`
+  rather than emitting `\"`.
+
+- **Validation refuses; it never repairs.** `protectedResourceMetadata` applies every
+  §28.2 rule at construction — absolute URI with no query and no fragment, `https`
+  except on `127.0.0.1`/`[::1]`/`localhost`, at least one issuer with no duplicates and
+  no query, `NQCHAR` scope tokens in the caller's order, `bearer_methods_supported`
+  exactly `["header"]` — and raises `ValidationError` (§2's taxonomy, unchanged; §28
+  adds no error type) rather than normalising, trimming, lowercasing or re-encoding
+  anything to make it pass. An empty `scopesSupported` and an absent
+  `resourceDocumentation` omit their members rather than emitting `null`. Nothing in
+  the document may come from a request, and there is no option that would let it.
+
+- **Tests**: §28.9's five required tests, on the fixture §28.9 names, across three
+  files — `test/middleware/mcp.contract.test.ts` for the two framework-independent
+  ones (document shape and validation negatives; challenge quoting and its refusals)
+  and `test/middleware/mcp.{express,fastify}.test.ts` for the three that need a server
+  (401 with the challenge; 403 `insufficient_scope`; a token whose `aud` is not the
+  resource), plus the off-by-default regression on each surface. The Express suite runs
+  against a real application on a real socket and the Fastify suite through
+  `app.inject`, so what is asserted is what a client receives rather than what the SDK
+  asked for.
+
+- **Contract**: the vendored `CONTRACT.md` is re-synced to **1.48** (§28, and 1.47's
+  two additions). `openapi.json`'s own 1.48 half — T21.3's RFC 8707 `resource`
+  parameter — is a separate re-sync and is not in this change; no SDK operation
+  changes signature or behaviour either way. **That separate re-sync now has a name
+  and a schedule: F-28-01 below.**
+
+### Changed
+
+- Re-sync CONTRACT.md 1.50 and management-registry.json from axiam main @ da94e1d04
+
+- F-28-01 — re-sync CONTRACT.md 1.49, openapi.json and management-registry.json from axiam main @ e4c62180e
+
+- Record the §28.3 Content-Type erratum's acceptance and F-28-01 (T21.9 T9d)
+
+- Stop markdown-it linkifying "CONTRACT.md" into a dead link
+
+- Report the current release in the npm badge, not npm's `latest`
+
+- Label the published API reference with its release version
+
+- **Breaking — `CreateRegistrationTokenResponse.initial_access_token` is now
+  `Sensitive<string>` (contract 1.50, CONTRACT.md §27.5).** The field was a plain
+  `string`; it is the one-time RFC 7591 §1.2 initial access token, so it belonged in
+  the §27.5 sensitive table from the day `oauth2_clients.create_registration_token`
+  shipped and was omitted. As a bare string it appeared in every `JSON.stringify`,
+  `console.log` and error rendering of the response — the leak §7 rule 1 and §27.5
+  exist to prevent. The §27.5 table now lists **fifteen** operations, not fourteen.
+
+  **Migration.** Reading the token now takes the explicit reveal, as it already does
+  for the other fourteen fields:
+
+  ```diff
+  - const token = created.initial_access_token;
+  + const token = created.initial_access_token.expose();
+  ```
+
+  There is deliberately **no** plain-string accessor kept alongside it: the plain
+  accessor is precisely the leak. The wire shape is unchanged — `openapi.json` and
+  `proto/` do not move, only this SDK's type does.
+
+  The vendored artefacts are re-synced from **`ilpanich/axiam` `main` @ `da94e1d04`**:
+
+  | Artefact | Blob |
+  |---|---|
+  | `CONTRACT.md` (1.50) | `28c163e32d25` |
+  | `openapi.json` | `b75e30eaa359` (unchanged) |
+  | `management-registry.json` | `aab87fd79910` |
+
+  `proto/` already matched and is unchanged. The §27 surface is regenerated in the
+  same commit (`node scripts/gen-management.mjs`); the operation count stays at
+  **162** across 24 namespaces and the only generated movement is this one field's
+  type, its `CreateRegistrationTokenResponseWire` twin and the `fromWire` wrapper.
+  The README's conformance statement now names contract 1.50. Upstream: ilpanich/axiam#480.
+
+- **§28.3 rule 1's `Content-Type` erratum is accepted into the contract** (contract
+  1.49, CONTRACT.md §28.11 row R-4, T21.9 T9d). This port reported that Fastify
+  appends `; charset=utf-8` to any `*json*` content type and offers no supported way
+  to suppress it, so 1.48's verbatim `Content-Type: application/json` could be
+  satisfied on that surface only by writing to `reply.raw` and losing every `onSend`
+  hook. The cross-SDK review confirmed it and adopted this port's suggested wording:
+  §28.3 rule 1 now binds the **media type**, permits a framework-appended `charset`,
+  and requires a test to compare with parameters dropped — which is what this
+  repository's two suites already do. No code change here; the contract moved to
+  match the behaviour. Two other ports (C#, PHP) had independently asserted the media
+  type defensively for the same reason.
+
+- **F-28-01 — the vendored contract artefacts are re-synced from a merged `main`
+  (contract 1.49).** The re-sync this repository deferred — and that the T21.9 T9d
+  cross-SDK review found correct to defer, since the seven SDKs that took it from
+  `ilpanich/axiam`'s `claude/t21-2a-public-clients` phase branch were stale within
+  hours (CONTRACT.md §28.11 row R-1) — is done once, from **`ilpanich/axiam` `main` @
+  `e4c62180e`**, as contract 1.49 requires:
+
+  | Artefact | Blob |
+  |---|---|
+  | `CONTRACT.md` (1.49) | `2493348c3285` |
+  | `openapi.json` | `b75e30eaa359` |
+  | `management-registry.json` | `4619f441aac0` |
+
+  `proto/` already matched and is unchanged. The §27 management surface is
+  regenerated in the same commit (`node scripts/gen-management.mjs`), moving from
+  **160 to 162 operations** across the same 24 namespaces:
+
+  - `client.oauth2Clients.createRegistrationToken(body)` and
+    `client.oauth2Clients.listRegistrationTokens()` — `POST` / `GET
+    /api/v1/oauth2-clients/registration-tokens`, the RFC 7591 initial access tokens
+    (T21.4). The create is not retried (§27.4 rule 8), like every write here.
+  - New models `CreateRegistrationTokenRequest`, `CreateRegistrationTokenResponse`,
+    `RegistrationTokenResponse`, `CimdPolicy` and the open `ManagedBy` union
+    (`"admin" | "dcr" | "cimd"`).
+  - `OAuth2ClientResponse` gains `managed_by`, `allowed_resources` and
+    `last_authorized_at`; `CreateOAuth2ClientRequest` / `UpdateOAuth2ClientRequest`
+    gain an optional `allowed_resources` (RFC 8707, T21.3).
+  - `ClientAuthMethod` gains `"none"`, and **`OAuth2ClientCreatedResponse.client_secret`
+    becomes optional** — absent, never empty, for a client registered as public
+    (contract 1.47, T21.2). Every confidential registration still carries it, but
+    code that read `created.client_secret.expose()` unconditionally must now
+    narrow it first.
+  - `OidcPolicy`, `SetOrgSettings` and `TenantSettingsOverride` gain the dynamic
+    registration and CIMD policy fields (`dynamic_registration`, `dcr_allowed_scopes`,
+    `dcr_allowed_redirect_hosts`, `dcr_max_clients`, `dcr_unused_client_ttl_days`,
+    `external_client_allowed_resources`, `cimd`).
+
+  `test/management.surface.generated.test.ts` is regenerated with it. No hand-written
+  operation changes signature or behaviour. The README's conformance statement now
+  names contract 1.49.
+
+## [1.0.0-beta15] - 2026-09-15
+
+### Added
+
+- Certificate CSR signing and passkey-first-login setup (contract 1.45) (#104)
+
+- **`certificates.signCsr` — issue an end-entity certificate from a caller-supplied
+  CSR (CONTRACT.md §27.5, contract 1.45).** `POST /api/v1/certificates/sign-csr`,
+  reached as `client.certificates.signCsr({ issuer_ca_id, csr_pem, cert_type,
+  validity_days, metadata })`. The management surface moves from 159 to 160
+  operations across 24 namespaces; `management-registry.json` and the generated
+  `test/management.surface.generated.test.ts` are re-vendored and regenerated
+  accordingly.
+
+  The response is the existing `Certificate` model, **not** `GeneratedCertificate`
+  — there is no private key to return (the caller already holds it, since it
+  never left their machine to make the CSR), and no field anywhere on this
+  exchange to leave empty. A model round-trip test in
+  `test/management/semantics.test.ts` asserts this at both the type level (a
+  `@ts-expect-error` read of `private_key_pem` on the returned value) and at
+  runtime, against the same fixture shape every other `certificates.*` operation
+  in this suite serves.
+
+- **`webauthnSetupRegisterStart`/`webauthnSetupRegisterFinish` — a passkey or
+  security key as an account's first factor, during forced login setup
+  (CONTRACT.md §24.1/§24.3/§25.2, contract 1.45).** The WebAuthn twin of
+  `mfaSetupEnroll`/`mfaSetupConfirm`: reached from the same `login()`
+  `mfa_setup_required` outcome, for a user who would rather enrol a passkey than
+  scan a TOTP QR code.
+
+  ```ts
+  case 'mfa_setup_required': {
+    const { challenge, stateToken } = await client.webauthnSetupRegisterStart(result.setupToken);
+    const credential = await runTheCeremony(challenge);
+    await client.webauthnSetupRegisterFinish(result.setupToken, stateToken, name, credential);
+    break; // completes the login, exactly as mfaSetupConfirm does
+  }
+  ```
+
+  `axiam-sdk/browser` gains the matching composed helper, `webauthnSetupRegister`,
+  running all three steps the same way `webauthnRegister` does for an
+  already-signed-in enrolment.
+
+  **They take no session, on either end.** The setup token in the request body
+  is the only credential either endpoint accepts: unlike `webauthnRegisterStart`/
+  `webauthnRegisterFinish`, which enrol a passkey for an *already signed-in*
+  user and require a session, these two neither require one nor attach one —
+  even when the calling `AxiamClient` happens to be authenticated for something
+  else. Under the Node persona this is enforced by routing the call through a
+  fresh, non-jar-backed agent rather than the session's own cookie-jar-wrapped
+  one, proved against a real HTTP server in
+  `test/node/webauthnSetupRegister.test.ts` (MSW's mocked transport cannot
+  observe this layer either way, so it cannot tell a real fix from no fix).
+
+  `webauthnSetupRegisterFinish` adopts the resulting session **exactly as
+  `mfaSetupConfirm` does** — including, for this cookie-jar SDK, capturing the
+  CSRF token so the very next state-changing call carries it. The two
+  completions of a forced enrolment leave the client in the same state, so a
+  caller's next request does not depend on which first factor the user
+  happened to choose.
+
+  Both `setup_token` and the returned `state_token` are `Sensitive<string>`.
+  Statuses: `401` for an invalid, expired, or wrong-purpose token (a session
+  bearer presented as a setup token included); `400` when the account already
+  has a factor — the same answer `mfaSetupEnroll` gives; `403` surfaces the
+  tenant's attestation policy message verbatim; a `503` from
+  `webauthnSetupRegisterStart` is **not** retried, matching
+  `webauthnRegisterStart`.
+
+### Changed
+
+- Bump codeql-action/init alongside analyze to v4.38.0
+
+- Bump codeql-action/analyze alongside init to v4.38.0
+
+- Bump github/codeql-action/init from 4.37.9 to 4.38.0
+
+- Bump github/codeql-action/analyze from 4.37.9 to 4.38.0
+
+- Bump the minor-patch group with 4 updates
+
+- Re-vendor CONTRACT.md at 1.46
+
+## [1.0.0-beta14] - 2026-09-13
+
+### Added
+
+- The revocation feed, vector C refusal, and the 503 retry pin (contract 1.44)
+
+- **CONTRACT.md §10.4 — an optional session-revocation feed poller (contract
+  1.44).** `RevocationFeed` from `@axiam/sdk/node`, set as
+  `VerifiableSession.revocationFeed`.
+
+  Local verification proves a token was issued and has not expired, never that
+  the session behind it still exists — so a logout or a role removal does not
+  reach a token already in a caller's hands until it expires, up to fifteen
+  minutes. A deployment that publishes `GET /oauth2/revocations` lets a guard
+  close that to **one poll interval**, for one cacheable fetch per interval
+  rather than the round trip per request gRPC introspection costs.
+
+  Nothing changes unless you set one. It never fetches on the request path
+  after the first call — `authenticateRequest` reads a cached set. And it never
+  fails closed: an unreachable feed, a non-`200`, an unparseable body or an
+  unknown `alg` all behave exactly as no feed at all, and specifically not as
+  an empty list, which would assert that nothing has been revoked. A token with
+  no `sid` is never matched against it, and there is no fallback to `jti`.
+
+- Two tests pinning CONTRACT.md §16 against the server's new answer for a
+  contended write — `503` with `Retry-After: 1` (AXIAM T-262). No behaviour
+  changed: §16.3 already retried `5xx` on an eligible operation and §16.1
+  already honoured `Retry-After` as a floor. Both halves are asserted through
+  the public surface with a wire count, because a retry policy nobody
+  exercises that way is the failure §16.7 exists for.
+
+### Changed
+
+- Re-vendor the final CONTRACT.md (1.44) from the axiam branch
+
+- **A malformed `mtls_endpoint_aliases` entry now throws instead of falling
+  back to the top-level endpoint** (CONTRACT.md §21.3.1 vector C, contract
+  1.43).
+
+  Falling back looks like the safe answer and is the dangerous one: the caller
+  asked to authenticate with a certificate, the operator published something
+  unusable, and sending the certificate to the front-channel host authenticates
+  nothing while appearing to work.
+
+  "Malformed" means not an absolute URL, or a scheme weaker than the top-level
+  endpoint the alias replaces — comparing like with like, so an `http` alias
+  for an `http` endpoint (a development deployment) is still accepted.
+
+  The refusal is an `AuthError`, not a `NetworkError`: nothing failed in
+  transport — the server published a document this client cannot use, the same
+  taxonomy as a document advertising no endpoint at all. It also matters
+  operationally, because §16.3 retries `NetworkError` and only `NetworkError`:
+  the other choice would have attempted a permanent, deterministic
+  misconfiguration three times and reported it as a transient one.
+
+  A client with no certificate configured never reads the member at all, so a
+  deployment whose aliases are malformed cannot break the clients that never
+  use them.
+
+- Re-vendored `CONTRACT.md` (1.44), `openapi.json` and
+  `management-registry.json` from `axiam`, and regenerated the §27 management
+  surface. The surface gains `SessionResponse`, whose T-254 replay fields were
+  published server-side at 1.0.0-beta13.
+
+### Fixed
+
+- Reattach OidcClient's doc block, and reach §10.4 from middleware
+
+## [1.0.0-beta13] - 2026-09-12
+
+### Added
+
+- Prefer RFC 8705 §5 mtls_endpoint_aliases on mTLS calls
+
+- **RFC 9449 §10.1 `dpop_jkt` on `oidcPar` (SDK contract 1.42).**
+  `OidcParParams` gains an optional `dpopJkt`, pushed to `POST /oauth2/par` as
+  `dpop_jkt` **only when set** and omitted entirely otherwise. Without it the
+  authorization code is bound to a DPoP key only at the token request, so a
+  stolen code can be redeemed with a different key; RFC 9449 §10 binds the code
+  to the key at authorization time instead.
+
+  **Caller-supplied.** This SDK implements the resource-server half of DPoP
+  (CONTRACT.md §21.7.2 proof verification) and ships no proof generator, so it
+  holds no DPoP key whose thumbprint it could compute. The already-exported
+  `jwkThumbprintS256` produces the RFC 7638 value this parameter wants.
+
+  `request_uri` was **not** added alongside it, and will not be: RFC 9126 §2.1
+  makes it the one authorization parameter a client MUST NOT push, and
+  `openapi.json` models it on the PAR request schema so the server can refuse
+  it. A client able to send one is a client able to chain one pushed request
+  into another.
+
+- **Two RFC 8414 §2 capability members on `OidcConfiguration` (SDK contract
+  1.42, CONTRACT.md §21.5).** `code_challenge_methods_supported` and
+  `token_endpoint_auth_signing_alg_values_supported`. AXIAM publishes
+  `["S256"]` and `["PS256", "ES256", "EdDSA"]` respectively.
+
+  Both are modelled **optional even though `openapi.json` marks them
+  required**, for the reason §21.5 states: RFC 8414 defines no default for
+  either, so absence is not a statement about what the OP accepts, and this
+  struct must keep parsing a discovery document from a non-AXIAM OP that
+  predates them. Both are informational — this SDK implements S256 and nothing
+  else and does not negotiate against either list.
+
+  `acr_values_supported`, `claims_parameter_supported` and
+  `request_parameter_supported` arrived in the same two revisions and were
+  deliberately **not** added: `OidcConfiguration` models a curated subset (it
+  does not model `dpop_signing_alg_values_supported` either), and widening it
+  further is new surface rather than a re-sync.
+
+- **Three §27 `privacy` operations, generated from the re-vendored registry:**
+  `privacy.listConsents` (`GET /api/v1/account/consents`),
+  `privacy.grantScopeConsent` (`POST /api/v1/account/consents/oidc-scopes`) and
+  `privacy.withdrawScopeConsent`
+  (`DELETE /api/v1/account/consents/oidc-scopes/{client_id}`), with the
+  `ConsentView`, `GrantScopeConsent`, `AuthnRequestParamsMode` and `OidcPolicy`
+  models they use.
+
+- **RFC 8705 §5 `mtls_endpoint_aliases` (SDK contract 1.40, CONTRACT.md §21.3
+  rule 2).** `OidcConfiguration` gains an optional `mtls_endpoint_aliases`
+  member (the new `MtlsEndpointAliases` type), and the §12 helpers now prefer
+  an alias over the top-level entry of the same name on any call made over
+  mutual TLS — that is, from a client constructed with a §6.1 `clientCert` /
+  `clientKey` identity. Five operations are affected: `oidcExchange`,
+  `oidcRefresh`, `loginClientCredentials`, `tokenExchange` and
+  `umaExchangeTicket` (all `token_endpoint`), plus `introspect`, `revoke`,
+  `deviceAuthorize` and `oidcPar`.
+
+  Every member of `MtlsEndpointAliases` is itself optional: AXIAM always
+  publishes all six, but RFC 8705 §5 permits an OP to alias fewer, and an
+  endpoint the object does not name falls back to the top-level entry rather
+  than failing the document.
+
+  Absence of the member means "this deployment terminates mutual TLS on the
+  issuer's own host", never "mTLS is unsupported": a client without the member
+  keeps using the conventional endpoints instead of failing. No alias is
+  synthesised for `authorization_endpoint`, `end_session_endpoint` or
+  `jwks_uri`, which are front-channel or public. `issuer` does not move, and
+  §12.4 rule 3 still compares a token's `iss` against it by exact string —
+  including for a token minted at an alias endpoint.
+
+  Additive and server-side: no deployment publishes `mtls_endpoint_aliases`
+  until an operator sets `AXIAM__AUTH__OAUTH2_MTLS_BASE_URL`, so every existing
+  client keeps working unchanged against every existing deployment. No public
+  API was removed or renamed.
+
+### Changed
+
+- Re-sync vendored contract to 1.42 (158 ops), add dpop_jkt and two RFC 8414 discovery members (#102)
+
+- Bump vitest to 5.0.0 alongside @vitest/coverage-v8
+
+- Bump @vitest/coverage-v8 to 5.0.0 alongside vitest
+
+- Bump @vitest/coverage-v8 from 4.1.11 to 5.0.0
+
+- Bump vitest from 4.1.11 to 5.0.0
+
+- Bump the minor-patch group with 3 updates
+
+- Re-vendored `CONTRACT.md`, `openapi.json` and `management-registry.json` from
+  `ilpanich/axiam` at **SDK contract 1.42** — two revisions, 1.40 → 1.42, not
+  one. The registry grew from 155 to **158 operations** across an unchanged 24
+  namespaces, and the generated §27 surface was regenerated accordingly.
+  `proto/` is byte-identical upstream, so no gRPC stub was regenerated.
+
+  Alongside the three `privacy` operations above, `openapi.json` gained the
+  `Address`, `AuthnRequestParamsMode`, `ConsentView`, `GrantScopeConsent`,
+  `OidcPolicy` and `UserInfoPostForm` schemas and extended twelve existing
+  ones. `Address`, `User`, `UpdateUser` and `UserInfoResponse` are not
+  reachable from any included operation, so nothing is generated from them.
+
+- **Server-side, not an SDK change: an AXIAM ID token no longer carries
+  `tenant_id`, `org_id` or `email`** (OIDC Core §5.4). This SDK's
+  `IdTokenClaims` types none of the three — they only ever arrived through the
+  §12.1-mandated open index signature — so no type, no validation rule and no
+  test changed. Code that read `idClaims.tenant_id` off an AXIAM token now
+  reads `undefined`; the tenant and organization identifiers are in the
+  **access-token** claims (`AxiamClaims.tenant_id` / `org_id`, via the §10
+  verifier) and in UserInfo, which still carries both. Tokens from a
+  non-AXIAM OP that does send them keep parsing unchanged.
+
+- **`client_secret_basic` is now advertised by the server, and this SDK still
+  does not use it** (CONTRACT.md §5 rule 3, amended in 1.41). The enum member
+  appears in the generated `ClientAuthMethod` because it is a registration
+  value a §27 management caller may legitimately set. That is not an
+  instruction to the client: `token_endpoint_auth_methods_supported` describes
+  the deployment, and the two methods carry the identical credential while the
+  `Authorization` header is the channel proxies and APM agents log by default.
+  The SDK's own token-endpoint authentication remains `client_secret_post`.
+
+- Corrected four stale counts in `README.md` (the §27 surface is 158
+  operations, not 147 — it had not been updated since before contract 1.31)
+  and the conformance line, which still read "contract 1.38".
+
+### Fixed
+
+- Fall back per endpoint when only some aliases are published
+
+## [1.0.0-beta12] - 2026-09-06
+
+### Changed
+
+- Make the §27 drift-check gate the release
+
+## [1.0.0-beta11] - 2026-09-04
+
+### Changed
+
+- Bump fast-uri
+
+### Fixed
+
+- Regenerate the §27 surface for the WebAuthn policy fields
+
+- Regenerated the §27 management surface from the vendored
+  `management-registry.json` / `openapi.json`. The v1.0.0-beta09 re-vendor
+  carried the WebAuthn user-verification policy — `SecuritySettings.webauthn`,
+  and `webauthn_user_verification` on the organization and tenant settings
+  requests — without regenerating the code emitted from it. This SDK's
+  drift-check runs on pull requests only, so beta09 and beta10 both published a
+  surface in which the new policy could be neither read nor set.
+  `node scripts/gen-management.mjs --check` is green again.
+
+## [1.0.0-beta10] - 2026-09-03
+
+### Changed
+
+- Maintenance release — no notable changes since v1.0.0-beta09.
+
+## [1.0.0-beta09] - 2026-09-02
+
+### Changed
+
+- Maintenance release — no notable changes since v1.0.0-beta08.
+
+## [1.0.0-beta08] - 2026-09-02
+
+### Added
+
+- The four public "Sign in with X" operations (CONTRACT §12.1, 1.38)
+
+- **Contract 1.38: the four public "Sign in with X" operations.** `ssoProviders`,
+  `ssoStartOauth2`, `ssoCompleteOauth2` and `ssoCompleteHandoff`, under the exact
+  CONTRACT.md §12.2 TypeScript names, on `OidcClient` beside the nine §12
+  operations that came before. §12.2 forbids splitting the vocabulary across two
+  hosts, so they go on `OidcClient` with the rest even though three of them need
+  no Node-only code at all — a second host would be the one thing the rule names.
+  New exported types `FederationProvider` and `FederationProviderList`, matching
+  the §12.1 SDK-type table. Upstream: ilpanich/axiam#398.
+
+  Four rules an implementation can satisfy by accident and break by accident, so
+  each is stated in the code and carries a test:
+
+  - **An empty provider list is a success** (§12.1 note 9). An unknown
+    organization, a known one with nothing configured, and a request naming no
+    workspace at all all answer `200 []`. `ssoProviders` returns each as an
+    ordinary result and synthesises no not-found: the endpoint is shaped so it
+    cannot enumerate organization or tenant slugs, and distinguishing the three
+    client-side would rebuild that oracle. It is therefore also the one
+    federation operation that does *not* refuse client-side when no workspace
+    resolves.
+  - **`protocol` selects the start operation** (§12.1 note 10), never
+    `providerKind`: `OidcConnect` → `ssoStart`, `OAuth2` → `ssoStartOauth2`,
+    `Saml` → the SAML login endpoint, which is not a §12 vocabulary operation.
+    `FederationProvider.protocol` is the wire string, with `PROTOCOL_OIDC_CONNECT`
+    / `PROTOCOL_OAUTH2` / `PROTOCOL_SAML` exported to compare against; a union
+    the SDK enforced would turn a value added server-side into a parse failure
+    for the whole list.
+  - **PKCE on the OAuth2 variant is server-side** (§12.1 note 11). Nothing here
+    computes a verifier or sends a challenge, and a test asserts the absence
+    rather than leaving it to be noticed.
+  - **A `400` from a start call is a configuration refusal** (§12.1 rule 12a,
+    new at 1.38): the deployment rejecting a `redirectUri` whose origin is
+    neither its own issuer nor listed in `AXIAM__AUTH__SSO_SPA_ORIGINS`. It
+    surfaces as `NetworkError` — §2's `400` row, the taxonomy's
+    configuration/programming-error member, distinct from the `AuthError` a
+    `401` gets — and is not retried.
+
+  `HANDOFF_QUERY_PARAM` (`axiam_handoff`) and `HANDOFF_CODE_TTL_SECS` (60) are
+  exported for callers driving the browser hop. A handoff `401` is terminal:
+  `ssoCompleteHandoff` makes exactly one wire call, so it cannot become a retry
+  by accident.
+
+- `test/node/oidcLoginProviders.test.ts` — 26 tests. The wire-shape half reads
+  the vendored `openapi.json` and asserts method, path, media type, the success
+  schema names, that the `ssoProviders` identifiers are declared `in: query`, and
+  that neither OAuth2 start schema carries PKCE material; the SDK half asserts
+  what actually reaches the wire matches. The rule half covers note 9 (all three
+  empty-list cases, plus that a workspace-less request is still *sent*), note 10
+  (all three dispatch branches, with a `Saml` fixture whose `providerKind` is
+  `google` so a kind-based dispatch fails), note 12 (terminal `401`, exactly one
+  request) and rule 12a (a `400` from either start operation is `NetworkError`
+  and unretried; a `401` from the same endpoint stays `AuthError`).
+
+### Changed
+
+- Bump @nestjs/core alongside common, widen peer range
+
+- Bump @nestjs/common alongside core, widen peer range
+
+- Bump codeql-action/init alongside analyze to 4.37.9
+
+- Bump codeql-action/analyze alongside init to 4.37.9
+
+- State contract 1.38 conformance and document the thirteen §12 operations
+
+- Regenerate the §27 surface from the re-vendored artifacts
+
+- Wire shape and the four load-bearing rules for the 1.38 operations
+
+- Re-vendor CONTRACT.md 1.38, openapi.json and management-registry.json
+
+- Bump @nestjs/core from 11.2.1 to 12.0.1
+
+- Bump @nestjs/common from 11.2.1 to 12.0.1
+
+- Bump the minor-patch group with 2 updates
+
+- Bump github/codeql-action/init from 4.37.8 to 4.37.9
+
+- Bump github/codeql-action/analyze from 4.37.8 to 4.37.9
+
+- Re-vendored `CONTRACT.md` (1.29 → 1.38), `openapi.json` and
+  `management-registry.json` byte-for-byte from `ilpanich/axiam@1c457f6`.
+  `proto/axiam/v1/` and `opaque-test-vectors.json` did not change upstream and
+  were re-verified as already identical rather than re-copied.
+  `management-registry.json` moves only its `spec_digest`: `operation_count`
+  stays at 155, so no §27 operation was added or removed.
+
+- Regenerated the §27 management surface (`npm run gen-management`), as §27.8
+  requires whenever the vendored artifacts move. `openapi.json` gains ten fields
+  on the federation-config schemas (`allow_tenant_inheritance`,
+  `allowed_issuer_tenants`, the two Apple identifiers, the OAuth2 endpoint trio,
+  `provider_kind`/`provider_slug`, `button_icon`, `scopes`/`effective_scopes`,
+  `has_bundled_mark`, `mints_client_secret`, `pkce_required`), so
+  `src/management/models.ts` and the generated surface test move with it. The
+  operation surface itself is unchanged.
+
+- The README's contract-conformance statement names **contract 1.38** and §12's
+  thirteen operations, and its §12 section documents the four new ones, the
+  protocol-dispatch table, the faithful `FederationProvider` shape, and the
+  rule-12a taxonomy mapping. The `/node` barrel test now asserts all thirteen
+  operations on `OidcClient` rather than nine.
+
+## [1.0.0-beta07] - 2026-08-30
+
+### Changed
+
+- Re-vendor AXIAM contract 1.36
+
+- **Documented contract 1.36, which this SDK already vendors.** `CONTRACT.md`,
+  `openapi.json` and `management-registry.json` were re-vendored from the
+  `sdks/` sources in [`ilpanich/axiam`](https://github.com/ilpanich/axiam)
+  (ilpanich/axiam#396) as part of the 1.0.0-beta06 release, whose note recorded
+  only "no notable changes". That understated it — the contract moved in that
+  release — and v1.0.0-beta06 is tagged, so the correction is recorded here
+  rather than by editing a released section. No SDK code changed with the
+  artifacts; the three entries below are why not.
+
+- **§5.2.2 rule 4 is new, and is an errata rather than a wire change.** The
+  server now scopes every *self-service* endpoint to `principal_tenant_id`
+  rather than to the acting tenant — `GET`/`PUT /users/{own id}`, that user's
+  `mfa-methods`, `POST /users/{own id}/reset-mfa`, `POST /auth/mfa/enroll` and
+  `/confirm`, `POST /auth/webauthn/register/start` and `/finish`, `POST
+  /users/me/resend-verification`, the §25 account export and erasure for the
+  caller's own id, and `GET /oauth2/userinfo`. Each of those answered `404` for
+  an organization-level caller that had switched to another tenant and now
+  succeeds. No request or response field is added, so nothing here is a wire
+  change.
+
+  The rule also forbids the obvious workaround: an SDK MUST NOT clear or rewrite
+  the acting-tenant header for those calls, because that header is what makes
+  the **administrative** form of the same endpoints reach the tenant the caller
+  asked for — stripping it would break reading another tenant's user in order to
+  fix reading your own. This SDK was audited for such a workaround and has none:
+  `X-Tenant-ID` is set in one axios request interceptor (`src/rest/session.ts`),
+  whose only exception is the §3A foreign-host check; no endpoint is
+  special-cased.
+
+- **Issue #395 is settled: the acting-tenant header is `X-Axiam-Tenant`**, and
+  §5.2, §5.2.2 and §5.2.3 now name it. The note under 1.0.0-beta05 below
+  recorded the contract and the server disagreeing on it; they no longer do, and
+  the name this SDK documents was already the server's. §5 rule 2's
+  *unconditional* `X-Tenant-ID` is deliberately **not** renamed, and the
+  contract now carries a note saying why it must not be: it names the client's
+  *constructor* tenant, so folding it into `X-Axiam-Tenant` would override the
+  acting tenant on every request an organization-level principal made after a
+  switch. Every existing §5 rule 2 send is left exactly as it was.
+
+- **`openapi.json` gained `/api/v1/auth/me`, `/api/v1/auth/password/change` and
+  `/api/v1/admin/bootstrap`.** All three were always served and always normative
+  in `CONTRACT.md`; they were missing from the generated document only because
+  their handlers were never listed in its `paths(…)`. `management-registry.json`
+  keeps `operation_count` at **155** — bootstrap is excluded on the §27.0
+  boundary — so §27 code generation is unaffected and the generated surface is
+  unchanged.
+
+## [1.0.0-beta06] - 2026-08-30
+
+### Changed
+
+- Maintenance release — no notable changes since v1.0.0-beta05.
+
+## [1.0.0-beta05] - 2026-08-30
+
+### Added
+
+- Contract 1.35, carrying 1.34 — service-account RBAC, principal tenant, tenant scope
+
+- **Contract 1.35, which carries contract 1.34 with it.** Nothing had been
+  fanned out since 1.33, so this re-vendors `CONTRACT.md`, `openapi.json` and
+  `management-registry.json` across both revisions. The registry still holds
+  155 operations across 24 namespaces — 1.35 changed only its `spec_digest` —
+  so the eight §27 operations below arrived with 1.34 and are new here
+  regardless.
+
+- **§27: service accounts as RBAC principals** (contract 1.34) — eight
+  generated operations: `roles.listServiceAccounts`,
+  `roles.assignToServiceAccount`, `roles.unassignFromServiceAccount`,
+  `groups.listServiceAccounts`, `groups.addServiceAccount`,
+  `groups.removeServiceAccount`, `serviceAccounts.listRoles` and
+  `serviceAccounts.listGroups`. `unassignFromServiceAccount` takes the same
+  optional `resourceId` query parameter as the user and group unassign calls:
+  omitting it removes the *global* grant specifically, not every grant of that
+  role.
+
+- **§5.2.2: the acting tenant and the principal tenant are different things**
+  (contract 1.34). `AxiamUserInfo` gains `tenantId`, `principalTenantId`,
+  `principalTenantSlug` and `orgId`. Absent means equal — a server older than
+  1.34 omits them and cannot switch the acting tenant either, so
+  `principalTenantId` falls back to `tenantId` rather than to `undefined`.
+  Read `orgId` from the session instead of resolving a slug through `GET
+  /api/v1/organizations`, which is `super-admin`-only.
+
+- **§5.2.3: tenant-scoped role assignments** (contract 1.35). `tenant_scope`
+  appears on the three assignment request bodies and on the assignment objects
+  the read paths return, and `AxiamUserInfo.reachableTenantIds` reports a
+  narrowed principal's reach. Omitted means unrestricted, which is what every
+  assignment written before the field existed already meant.
+
+### Changed
+
+- **One mapper for the login user object, instead of three.** `auth.ts`,
+  `accountLifecycle.ts` and `opaque.ts` each carried their own copy of the
+  wire-to-`AxiamUserInfo` mapping, two of them annotated "same reading as
+  `auth.ts`". Contract 1.34 turned that duplication into a hazard — five more
+  fields, and a copy forwarding three of them is a bug nothing catches — so
+  they now share `userInfoFromWire`.
+
+### Fixed
+
+- **A registration record for your own password was sealed against the wrong
+  tenant.** CONTRACT.md §5.2.2 rule 2: the caller's credentials live in the
+  tenant the *account* lives in, not whichever tenant the client is currently
+  pointed at, and a record sealed against the acting tenant is refused with
+  "the OPAQUE session was issued for a different tenant".
+
+  `opaqueEnrollment` had one behaviour for a function documented for three
+  callers — user creation, change-password and reset completion — and only the
+  first of those wants the acting tenant. It keeps that behaviour, which is
+  correct for creating *another* account; the new `opaqueEnrollmentForSelf`
+  seals against `principalTenantId` and is what a self-service password change
+  must call.
+
+  The two collapse to the same request for every ordinary principal, so this
+  only bit an organization-level account that had switched tenant — which is
+  why it survived every test written against an ordinary one.
+
+- **An empty `tenant_scope` is no longer put on the wire.** The server refuses
+  `[]` with `400`: an assignment reaching no tenant is a grant that does not
+  exist rather than a restriction. Optionality alone did not prevent it —
+  `JSON.stringify` drops `undefined` but keeps `[]`, and `[]` is exactly what
+  collecting into an array produces for "no tenants named". The three
+  assignment operations now normalise the body before sending.
+
+### Note on `X-Tenant-ID` vs `X-Axiam-Tenant`
+
+CONTRACT.md §5.2.2 and §5.2.3 name the acting-tenant header `X-Tenant-ID`, but
+the AXIAM server reads **`X-Axiam-Tenant`** (`ACTIVE_TENANT_HEADER` in
+`crates/axiam-api-rest/src/extractors/auth.rs`), as do its own tests, the admin
+UI, and the `openapi.json` vendored alongside that contract. The server never
+reads `X-Tenant-ID` at all.
+
+Documentation updated here for §5.2.3 rule 4 therefore names
+`X-Axiam-Tenant`, because a tenant switch sent under the other name is not
+refused — it is ignored, and the request quietly acts on the principal's own
+tenant instead. The discrepancy has been reported upstream; this SDK's existing
+`X-Tenant-ID` sends are left as they are, being out of scope for a contract
+re-vendor.
+
+## [1.0.0-beta04] - 2026-08-28
+
+### Changed
+
+- Re-vendor contract 1.33, pin CodeQL by digest, record why npm needs no second attestation
+
+- Vendor contract 1.32 — §5.2.1 organization-level sign-in
+
+- **CONTRACT 1.32 — signing in an organization-level principal (§5.2.1).**
+  `CONTRACT.md`, `openapi.json` and `management-registry.json` re-vendored from
+  the AXIAM server.
+
+  No code change was needed here, and that is the point worth recording. §5.2.1
+  adds two rules; this SDK already satisfied both:
+
+  - Naming no tenant resolves the organization's own reserved scope on
+    `/auth/login`, `/auth/opaque/login/start`, `/auth/opaque/register/start`
+    and `/auth/webauthn/authenticate/discoverable/start`. The reserved tenant's
+    slug is `organization`, so `new AxiamClient({ tenantSlug: 'organization',
+    orgSlug })` reaches it through the ordinary constructor.
+  - An SDK **MUST NOT** send an empty-string slug. `tenantSlug: ''` is refused
+    at construction (§5 — there is no default tenant), so no client exists from
+    which one could be serialized, and `buildLoginBody` omits an identifier it
+    was not given.
+
+  Both are now pinned by tests in `test/rest/orgContext.test.ts` rather than
+  left as a property of falsy checks. The rule has teeth: sending `""` breaks
+  organization-level sign-in on all four routes, and on
+  `/auth/opaque/login/start` it does so before the tenant's OPAQUE mode is
+  read — the `404` of §23.4 rule 10 never arrives, so the client has no
+  fallback and sign-in fails even where OPAQUE is disabled.
+
+## [1.0.0-beta02] - 2026-08-28
+
+### Added
+
+- Contract 1.31 — list search, the truthful resend, organization scope
+
+- Declarative manifests, plan/apply, and the §27.7 forms
+
+- Generate the §27 surface — 146 operations, 24 namespaces
+
+- **CONTRACT 1.31 — the AXIAM server PR #383 surface.** `CONTRACT.md`,
+  `openapi.json` and `management-registry.json` re-vendored, and the six things
+  they describe implemented.
+
+  - **`search` on all twenty paginated management operations** (§27.4 rule 4).
+    A third field on `PageRequest`, not a third argument on twenty generated
+    `list` methods:
+
+    ```ts
+    await client.users.list({ limit: 50, search: 'ada' });
+    await client.users.listAll({ limit: 200, search: 'ada' });
+    ```
+
+    Putting it on the page request is what makes `listAll` carry the term across
+    the whole walk. A walk that filtered its first request and not the rest
+    returns the matches followed by the unfiltered tail, which from the caller's
+    side looks like a server bug.
+
+    The server applies it **before** `offset`/`limit`, so `page.total` counts
+    matches rather than rows — which is what lets a pager built on it show a page
+    count belonging to the result set it is paging. `search: ''` and
+    `search: '   '` send no `search` parameter at all, so a box that fires on
+    every keystroke does not ask a different question once it is cleared. The
+    server's length cap is deliberately **not** copied here: a client-side
+    truncation the server would not have made is a silently different query.
+
+  - **`resendOwnVerification()`** (§25.1, §25.7) —
+    `POST /api/v1/users/me/resend-verification`, for a caller signed in to the
+    account it is asking about. It takes no address, and reports what happened:
+    resolves for enqueued, `ConflictError` for already-verified-or-ineligible,
+    `NetworkError` for the daily limit.
+
+    `resendVerification` still exists and still resolves whatever happens,
+    because it takes an address from an anonymous caller and a truthful answer
+    there is an enumeration oracle. Use the new one whenever there is a session —
+    a profile page wired to the old one reports success while doing nothing,
+    which is the defect the pair exists to separate. This SDK does not fall back
+    from one to the other in either direction (§25.7 rule 2).
+
+  - **`AxiamUserInfo.organizationLevel`** (§5.2) — on the `authenticated`
+    branch of `LoginResult`. Whether the account holds grants that apply in every
+    tenant of its organization. Check it before offering a tenant switch: an
+    ordinary tenant principal changing `X-Tenant-ID` gets a `403`. `false`
+    against a server older than contract 1.31, which is the safe reading of
+    absent.
+
+  - **`Tenant.kind` and `TenantKind`** (§27.11) — ordinary tenant or the
+    organization's own scope. Absent on a row written before that scope existed.
+    Read-only: it is not on `CreateTenantRequest` or `UpdateTenantRequest`.
+
+  - **`MtlsTrustAnchorResponse.trusted_anchors`** (§27.11) — how many CAs the
+    live listener now trusts, when it was reloaded. Absent is **not** zero: it
+    means there was no listener to ask, which is the case `restart_required:
+    true` already reports.
+
+  - **`Certificate.bound_service_account_id`** (§27.11) — the service account a
+    certificate authenticates, resolved for a whole page in one query by
+    `certificates.list()` and absent from `certificates.get()`. The SDK does not
+    issue a second request to fill it in there.
+
+### Changed
+
+- Re-vendor openapi.json and management-registry.json from axiam main (#84)
+
+- Re-vendor the contract artifacts: spec digest + §27.10 posture (#82)
+
+- README, examples, and the CI codegen gate
+
+- Re-vendor CONTRACT.md, openapi.json and the §27 registry
+
+- **Generated management enums are open.** Each is now a literal union with a
+  trailing `(string & {})` arm, so a value this SDK's copy of the spec does not
+  list reaches a caller as itself rather than being asserted out of existence
+  (§27.11 rule 1). The named arms still autocomplete and still narrow; what the
+  extra arm removes is the illusion that an exhaustive `switch` over them is
+  exhaustive — which is exactly the assumption the next `kind` or `status` the
+  server adds would break.
+
+### Fixed
+
+- The search doc linked to an internal symbol
+
+- **`scripts/gen-management.mjs` no longer drops a projected list element.** The
+  server answers `GET /api/v1/certificates` with `Certificate` plus one resolved
+  graph edge, expressed as an `allOf` of the `$ref` and an anonymous object.
+  Read as a whole, that composition has no name, so the registry carried a page
+  with no element type and the added field reached no model. The generator now
+  takes the base name through the `allOf` and folds the projection's added
+  fields onto the base interface as optional. (The registry-side half of this is
+  AXIAM PR #386.)
+
+## [1.0.0-alpha44] - 2026-08-25
+
+### Changed
+
+- Re-vendor openapi.json at alpha43 for tenant signing CAs (axiam#379)
+
+- Bump github/codeql-action from 4.37.7 to 4.37.8
+
+- Bump the minor-patch group with 5 updates
+
+- **Re-vendor `openapi.json` at 1.0.0-alpha43** for AXIAM server PR #379, which
+  adds **tenant signing CAs**: an intermediate CA created beneath one of the
+  organization's CAs and scoped to a single tenant, so a tenant's user, service
+  and device certificates chain through a CA that can be revoked, rotated or
+  handed to a different operator without redistributing the anchor the rest of
+  the estate trusts. `CONTRACT.md` and `proto/` were untouched by that PR and are
+  already current.
+
+  This is a specification re-sync with **no SDK surface change**. CA-certificate
+  administration is not part of the SDK contract — `CONTRACT.md` §1 maps no
+  method onto any `/api/v1/organizations/{org_id}/...` CA route — and this SDK
+  models none of the schemas below, so nothing here gains, loses, or changes a
+  symbol. The spec is vendored so what this SDK is written against keeps
+  describing the server it talks to.
+
+  What moved in the spec:
+
+  - **`POST /api/v1/organizations/{org_id}/tenants/{tenant_id}/signing-cas`**
+    (`generate_intermediate`) — create a tenant signing CA under an organization
+    CA, with AXIAM generating the key. Returns `GeneratedCaCertificate`; the
+    private key comes back exactly once, and not at all under `vault_pki`, where
+    it was born inside Vault and no API exports it.
+  - **`GET .../signing-cas`** (`list_intermediates`) — a paginated list of one
+    tenant's signing CAs.
+  - **`POST .../signing-cas/sign-csr`** (`sign_intermediate_csr`) — the BYOK
+    counterpart: sign a PKCS#10 CSR produced elsewhere, so the private key never
+    reaches AXIAM at all. The response carries no `private_key_pem` because there
+    is none to carry.
+  - **`CaCertificate` gains two nullable fields** — `tenant_id`, the tenant a CA
+    signs for, and `parent_ca_id`, the CA in the organization that signed it.
+    Both are absent for an organization-level CA, which is the trust anchor and
+    the only kind that existed before this change.
+  - **Four new schemas**: `CreateIntermediateCa`, `CreateIntermediateCaRequest`,
+    `SignIntermediateCsr` and `SignIntermediateCsrRequest`.
+
+  The spec version moves from **1.0.0-alpha40** to **1.0.0-alpha43**; the
+  intervening alpha41 and alpha42 releases changed nothing in it but that string.
+
+## [1.0.0-alpha43] - 2026-08-24
+
+### Added
+
+- Raise the Node floor to 22 and build the newest line (#77)
+
+- **Node 26 is now a CI-built runtime.** The gating matrix runs `build`,
+  `typecheck`, the full test suite and the CommonJS-require smoke tests on the
+  floor **and** on the newest release line, rather than on one line in the
+  middle of the range.
+
+- **`test/core/versionPolicy.test.ts`** — a conformance test for the support
+  policy itself. `engines.node`, the `@types/node` pin and the CI `node` matrix
+  are three independent declarations of the same fact and nothing compared
+  them. Before this test existed all three disagreed at once: `engines` said
+  `>=18`, `@types/node` was `^26`, and CI built only 22 — meaning `tsc`
+  validated the SDK against APIs no tested runtime provided, while the package
+  advertised installation on a runtime nothing built.
+
+- **`examples/version-compatibility.ts`** — a runnable startup preflight
+  reporting the running Node against the SDK's declared range, read out of the
+  SDK's own `package.json` rather than hardcoded. `engines` is advisory to npm
+  and ignored outright under `engine-strict=false`; this makes it assertable.
+
+- **`"./package.json"` in the package `exports` map**, so a consumer can read
+  the SDK's `engines` range at runtime. Additive — no existing subpath changes.
+
+- **A "Supported Node versions" section in the README**, stating the two claims
+  separately: built against the floor, runs on everything through the newest,
+  with a CI leg proving each.
+
+### Changed
+
+- **BREAKING (declared support): `engines.node` raised `>=18` → `>=22`.** Node
+  18 reached end of life on 2025-04-30 and Node 20 on 2026-04-30; 22 is the
+  oldest line still receiving security fixes. The SDK was never built or
+  tested on 18 — this corrects a declaration that had quietly stopped being
+  true, rather than dropping a runtime that was working.
+
+  No code change accompanies this: the bundle still targets ES2022. Installs
+  on Node 18 or 20 will now emit an `EBADENGINE` warning (or fail under
+  `engine-strict=true`).
+
+- **The gating CI matrix is floor + newest (22, 26)** rather than a single
+  line. Runtime-independent gates — bundle-grep, the token-leak and TLS-lint
+  greps, `npm audit`, the docs gate and the publish dry-run — run once on the
+  floor leg rather than twice, mirroring the Rust SDK's
+  `if: matrix.toolchain == 'stable'` pattern.
+
+## [1.0.0-alpha41] - 2026-08-24
+
+### Added
+
+- Fall back to /auth/login when mode is optional (§23.4 rule 7)
+
+### Changed
+
+- Re-vendor openapi.json for the vault_pki CA custodian (axiam#368)
+
+- Re-vendor CONTRACT.md 1.29 and openapi.json alpha40
+
+- **Re-vendor `openapi.json`** for AXIAM server PR #368, which adds a third CA
+  key custodian, `vault_pki`, having HashiCorp Vault's PKI secrets engine
+  generate the CA key inside Vault and sign on AXIAM's behalf. The spec version
+  is unchanged at **1.0.0-alpha40**; `CONTRACT.md` and `proto/` are untouched by
+  that PR and are already current.
+
+  This is a specification re-sync with **no SDK surface change**. CA-certificate
+  administration is not part of the SDK contract — `CONTRACT.md` §1 maps no
+  method onto `/api/v1/organizations/{org_id}/ca-certificates`, and this SDK
+  models none of the five schemas below — so nothing here gains, loses, or
+  changes a symbol. It is vendored so the spec this SDK is written against keeps
+  describing the server it talks to.
+
+  What moved in the spec:
+
+  - `CaCertificate` gains a nullable `chain_pem`: the issuers above
+    `public_cert_pem`, concatenated PEM, nearest issuer first and the root last.
+    Absent for a CA that is its own root, which is every CA AXIAM generated
+    before this. Present for a `vault_pki` CA, where it is the only copy of the
+    root certificate anything outside Vault will ever see.
+  - `CaCertificate.public_cert_pem` is now documented as the certificate that
+    *signs*, which under `vault_pki` custody is the intermediate rather than the
+    root beneath which it was created. The field itself is unchanged.
+  - `GeneratedCaCertificate.private_key_pem` is **no longer required**. Under
+    `vault_pki` custody the key is born inside Vault and no API exports it, so
+    there is nothing to return. The field is omitted rather than sent as `null`,
+    which keeps a client that has always read it working unchanged against every
+    custodian that does produce a key.
+  - `GeneratedCertificate` gains a nullable `chain_pem`, present only when the
+    signer returned one — the `vault_pki` case, where the root's certificate
+    exists nowhere a client could fetch it from.
+  - `CreateCaCertificate` and `CreateCaCertificateRequest` gain the optional
+    `issue_from_root`, `intermediate_subject` and `intermediate_validity_days`.
+    All three are `vault_pki`-only and ignored by every other custodian.
+    `issue_from_root` defaults to off: a root that signs only one intermediate
+    can have that intermediate revoked and replaced without redistributing the
+    trust anchor, and a root that signs leaves directly cannot.
+
+- **`loginOpaque()` falls back to `login()` under `opaque_mode: "optional"` —
+  CONTRACT.md §23.4 rule 7 (contract 1.29).** `POST /auth/opaque/login/start`
+  now returns the tenant's `mode`, and it is the only thing that decides what a
+  failed `KE2` means. Under `"optional"` the SDK retries the same credentials
+  over `POST /api/v1/auth/login` before reporting anything, and returns that
+  call's outcome — its success on success, its error on failure. Under
+  `"optional"` an account with no registration record is the ordinary case, not
+  an error: every account has none the moment an operator enables OPAQUE and
+  acquires one only as its password is next set, so the previous behaviour
+  locked out every user of a tenant mid-migration. Under `"required"`, with no
+  `mode` field at all (a server older than it), or on an unrecognised value, the
+  behaviour is unchanged and fails closed: `AuthError`, no `KE3` sent, and no
+  plaintext password on the wire. `404` handling — the tenant has OPAQUE
+  disabled, still a `NetworkError` — is untouched.
+
+  `mode` is **not** downgrade protection and is not documented as such: a
+  hostile server that wanted the plaintext could answer `404` and get the
+  fallback whatever it put there. `required` is what closes that, server-side.
+
+- Re-vendor `CONTRACT.md` at **1.29** and `openapi.json` at **1.0.0-alpha40**.
+
+### Fixed
+
+- Surface a pre-mapped 401 as AuthError, not NetworkError
+
+- **`login()`, `refresh()` and `logout()` reported a `401` as a `NetworkError`
+  instead of an `AuthError`.** All three post to a `SKIP_REFRESH` url, so the
+  response interceptor maps their `401` to an `AuthError` before `auth.ts`'s
+  own `catch` runs. That already-mapped error carries no axios `.response`, so
+  the status probe returned `undefined` and the final line wrapped it in
+  `NetworkError('<op> request failed')` with the `AuthError` as `cause` — a
+  wrong password was reported as a transport failure. `auth.ts` now rethrows an
+  already-mapped `AxiamError` unchanged.
+
+  The inconsistency this removes: `verifyMfa()` is *not* a `SKIP_REFRESH` url,
+  so the identical `401` already surfaced there as `AuthError`. The same bad
+  credential produced two different error classes depending on which endpoint
+  saw it, and the README's documented `catch` pattern — `if (err instanceof
+  AuthError) { /* re-authenticate */ }` — silently failed to match a failed
+  login.
+
+  It also compounded with the §23.4 rule 7 fallback: under `opaque_mode:
+  "optional"`, `loginOpaque()` delegates to `login()` and returns its outcome
+  verbatim, so a wrong password came back as a `NetworkError` — which the
+  README's own fallback guard (`if (!(err instanceof NetworkError)) throw err`)
+  treats as "OPAQUE unavailable, try the password path", running a second
+  plaintext login for a credential that had already been rejected.
+
+  **Behaviour change for callers** who catch `NetworkError` around `login()`,
+  `refresh()` or `logout()` to handle a rejected credential: that now arrives
+  as `AuthError`. Catching `AxiamError`, or the `AuthError`/`NetworkError`
+  split the README documents, was already correct and is unaffected. Transport
+  failures with no response are still `NetworkError` with the same messages.
+
+## [1.0.0-alpha40] - 2026-08-23
+
+### Changed
+
+- Maintenance release — no notable changes since v1.0.0-alpha39.
+
+## [1.0.0-alpha39] - 2026-08-23
+
+### Changed
+
+- Re-vendor CONTRACT.md for the §14.1 anchor repair
+- Re-vendor openapi.json at 1.0.0-alpha38
+
+## [1.0.0-alpha38] - 2026-08-22
+
+### Added
+
+- Add WebAuthn (§24), account lifecycle (§25) and PAR (§26)
+
+- **WebAuthn and passkeys — CONTRACT.md §24.** Six relying-party operations on
+  `AxiamClient` (`webauthnRegisterStart`/`Finish`,
+  `webauthnAuthenticateStart`/`Finish`, `webauthnDiscoverableStart`/`Finish`),
+  isomorphic so a Node service completing a ceremony a handset ran is the
+  relying party exactly as a browser is. A new `axiam-sdk/browser` subpath adds
+  the platform ceremony over `navigator.credentials` —
+  `webauthnRegister`/`webauthnLogin`/`webauthnDiscoverableLogin`, feature
+  detection, conditional mediation, and the five-outcome error classification.
+
+- **The §24.6a JSON bridge.** `webauthnRequestJson` hands the challenge to any
+  platform authenticator API in the JSON form all of them speak, and every
+  `*Finish` accepts the platform's response JSON string directly — so an Android
+  app passes `requestJson` into `CreatePublicKeyCredentialRequest` and the
+  response straight back, with nothing destructured in between.
+
+- **Account lifecycle and MFA enrolment — CONTRACT.md §25.** Nine operations:
+  `mfaEnroll`/`mfaConfirm`, `mfaSetupEnroll`/`mfaSetupConfirm`, `verifyEmail`,
+  `resendVerification`, `requestPasswordReset`, `confirmPasswordReset`,
+  `passwordResetContext`.
+
+- **Pushed authorization requests — CONTRACT.md §26 (RFC 9126).** `oidcPar` on
+  `OidcClient`, plus `pushed_authorization_request_endpoint` in the discovery
+  document type.
+
+- Examples: `webauthn-browser.ts`, `account-lifecycle.ts`, `par-login.ts`.
+
+### Changed
+
+- Use the shared authenticatorData fixture value
+
+- Re-vendor CONTRACT.md at 1.28
+
+- Re-vendor `CONTRACT.md`. Repairs §14.1's link to the `device_login` heading,
+  which dropped a hyphen the em dash leaves behind and so rendered as a link
+  that went nowhere; the same heading's other two links were already correct.
+  Link target only — no normative change and no contract-version bump.
+
+- Re-vendor `openapi.json` at **1.0.0-alpha38**. The server registered the four
+  GDPR data-subject endpoints (`POST /api/v1/account/export`,
+  `GET /api/v1/account/export/{token}`, `POST /api/v1/account/delete`,
+  `GET /api/v1/auth/account/delete/cancel`), taking the document to 181
+  operations across 121 paths. Purely additive, and no SDK surface changes with
+  it: nothing in this repo is generated from the spec, so the cross-repo
+  artifact-drift gate was the only thing reporting `STALE`.
+
+- **BREAKING — `login()` and `loginOpaque()` gain a third outcome.** A tenant
+  that requires MFA answers `403 mfa_setup_required` with a setup token for an
+  account that has none. That used to arrive as an `AuthzError`, which told the
+  caller they lacked permission to log in when what the server said was
+  recoverable and came with the means to recover. It is now
+  `{ status: 'mfa_setup_required', setupToken }` on `LoginResult`. Code that
+  matches the union exhaustively needs a new arm; code that does not is
+  unaffected, and a genuine authorization refusal is still an `AuthzError` —
+  the SDK matches on the body's discriminant, not on the status alone.
+
+- The SC#1 bundle-and-grep gate now covers the `axiam-sdk/browser` entry as well
+  as `/rest`, rather than trusting a browser-only subpath to stay clean.
+
+## [1.0.0-alpha37] - 2026-08-21
+
+### Changed
+
+- Maintenance release — no notable changes since v1.0.0-alpha34.
+
+## [1.0.0-alpha34] - 2026-08-21
+
+### Added
+
+- Replace SRP-6a with OPAQUE (RFC 9807) — CONTRACT 1.26
+
+### Changed
+
+- Link to the AXIAM platform documentation site
+
+- Re-vendor openapi.json at alpha32 (#69)
+
+- Document OpaqueEnrollment's fields for typedoc
+
+## [1.0.0-alpha33] - 2026-08-21
+
+### Added
+
+- `@axiam/opaque-wasm` as an **optional peer dependency**. An installation that
+  never calls the OPAQUE path is not made to carry a WebAssembly module; when it
+  is absent, `opaqueAvailable()` resolves to `false` and `loginOpaque` rejects
+  with a `NetworkError`, so the documented fallback to `login()` works unchanged.
+- `OpaqueUnavailableError`, a `NetworkError` subclass, so a caller can tell "not
+  installed" from "the tenant has it disabled" while a caller that only catches
+  `NetworkError` needs no special case.
+
+### Changed
+
+- Maintenance release — no notable changes since v1.0.0-alpha31.
+- **BREAKING: `loginSrp` becomes `loginOpaque`** — CONTRACT.md §23 is now
+  OPAQUE (RFC 9807), and SRP-6a is removed from AXIAM entirely.
+  - `loginSrp` → `loginOpaque`, `srpEnrollment` → `opaqueEnrollment`,
+    `srpAvailable` → `opaqueAvailable`.
+  - `opaqueEnrollment` takes only a password and is **async**: it performs a
+    `register/start` round trip, because OPAQUE's envelope is sealed under the
+    server's oblivious PRF and there is no offline computation that produces a
+    valid record. The SRP version took four arguments including the account's
+    canonical username, and passing an email produced a verifier no login could
+    satisfy — a mistake that is no longer expressible.
+  - `opaqueAvailable` is **async** and can genuinely return `false`.
+  - The enrolment object has two fields where `SrpEnrollment` had seven.
+- **The protocol is no longer implemented here.** `core/srp.ts` — 419 lines of
+  modular exponentiation, `PAD()` and transcript hashing — is replaced by a
+  loader around `@axiam/opaque-wasm`. §23.1 forbids an SDK from writing its own.
+- Re-vendor `openapi.json` at **1.0.0-alpha32**, matching the server. The
+  content was already byte-identical in every path and schema; only
+  `info.version` differed, which is what the cross-repo artifact-drift gate
+  reports as `STALE`.
+
+### Removed
+
+- The server-proof check. RFC 9807's AKE authenticates the server during the
+  handshake, so opening `KE2` *is* the proof it holds the record. §23.3 rule 6
+  had to mandate an `M2` comparison in capitals because skipping it kept only
+  half the protocol; there is now nothing to skip.
+- The group-restart loop. SRP had to guess a group before the server named one
+  and re-run the exchange if it guessed wrong; `KE1` does not depend on the KSF,
+  so a login is always one round trip.
+- `hash-wasm` is no longer needed for the login path.
+- `srp-test-vectors.json`, replaced by the smaller `opaque-test-vectors.json` —
+  see CONTRACT §23.7 for why the fixture shrank rather than being ported.
+
+### Fixed
+
+- `OpaqueUnavailableError` re-sets its prototype after `super()`. `NetworkError`
+  pins its own to survive ES5 transpilation, which silently breaks `instanceof`
+  for anything extending it — the subclass would have been indistinguishable
+  from its parent, defeating the distinction it exists to draw.
+
+## [1.0.0-alpha31] - 2026-08-20
+
+### Fixed
+
+- Release: `npm publish` is called with an explicit `--tag`, derived from the
+  version, so a prerelease publishes under `alpha` instead of being refused.
+  npm >= 11 rejects publishing a prerelease with no dist-tag, and the publish
+  job upgrades to npm@latest because Trusted Publishing needs >= 11.5.1 — so
+  1.0.0-alpha29 and 1.0.0-alpha30 both failed at the pre-publish dry run and
+  never reached the registry. The fix landed on main after the alpha30 tag was
+  cut, so this is the first release to carry it.
+
+## [1.0.0-alpha30] - 2026-08-20
+
+### Changed
+
+- Added publish environment to NPM publish flow
+
+## [1.0.0-alpha29] - 2026-08-20
+
+### Added
+
+- SRP-6a login client (CONTRACT §23) + npm Trusted Publishing (#66)
+
+## [1.0.0-alpha28] - 2026-08-19
+
+### Changed
+
+- Re-vendor openapi.json at 1.0.0-alpha27 (#65)
+- Bump github/codeql-action from 4.37.6 to 4.37.7
+- Bump the minor-patch group with 3 updates
+
+## [1.0.0-alpha27] - 2026-08-17
+
+### Added
+
+- §22.14 declarative reactor handler binding — reactorHandlers
+- **A CA bundle and client identity for the broker connection (§8b rules 2 and
+  3).** Both entry points take an optional `tls` option carrying `caCert` (a
+  privately issued broker certificate — the common in-cluster case, and why
+  rule 2 is a MUST) and `clientCert`/`clientKey` for mutual TLS. Rule 2 was
+  previously unimplementable here: there was no way to supply a CA at all.
+
+  The certificate/key pair is validated by the same §6.1 helper the REST and
+  gRPC transports use, so half an identity is refused before dialling on every
+  transport this SDK speaks rather than once per protocol.
+
+  There is still deliberately no verification-skip option under any name
+  (rule 4). `amqplib` would accept `rejectUnauthorized` in its socket options,
+  which is why the SDK constructs that object itself from the three fields
+  above rather than forwarding a caller-supplied one.
+
+- `assertAmqpsUrl()` and `buildAmqpConnectOptions()`, exported from
+  `axiam-sdk/amqp`, so a broker URL can be validated at config-load time rather
+  than at first connect.
+
+### Changed
+
+- Stop a doc comment tripping the TLS-bypass gate
+- Re-vendor CONTRACT.md 1.23 (§8b rules 7 and 8)
+- Re-vendor openapi.json for the SCIM provisioning-token endpoints
+- Re-vendor CONTRACT.md 1.22 from the server repo
+- Re-vendor `openapi.json` at 1.0.0-alpha27 — the copy was pinned at alpha26 and
+  failing the cross-repo artifact-drift gate
+
+### Fixed
+
+- Enforce §8b instead of documenting it
+- **§8b transport security is now enforced, not just documented.** `consume()`
+  and `reactorServe()` both called `amqp.connect(url)` with no scheme check and
+  no TLS options, while their own doc comments stated that the URL "must be
+  `amqps://` (§8b) — there is no verification-skip switch and no plaintext
+  fallback". A plaintext `amqp://` URL connected without complaint, so signed
+  but readable authorization requests, audit events and reactor replies could
+  cross the wire in cleartext with nothing in the SDK objecting.
+
+  Both entry points now validate the URL **before** opening a socket and refuse
+  every scheme but `amqps://` (rules 1 and 5). Documented-but-unenforced is the
+  worst of the three states: it reads as a guarantee at review time and behaves
+  as an invitation at runtime.
+
+## [1.0.0-alpha25] - 2026-08-16
+
+### Added
+
+- Ship the CONTRACT.md §22 reactor runtime (R2.5) (#60)
+- Extend §10.1 rule 9 for DPoP and implement §21.7.2 (#58)
+- SubjectTokenType is required (contract 1.13)
+- §15.7 — external-IdP subject tokens at the exchange (X4)
+- Wire §20.3 challenge emission into the §11 guards, plus the example pair (#52)
+- §20 — UMA 2.0 Protection API and ticket grant
+- Report clamped settings via §19 ConfigClampedEvent (contract 1.9)
+- §16 retry, §17 memo, §18 close(), §19 telemetry (D5) (#47)
+- Device grant, token exchange, logout helpers; re-vendor (D6)
+- **CONTRACT.md §22 — Reactors (AMQP extension actors).** New `src/amqp/reactor/`
+  and `reactorServe(config, handler)`, exported from `axiam-sdk/amqp`: it consumes
+  the server-declared per-reactor queue, verifies every event (§8 v2 —
+  `key_version`, MAC, ±300 s freshness, nonce seen-set) *before* user code sees
+  it, dispatches to a handler returning `allow()` / `deny()` / `mutate()`, then
+  signs and publishes the reply. Also ships the event registry with its
+  mutable-field allow-lists, the strictest-wins `failure_policy` composition
+  (§22.8), `AbortSignal`-driven §18 drain, and `examples/reactor/`.
+
+  **§8's HMAC now runs in both directions**, and TypeScript has *two* ways to
+  produce a MAC that never verifies with no other symptom. The first is shared
+  with every SDK: a reactor body signs `hmac_signature` as **`null`**, where
+  `AuthzRequest` and `AuditEventMessage` omit it. The second is ours alone —
+  `Date.prototype.toISOString()` always emits three fractional digits, while the
+  server's `chrono` emits none on a whole second, so a reply timestamped
+  `…T12:00:00.000Z` is re-serialized server-side as `…T12:00:00Z` and its
+  signature fails. `toChronoRfc3339()` is the fix; the runtime always uses it and
+  a test pins both branches. Both quirks are pinned by the server-generated
+  vectors in `testdata/reactor_v2_reference_vectors.json` — same master key,
+  tenant and derived subkey as the §8 fixture, so one loader serves both.
+
+  Three behaviours are structural rather than documented. The runtime **declares
+  no topology**: the `ReactorChannel` seam has no `assertQueue`/`assertExchange`/
+  `bindQueue` at all, and a test drives the whole of `reactorServe` against a
+  fake channel that *does* offer them, asserting none is ever called (§22.1). It
+  **fails closed on its own errors**: a throwing handler, an unparseable body or
+  an expired window publishes *nothing*, so the operator's `failure_policy`
+  decides rather than a synthesized `allow` from inside the library (§22.10
+  rule 2). And it **does not filter a patch** — one forbidden key rejects the
+  whole patch server-side, and pruning it would leave the author believing a
+  field was set (§22.4 rule 1).
+
+  §22.7's hot-path exclusion is honoured by absence: `authz.check`,
+  `authz.check_batch` and `token.introspect` appear in no constant, no registry
+  row and no example.
+
+  Not shipped, deliberately: a typed client for the §22.9 admin CRUD endpoints.
+  That subsection is informative, and §22.9 specifically warns against
+  re-deriving `PUT` merge semantics or the `failure_policy` re-derivation
+  client-side — so the right surface is the server's.
+
+- **CONTRACT.md §21.7.2 DPoP proof verification (RFC 9449).** New `src/node/dpop.ts`
+  implements all ten checks and returns the proof key's RFC 7638 thumbprint, so a
+  value passed on to rule 9 could only have come from a proof that verified.
+  `InMemoryJtiStore` covers check 8 for a single process; the `JtiStore` interface
+  is a required option, not an optional one, because there is no safe default
+  that skips replay tracking.
+
+  Two design points worth knowing: the algorithm is derived from the embedded
+  `jwk` and the header's `alg` is **never read** (the test runs the real
+  public-key-as-HMAC-secret forgery and asserts it verifies under HS256 before
+  asserting this module refuses it), and the `jti` is claimed **last**, after
+  every other check passes, so a stream of invalid proofs cannot burn `jti`
+  values out of the store and deny service to valid ones.
+
+- **CONTRACT.md §10.1 rule 9 extended for DPoP (contract 1.16/1.17).**
+  `CnfClaim` gains `jkt` (RFC 9449 §6.1), and a new `verifyTokenBinding(claims, proofs)` applies the full
+  ten-row rule against a certificate thumbprint, a verified DPoP key
+  thumbprint, or **both**. A `cnf` naming both methods is a **conjunction** —
+  satisfying only the more convenient one is not compliance — and a `cnf`
+  naming nothing this SDK can check (including an *empty* one) is refused
+  rather than read as unbound.
+
+  `verifyCertificateBinding` remains as the narrower entry point for transports that can only
+  produce a certificate, and now **refuses** a DPoP-bound or both-bound token
+  rather than ignoring the half it cannot check.
+
+  New example: `examples/sender-constrained-guard.ts`.
+
+  Not a breaking change: an unbound token is still accepted with no certificate
+  and no proof, asserted directly by the first test in the new group.
+
+- **CONTRACT.md §10.1 rule 9 — sender-constrained (certificate-bound) access tokens**
+  (contract 1.15, RFC 8705 §3 / RFC 7800). A token carrying `cnf` is **not** a bearer
+  token; accepting one without proving the caller holds the named key converts it back
+  into one.
+  - `AxiamClaims.cnf` / `CnfClaim` — the decoded confirmation claim.
+  - `verifyCertificateBinding(claims, presentedThumbprint)` — the rule. Throws on a
+    bound token with no certificate, with a *different* certificate, or with a `cnf`
+    naming a confirmation method this SDK cannot check.
+  - `certificateThumbprintS256(der)` — RFC 8705 §3.1 `x5t#S256`: base64url, **unpadded**,
+    SHA-256 over the DER certificate. Node only.
+
+  **Not a breaking change, and it does not make certificates mandatory.** An *unbound*
+  token is still accepted with or without a certificate — asserted directly, because the
+  likeliest wrong implementation of this rule is one that starts demanding certificates
+  from every caller.
+
+  `verifyAccessToken` deliberately does **not** apply rule 9: it has no transport to ask
+  for a peer certificate. Call `verifyCertificateBinding` with the thumbprint your TLS
+  layer gives you (`TLSSocket.getPeerCertificate().raw`), or a value a *trusted*
+  terminating proxy forwarded — never a caller-settable header, which would make the
+  mechanism decorative.
+
+  A `cnf` naming an unimplemented method is **rejected**, never read as "unconstrained":
+  read the other way, a sender-constrained token silently degrades to a bearer token the
+  day a newer AXIAM issues a confirmation this SDK predates.
+
+- **CONTRACT.md §21** — the FAPI 2.0 posture as an SDK sees it: client-registration
+  fields, RFC 9207 `iss` on authorization responses, and the discovery additions. Only
+  rule 9 above is normative for this SDK.
+- **§15.7 external-IdP subject tokens (X4).** `tokenExchange` can now exchange a token minted
+  by a trusted external IdP — a partner's Entra, Okta or Keycloak — for an AXIAM token scoped
+  to what the resolved AXIAM user may actually do. No new operation: the same method, plus
+  `TokenExchangeParams.subjectTokenType` and the exported `JWT_TOKEN_TYPE` constant alongside
+  the existing `ACCESS_TOKEN_TYPE`.
+
+  **The type is the caller's to name, never the SDK's to guess.** §15.7 forbids inspecting the
+  subject token to pick it, because which kind of token you hold is something only you know and
+  a wrong guess is the difference between a request that is refused and one that is silently
+  reinterpreted. A JWT-shaped subject token does **not** change what is sent, which is asserted
+  by a test. (This shipped with an `ACCESS_TOKEN_TYPE` default; contract 1.13 removed it — see
+  *Changed* above.)
+
+  Also asserted: an `actorToken` alongside an external subject token surfaces `invalid_request`
+  with no retry and no request rewriting; a refused refresh or ID token type is never retried as
+  a different type; the one normative description — `the subject token's issuer is not
+  configured for token exchange`, meaning *fix the AXIAM trust config* rather than *fix your
+  token* — reaches the caller intact; and nothing re-exchanges an exchanged token, which both
+  server paths refuse because exchanges do not compose.
+
+  New `examples/external-token-exchange.ts` runs the partner-token → AXIAM-token exchange at an
+  API gateway, including the one error branch worth telling apart.
+
+  `CONTRACT.md` and `openapi.json` re-synced from `ilpanich/axiam@main` (contract 1.10 → 1.12
+  plus §15.7), which also brings contract 1.11's lifted §12.6 deferral, contract 1.12's
+  `/oauth2/*` error rows dispatching on the `error` field at any status, and the
+  `TokenExchangeTrust` schemas behind the X4 provider configuration.
+
+- **§20.3 challenge emission wired into the §11 guards.** `RequireAccessOptions.umaChallenge`
+  takes a new `UmaChallenger` (realm, `asUri`, PAT, minter); on denial `requireAccess`
+  (Express) and `requireAccessHook` (Fastify) mint a permission ticket for the action just
+  refused and set `WWW-Authenticate: UMA` alongside the 403. `CheckOutcome`'s `denied` arm
+  gained an optional `challenge`.
+
+  **Opt-in by construction.** Emitting a challenge means minting a credential, so a guard
+  that did it by default would turn every unauthorized request into a Protection API call.
+  And **failure is not escalation**: if minting fails the denial still surfaces as a plain
+  403, because a caller who was going to be refused is refused either way and an outage must
+  not turn a deny into a 500 — still less into an allow.
+
+  The minter is taken as a *function* (`UmaTicketMinter`) rather than an `OidcClient`, because
+  the middleware core is shared with the browser build and that build has no Protection API
+  client. For the same reason the header is formatted inline rather than imported from the
+  Node-only `umaChallengeHeader` — it is four literals and a template, and the import would
+  drag the whole OIDC entry point into the browser bundle.
+
+- **A runnable UMA example pair**: [`examples/uma-resource-server.ts`](examples/uma-resource-server.ts)
+  mints a PAT, registers a resource and guards a route with the challenger;
+  [`examples/uma-client.ts`](examples/uma-client.ts) catches the refusal, parses the
+  challenge, **makes the trust decision about `asUri` explicitly**, exchanges the ticket and
+  retries with the RPT. The client half exists partly to show what §20.3 is protecting: the
+  `asUri` is chosen by the server you just failed against, and the example refuses to redeem
+  against a host that is not the issuer it already trusts.
+
+- **§20 UMA 2.0 — Protection API and ticket grant (contract 1.10).** New methods on
+  `OidcClient`: `umaRegisterResource` / `umaReadResource` / `umaUpdateResource` /
+  `umaDeleteResource` / `umaListResources`, `umaRequestTicket`, `umaExchangeTicket`, plus the
+  `WWW-Authenticate: UMA` challenge helpers `umaParseChallenge` and `umaChallengeHeader`.
+
+  Two behaviours are load-bearing rather than incidental, and both are asserted by counting
+  requests. **`umaExchangeTicket` never retries** — the one documented exception to the §16
+  retry policy, because a ticket is consumed before the request is evaluated, so a retry
+  cannot succeed and under concurrency is exactly the second redemption that
+  ilpanich/axiam#302's measured residual describes. And **`umaParseChallenge` does not
+  exchange the ticket it parsed**: the `as_uri` names an authorization server the client has
+  not chosen to trust.
+
+  The PAT is an explicit parameter on every Protection API call rather than being taken from
+  the client's session, because that session is usually a *user* session and a ticket binds
+  to a `client_id`.
+
+  `access_denied` on the ticket grant arrives as **403** (UMA 2.0 §3.3.6), unlike RFC 8628's,
+  which is a 400. It is mapped to `OAuthProtocolError` by a mapper local to this grant rather
+  than by widening §2's endpoint-qualified rows — an ordinary REST 403 still maps to
+  `AuthzError`, unchanged.
+
+- **§19 `ConfigClampedEvent` (contract 1.9).** A clamped setting is now reported at
+  construction rather than applied silently — currently the §17.1 rule 2 memo TTL. Clamping
+  is right; clamping *silently* is not: an operator who set a 60-second TTL believes their
+  staleness bound is 60 seconds, and it is five. Nothing is emitted for a value already
+  within its limit, or for the disabled default.
+- **§16 bounded read-only retry policy.** `checkAccess`/`can`/`batchCheck` now retry under
+  the contract's normative table: 3 attempts, 200 ms base, 5 s cap, **full jitter** over
+  `[0, backoff]`, `Retry-After` honored as a floor. Both non-deterministic inputs are
+  injectable, so the tests pin the jitter fraction to 0 and 1 to prove the range instead of
+  sleeping.
+- **§18 `AxiamClient.close()`**, idempotent, with use-after-close rejecting rather than
+  silently reconnecting. It does **not** log out and never reaches the network: the
+  server-side session outlives the client object, and a `close()` that logged out would end
+  every user's session on each deploy.
+- **§19 telemetry hooks** — `telemetryHook` on `AxiamClientOptions`, plus the `TelemetryEvent`
+  union and `examples/telemetry-hook.ts` with the OpenTelemetry mapping. A hook that throws
+  cannot fail the operation that fired it, and no event payload can carry a token. One
+  request pair per *attempt*, not per logical call, so callers can count real wire calls.
+- **§17 decision memo — opt-in, off by default.** `decisionMemoTtlMs`, clamped to 5000 ms.
+  Allows and denies memoized identically, failures never memoized, cleared on any credential
+  change. **Reads-your-own-writes is not guaranteed.**
+- `retryEnabled` (§16.6), default on. No knob for the attempt cap, base or delay cap: §16.1
+  forbids raising them.
+
+### Changed
+
+- Re-vendor CONTRACT.md 1.19, openapi.json and proto/ from main (R5.8) (#59)
+- Contract 1.15 — §10.1 rule 9, sender-constrained access tokens (#57)
+- Add the §20.7 required timeout assertion
+- Retire the "measured residual" justification (contract 1.14)
+- Re-sync to contract 1.14 (#302 closed)
+- Bump the minor-patch group with 3 updates
+- Bump github/codeql-action from 4.37.4 to 4.37.6
+- **Re-sync vendored `CONTRACT.md`, `openapi.json` and `proto/` to contract 1.19**
+  (upstream **R5.8**). The vendored copies had been pinned at the 1.15-era artifacts and
+  drifted three contract revisions behind `ilpanich/axiam@main`. All five files are now
+  byte-identical to upstream, and `proto/axiam/v1/reactor.proto` (contract 1.18 §22, the
+  AMQP reactor protocol) is vendored here for the first time.
+
+- **CONTRACT.md §11.2 rule 9 — the gRPC decision reads `reason`, not `deny_reason`**
+  (**SDK-Q10**, contract 1.19). `CheckAccessResponse` gains `reason` (proto field 4,
+  explicit presence) carrying the same string the REST decision body has always called
+  `reason`; `deny_reason` (field 2) is now `[deprecated = true]` and is removed at AXIAM
+  2.0. The mirrored `WireCheckAccessResponse` gains an optional `reason` and marks
+  `deny_reason` `@deprecated`, and the decision mapper reads `reason`, falling back to
+  `deny_reason` only when `reason` is **absent on a refusal** — which is exactly what a
+  pre-SDK-Q10 server sends. `AccessDecision` still exposes one `reason`, so this is not a
+  breaking change for callers and nothing changes on the wire today.
+
+  **Known residual, deliberately not taken here:** contract 1.19 also relaxes gRPC
+  `subject_id` to optional (an *empty* value meaning "the subject in the verified token").
+  `CheckAccessRequest.subjectId` stays required — relaxing it is a breaking signature move
+  and belongs in its own change. The type's doc comment now records the gap.
+- **Re-sync vendored `CONTRACT.md` to contract 1.14** — documentation only, no code change.
+  §20.2 rule 6 (a permission ticket MUST NOT be retried) cited a "measured residual
+  (ilpanich/axiam#302) … roughly 1 in 640" as its second reason. That residual is closed: the
+  server now decides the ticket race with a transaction its storage engine arbitrates plus a
+  redemption nonce read back after the commit. **The rule is unchanged, and this SDK's
+  behaviour is unchanged** — `uma_exchange_ticket` stays excluded from every automatic retry
+  path. What changed is the reasoning: the first reason (a spent ticket makes the retry
+  useless) always stood alone, and the second now rests on what an SDK can actually know —
+  it is talking to a server whose storage engine it cannot attest, and the guarantee is
+  conditional on that engine being persistent.
+- **BREAKING (contract 1.13): `TokenExchangeParams.subjectTokenType` is now required.** It
+  shipped optional, defaulting to `ACCESS_TOKEN_TYPE` when omitted — which satisfied §15.7's
+  "never inspect the subject token" while leaving the rule it serves unenforced: an optional
+  field with a default *is* a default the SDK applies whenever the caller says nothing. §15.1
+  now makes it required.
+
+  TypeScript is one of the languages that can refuse the call outright, so it does: omitting
+  the field is a **compile error**, not a runtime one. A `@ts-expect-error` test asserts that,
+  so reintroducing the default would fail the build rather than pass silently.
+
+  **Migration** — one line, naming what you were previously getting by silence:
+
+  ```ts
+  const exchanged = await oidc.tokenExchange({
+    subjectToken: new Sensitive(userToken),
+    subjectTokenType: ACCESS_TOKEN_TYPE, // <- add this
+    scopes: ['orders:read'],
+  });
+  ```
+
+  This closes a gap rather than opening one: `subject_token_type` has always been required *on
+  the wire*, and the SDK was covering for that with a constant which stopped being the only
+  legal value when X4 landed. For a caller who actually held a refresh token, the old default
+  traded the `invalid_request` that names the type for a generic `invalid_grant`.
+- Re-vendored `CONTRACT.md` at **1.8.1**. `openapi.json` unchanged — docs-only contract revs.
+- `RetryOptions.maxAttempts` removed: §16.1 fixes the cap at 3 and forbids raising it.
+  `withRetry`'s callback now receives the attempt number.
+
+### Fixed
+
+- Re-export the §20 types from the middleware entry point
+- Re-export the §12.7/§14/§15 types from the middleware entry point
+- **`withRetry` was never called by any production path.** It was exported, unit-tested and
+  green, but `checkAccess` did not route through it — so this SDK performed **no read-only
+  retries at all** while appearing to, leaving §11.2 rule 5 silently unmet. A tested helper
+  nobody calls is worse than an absent one: the passing tests are what stop anyone looking.
+  The §16 conformance tests now assert through the public `checkAccess` surface.
+- **`Retry-After` replaced the backoff instead of flooring it.** `retryAfterMs ?? backoff(n)`
+  meant a `Retry-After: 0` retried immediately, defeating the policy — exactly what §16.1's
+  "floor, never a ceiling" forbids. Now `Math.max(jittered, retryAfterMs)`.
+- **Partial jitter replaced with full jitter.** The old `base + 0–20%` keeps every client's
+  retries clustered around the same instant, which causes the thundering herd retries are
+  meant to prevent.
+- The §19 request pair now carries the real attempt number. An earlier draft emitted every
+  pair as attempt 1, which would have made a retried call indistinguishable from a single
+  slow one — caught by the conformance test asserting `[1, 2]`.
+
+## [1.0.0-alpha24] - 2026-08-04
+
+### Added
+
+- Enforce the full CONTRACT §10.1 local-verification set
+- **CONTRACT §10.1 rule-8 regression tests (§15.3.1).** Rule 8 — "the decision is
+  about the caller's credential and no other" — was enforced only by inspection
+  here. SEC-085 satisfied rules 1–7 and was still an authentication bypass, so
+  the absence of a guardrail is the condition that let it survive three reviews.
+
+  This SDK is structurally safe from that shape: `VerifiableSession` carries a
+  verifier and a tenant, **not a logged-in session**, so there is no second
+  credential in scope for the guard to substitute. The new tests pin that
+  property rather than assume it — one asserts the verifier is invoked with the
+  caller's token and nothing else, the other asserts the guard's input exposes
+  no `session`/`client`/`refresh`/`accessToken` surface. They fail if anyone
+  ever threads a stateful client session into the guard's inputs, which is
+  precisely how the PHP bug became reachable.
+- **Conditional issuer/audience expectations (CONTRACT §10.1 rules 5 and 6).**
+  New `AxiamClientOptions.expectedIssuer` and
+  `AxiamClientOptions.expectedAudience`, surfaced on `SharedSession` /
+  `VerifiableSession` and consumed by the §10 guard. Both are optional and
+  unset by default — the rules are explicitly conditional on configuration, and
+  the SDK never hardcodes an expected issuer. When set, a mismatch is rejected,
+  and the corresponding claim additionally becomes required (an absent `aud`
+  does not "contain" the expected audience).
+- **`Verifier.verifySignatureOnlyUnchecked(token)`** — the §10.1 raw
+  signature-only primitive, for integrators deliberately implementing their own
+  policy. No `exp` requirement, no `nbf`/`tenant_id`/`iss`/`aud` check. The
+  `Unchecked` suffix is the contract's reference spelling, chosen so the
+  omission is obvious at the call site. It is not, and must not become, the
+  documented guard entry point.
+- `assertTenantClaim` and `CLOCK_SKEW_LEEWAY_SEC` are exported from
+  `axiam-sdk/node` and `axiam-sdk/middleware`, so a consumer writing their own
+  guard on top of `Verifier` applies the same policy the middleware does.
+- `test/node/localVerificationSet.test.ts` — the complete §10.1 required
+  negative-test set, asserted against **both** local-verification entry points
+  (the verifier and the middleware guard): expired; no `exp`; non-numeric
+  `exp`; future `nbf`; different tenant; no `tenant_id`; no configured tenant;
+  `alg: none`; HS-signed token bearing the EdDSA `kid`; foreign signature; plus
+  issuer-mismatch and audience-mismatch cases for the newly-configurable
+  expectations, and proof that the raw primitive waves through exactly what the
+  guard rejects.
+- CONTRACT.md in this repository is re-synced with the upstream
+  `ilpanich/axiam` copy: §10.1 is vendored verbatim.
+- Add `verifyWebhook` webhook-signature verifier (CONTRACT.md §13, T-145), reachable from the
+  Node-only `axiam-sdk/node` subpath. Verifies the server's Stripe-style signed-timestamp
+  `X-Axiam-Signature: t=<unix>,v1=<hex>` scheme — HMAC-SHA256 over `<timestamp>.<raw_body>`,
+  compared in **constant time** (`crypto.timingSafeEqual` over the decoded MAC bytes, never `==`
+  on hex strings), with a two-sided 300s-default freshness window (rejects a future-dated `t=` as
+  well as a stale one) and a `now` injection seam for tests. Accepts the raw body as
+  `Buffer`/`Uint8Array`/string only — re-serializing parsed JSON before verifying breaks the MAC,
+  documented in the README alongside the Express `express.raw()`/`verify`-callback workaround.
+  Failures raise a typed `WebhookVerifyError` with a stable `reason` code that never surfaces the
+  expected or computed signature.
+
+### Changed
+
+- Bump fast-uri
+- Device (mTLS) tokens now carry aud=axiam:m2m (#44)
+- Service accounts can use login_client_credentials (#43)
+- Bump github/codeql-action from 4 to 4.37.4
+- Bump amqplib from 0.10.9 to 2.0.1
+- Bump the minor-patch group with 4 updates
+- Pin CONTRACT §10.1 rule 8 against regression (§15.3.1) (#39)
+- Bump postcss from 8.5.17 to 8.5.25
+- Bump find-my-way from 9.6.0 to 9.7.0
+
+### Fixed
+
+- Diagnose the slug-vs-UUID tenant comparand (§13.4 observation 6) (#36)
+- Repin amqplib to real 0.10.x + add verifyWebhook helper (SEC-078, T-145)
+- **Slug-vs-UUID tenant comparand now diagnoses itself (§13.4 observation 6).**
+  AXIAM access tokens carry the tenant **UUID** in `tenant_id`, but this SDK's
+  client is commonly configured with a tenant **slug**. A guard handed that slug
+  rejects 100% of traffic — fail-closed and safe, but it presents as "every token
+  is invalid" with nothing pointing at the cause. `assertTenantClaim` now emits a
+  single `console.warn` naming the real problem. It fires **once per process**,
+  only when the configured value is not UUID-shaped while the claim is, and
+  strictly *after* the rejection is decided — so it cannot be used as a log-flood
+  lever and does not alter the verification outcome. A genuine cross-tenant
+  rejection (UUID vs UUID) stays silent.
+- Repin `amqplib` from the mis-pinned `^2.0.1` to `^0.10.9`, matching the vendored
+  `@types/amqplib` range (SEC-078, an SDK-Q06 regression). Add a `npm ls amqplib` CI gate so a
+  future pin that can't resolve, or that drifts out of the range the bundled types are built
+  against, fails the build instead of surfacing later as a silent install or type mismatch.
+
+### Security — BREAKING
+
+- **The §10 route guard now applies the complete CONTRACT §10.1 "minimum
+  local-verification set".** §10.1 is a new normative section written because
+  `SEC-071` and `SEC-080` were the same defect found independently in two SDKs:
+  each verified a *different subset* of the token, and each subset looked
+  complete in isolation. This SDK was audited against the stated complete set
+  for the first time; two rules were missing and are now enforced. Every §10 /
+  §11 surface routes through one call — `axiamMiddleware` (Express),
+  `axiamPlugin` (Fastify), `requireAuth`/`requireAccess`/`requireRole`, and the
+  NestJS `AxiamGuard` all consume the identity `authenticateRequest` injects,
+  and none verifies anything itself.
+
+  This **tightens acceptance** and is therefore breaking, as §10.1 requires it
+  to be called out. A token minted by the AXIAM server is unaffected — it
+  always carries `exp` and never a future `nbf` — but a guard fed tokens from
+  another signer sharing the organization JWKS may start rejecting what it used
+  to accept. That is the intent.
+
+  - **`exp` is now REQUIRED (rule 2).** `jose` validates `exp` only
+    `if (payload.exp !== undefined)`, so a token minted with **no** `exp` at
+    all — a permanent credential — previously verified. `requiredClaims:
+    ['exp']` is now passed explicitly. (A present-but-non-numeric `exp` was
+    already rejected by `jose`'s own type check.) This is precisely the
+    SEC-080 shape.
+  - **Clock skew is now a named, bounded constant (rule 7).** `jose` defaults
+    `clockTolerance` to `0`; the guard now passes the exported
+    `CLOCK_SKEW_LEEWAY_SEC` at the contract's RECOMMENDED 60 seconds, applied
+    to both `exp` and `nbf`. It is deliberately not operator-configurable, so
+    it can never be widened to an unbounded value. Note this makes the `exp`
+    check 60 s *more* tolerant than before.
+  - `Verifier.verifyAccessToken(token)` gains a **required second argument**,
+    `AccessTokenExpectations`, carrying the tenant it must assert (rule 4) plus
+    the optional issuer/audience expectations. Callers that invoked the
+    verifier directly must pass it; consumers using `axiamMiddleware` /
+    `axiamPlugin` are unaffected, since the middleware builds it from the
+    session.
+  - `nbf` (rule 3), the `alg`-pinned signature check (rule 1) and the
+    `tenant_id` assertion (rule 4) were already correct and are unchanged:
+    `jose` honours `nbf` when present; `algorithms: ['EdDSA']` is checked
+    against the JWS protected header *before* `jose` invokes the remote key-set
+    resolver, so `alg: none` and an HS-signed token bearing an EdDSA `kid` are
+    both rejected without a key lookup; and `authenticateRequest` already
+    compared `tenant_id` against the session's configured tenant. Rule 4 is now
+    additionally enforced inside `verifyAccessToken` itself, so a
+    caller-supplied `Verifier` implementation cannot be the only thing standing
+    between a cross-tenant token and the application.
+
+## [1.0.0-alpha23] - 2026-08-02
+
+### Fixed
+
+- Make customCa and §6.1 client certificates usable in the Node persona
+
+## [1.0.0-alpha21] - 2026-07-30
+
+### Added
+
+- Add OIDC/SSO relying-party helpers (CONTRACT §12)
+
+### Changed
+
+- Re-sync vendored CONTRACT.md to contract 1.6
+- Add regression coverage for CSRF resync after refresh (05b9b8f)
+- Bump bufbuild/buf-action from 1.4.0 to 1.5.0
+- Bump coverallsapp/github-action from 2.3.6 to 2.3.8
+- Bump jsdom from 29.1.1 to 30.0.0
+- Bump the minor-patch group with 2 updates
+- Re-sync vendored CONTRACT.md to contract 1.5
+
+### Fixed
+
+- Resync CSRF token after refresh, both explicit and reactive (H8 SDK bench)
+
+## [1.0.0-alpha19] - 2026-07-25
+
+### Changed
+
+- Bump fast-uri
+
+## [1.0.0-alpha18] - 2026-07-24
+
+### Changed
+
+- Bump github/codeql-action from 3 to 4 (#19)
+- Bump actions/checkout from 7.0.0 to 7.0.1 (#20)
+- Bump actions/setup-node from 6.4.0 to 7.0.0 (#21)
+- Ratchet vitest thresholds toward current levels (#23)
+
+## [1.0.0-alpha16] - 2026-07-22
+
+### Added
+
+- Add UserInfoService/GetUserInfo (getUserInfo, CONTRACT §1.1)
+
+### Changed
+
+- Vendor userinfo.proto + CONTRACT 1.3 (§1.1 gRPC userinfo)
+
+## [1.0.0-alpha15] - 2026-07-21
+
+### Changed
+
+- Maintenance release — no notable changes since v1.0.0-alpha12.
+
+## [1.0.0-alpha12] - 2026-07-19
+
+### Fixed
+
+- Supply organization context for login/refresh (CONTRACT §5.1) (#18)
+
+## [1.0.0-alpha11] - 2026-07-18
+
+### Changed
+
+- Maintenance release — no notable changes since v1.0.0-alpha10.
+
+## [1.0.0-alpha10] - 2026-07-18
+
+### Added
+
+- OIDC / SSO relying-party helpers (CONTRACT.md §12, adopting contract 1.4): nine new
+  operations on a Node-only `OidcClient` reachable from the `axiam-sdk/node` subpath —
+  `oidcDiscover`, `oidcBegin`, `oidcExchange`, `oidcRefresh`, `loginClientCredentials`,
+  `introspect`, `revoke`, `ssoStart`, `ssoComplete` — giving a backend everything it needs
+  to offer "Login with AXIAM" (authorization code + PKCE), to authenticate itself as a
+  service account, to introspect/revoke tokens, and to drive the server's upstream-IdP
+  federation endpoints. PKCE is **S256-only** (`plain` is not implemented) with the RFC 7636
+  Appendix B vector covered by a unit test; `state`/`nonce` are 256-bit CSPRNG values; the
+  discovery document is cached per normalized origin (TTL ≥ 5 min) with concurrent callers
+  sharing a single in-flight fetch. Every returned `id_token` is validated in full before an
+  `OidcTokenSet` is constructed (`EdDSA` only, `kid`-selected Ed25519 signature against the
+  document's `jwks_uri`, exact-match `iss`, `aud`/`azp`, ≤ 60 s clock skew, constant-time
+  `nonce`), and any failure raises `AuthError` with a stable `reason` code while discarding
+  the whole token set. `oidcRefresh` runs under the existing single-flight refresh guard
+  (CONTRACT.md §9) and stays distinct from the cookie-session `refresh()`; `ssoComplete`
+  goes through the §4 cookie jar, since its session arrives as `Set-Cookie`. They reuse the
+  existing transport, error mapper, `Sensitive<T>` wrapper and JWKS verifier — no new runtime
+  dependency (`node:crypto` covers CSPRNG, SHA-256 and base64url).
+- `OidcStateStore` interface plus an opt-in `MemoryOidcStateStore` reference implementation
+  (10-minute TTL, single-use `consume(state)`, mirroring the server's `federation_login_state`
+  semantics). The core operations remain fully usable without one: `oidcBegin`/`oidcExchange`
+  never store `state`, `nonce` or `code_verifier` inside the SDK — the caller owns that state
+  (CONTRACT.md §12.3 rule 1).
+- "Login with AXIAM" framework glue on the `axiam-sdk/middleware` subpath:
+  `oidcLoginHandlers(options)` returning `{ login, callback }` Express handlers, and
+  `oidcLoginPlugin(options)` registering the same two routes in Fastify. Both are thin
+  adapters over one shared `beginOidcLogin`/`completeOidcLogin` core, with identical failure
+  mapping (400 malformed callback, 401 authentication failure, 503 AXIAM unreachable — never
+  a silent success).
+- `OAuthProtocolError`, an `AuthError` **sub-type** carrying `error` and `errorDescription`
+  with `message` set to `"<error>: <error_description>"`, raised for an `OAuth2ErrorResponse`
+  body from `/oauth2/*` (a `400` from the token endpoint, or a `401` from
+  introspect/revoke). Both endpoint-qualified rows are transcribed in the central error
+  mapper. `instanceof AuthError` keeps matching it, so this is additive, not breaking. A
+  `401` from `/oauth2/*` no longer enters the single-flight refresh guard — a
+  client-credential failure is not a session expiry (CONTRACT.md §12.3 rule 3).
+- The CONTRACT.md §2 error taxonomy (`AxiamError`, `AuthError`, `AuthzError`,
+  `NetworkError`, `OAuthProtocolError`) and the `Sensitive<T>` wrapper are now exported from
+  the root/`axiam-sdk/rest` entry, so `catch (e) { e instanceof AuthError }` works without
+  reaching into a subpath (previously they were reachable only via `axiam-sdk/amqp`).
+- `createJwksVerifier(jwksUri)` alongside the existing `createVerifier(baseUrl)`, and a
+  `verifyIdToken` method on the verifier both share: one verifier, one cached remote key set,
+  serving both the §10 middleware's access-token path and the §12.4 ID-token path.
+- Runnable `examples/express-oidc-login.ts` and a README section covering all nine
+  operations, the caller-owns-state contract, and the ID-token checklist.
+
+### Changed
+
+- Add organization context to client options (login + refresh) (#17)
+- Vendored `CONTRACT.md` re-synced to contract version 1.4 (§12 OIDC/SSO relying-party
+  helpers, the `OAuthProtocolError` taxonomy sub-type, and the two endpoint-qualified
+  HTTP-status rows). Conformance statement updated to §1–§12.
+
+- gRPC `getUserInfo` operation (CONTRACT.md §1.1, adopting contract 1.3): new
+  `UserInfoGrpcClient.getUserInfo()` on the `axiam-sdk/grpc` subpath, calling
+  `axiam.v1.UserInfoService/GetUserInfo` (vendored `proto/axiam/v1/userinfo.proto`).
+  It is the low-latency, gRPC-only counterpart of the server's REST
+  `/oauth2/userinfo` endpoint (no REST form in the SDK vocabulary) and returns a
+  typed `UserInfo { sub, tenantId, orgId, email?, preferredUsername? }` — `email`
+  is populated only with the `email` scope and `preferredUsername` only with the
+  `profile` scope, matching the server's OIDC scope gating. Reuses the existing
+  gRPC channel, auth + `x-tenant-id` metadata interceptor, and single-flight
+  refresh guard (CONTRACT.md §9): a `UNAUTHENTICATED` response drives exactly one
+  refresh + one retry, and calling it with no token raises `AuthError` client-side
+  without a wire call (CONTRACT.md §1.1). The vendored `CONTRACT.md` is updated to
+  contract version 1.3.
+- Client-certificate / mutual-TLS (mTLS) support (CONTRACT.md §6.1): new optional
+  `clientCert` / `clientKey` PEM options on `AxiamClientOptions` (and the
+  `AuthzGrpcClient` constructor options). When configured, the client identity is
+  presented on **both** the REST transport (Node `https.Agent` `{ cert, key }`) and the
+  gRPC channel (`createSsl(rootCerts, privateKey, certChain)`) of the same client.
+  Strict server verification is never relaxed — `rejectUnauthorized` stays at its secure
+  default and the client-cert path is kept separate from server-CA trust. The two options
+  are all-or-nothing and PEM-validated at construction (throwing on a one-of or non-PEM
+  value); the private key is held behind `Sensitive<T>` and never logged or serialized
+  (§7). Node-only: browsers validate the PEM shape then ignore it, as with `customCa`.
+
+## [1.0.0-alpha2] - 2026-07-16
+
+### Added
+
+- Declarative authorization helpers (CONTRACT.md §11): `requireAuth`,
+  `requireAccess`, `requireRole` (Express `RequestHandler`s) and
+  `requireAuthHook`, `requireAccessHook`, `requireRoleHook` (Fastify
+  `preHandler` hooks), exported from the existing `axiam-sdk/middleware`
+  subpath. `requireAccess`/`requireAccessHook` resolve the checked resource
+  from a literal string, `fromParam(name)`, or a `(req) => string` resolver,
+  and call `checkAccess` with `subjectId` set to the *authenticated request's*
+  user id — never the SDK client's own service-account identity. Error
+  mapping: 401 unauthenticated, 403 denied, 400 unresolvable resource, 503
+  `authz_unavailable` on any transport failure (fail closed, never a silent
+  allow); no decision caching.
+- `VerifiableSession` extended (as `AuthzVerifiableSession`) with an optional
+  `authzClient` (any `{ checkAccess(...) }`, satisfied by `AxiamClient`) —
+  `requireAccess`/`requireAccessHook` throw synchronously at construction if
+  it is not configured.
+- Optional `axiam-sdk/nestjs` subpath (Tier 2 of CONTRACT.md §11):
+  `@RequireAuth()`, `@RequireAccess(action, resource, opts?)`,
+  `@RequireRole(...roles)` metadata decorators plus an `AxiamGuard`
+  (`CanActivate`) that enforces them via `Reflector`, reusing the same §11
+  primitives (resource resolution, error mapping, no decision caching) as
+  the Express/Fastify guards. `@nestjs/common`/`@nestjs/core` are optional
+  peer dependencies.
+
+## [1.0.0-alpha] - 2026-07-15
+
+First alpha release of the official TypeScript client SDK for AXIAM. This is an
+early, pre-production preview published to npm for evaluation and feedback — the
+public API may still change before the beta and stable releases.
+
+### Added
+
+- REST client covering the AXIAM API surface (authentication, authorization
+  checks, tenant/user/role/resource management).
+- gRPC client (`@grpc/grpc-js`) for low-latency authorization checks; proto
+  stubs are generated at build time and bundled, so consumers need no `buf`.
+- Dual ESM/CJS builds with a browser-safe entry point (no Node-only transports
+  leak into the browser bundle).
+- Middleware helper for guarding server routes.
+- Strict TLS by default with no certificate-verification bypass surface.
+- Token-leak protection: no JWT-shaped values in built output.
+- Fully documented public API (TSDoc) and published type declarations.
+
+[1.0.0-alpha]: https://github.com/ilpanich/axiam-typescript-sdk/releases/tag/v1.0.0-alpha
