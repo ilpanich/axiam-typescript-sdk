@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-28
+
 ### Added
 
 - `requireScope` (Express), `requireScopeHook` (Fastify), `@RequireScope` (NestJS) and
@@ -157,6 +159,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Monthly dependency refresh (2026-11): runtime floors `amqplib` ^2.4.0 and `jose` ^6.2.18; dev tooling `vitest` / `@vitest/coverage-v8` ^5.1.1, `msw` ^3.0.7, `ts-proto` ^2.23.5, `@nestjs/common` / `@nestjs/core` ^12.6.0. Node support unchanged (22 floor, 26 newest); TypeScript stays on 6.0.x until typedoc accepts 7.x.
 
+- re-vendor CONTRACT.md 1.69 (§9 rule 7: oidc_refresh single-flight per tenant and token)
+
+- re-vendor CONTRACT.md after the server merged ilpanich/axiam#893
+
+- re-vendor CONTRACT.md 1.69 (typed consume, BOM refusal, bounded JWKS stale-if-error; axiam#883)
+
+- re-vendor CONTRACT.md 1.69 wire-form clarification (axiam#883)
+
+- re-vendor CONTRACT.md, openapi.json and the management registry
+
+- Bump the minor-patch group across 1 directory with 2 updates
+
+- Update codeql.yml
+
+- Bump github/codeql-action/init from 4.39.3 to 4.39.4
+
+- Bump github/codeql-action/analyze from 4.39.3 to 4.39.4
+
+- Monthly dependency and toolchain update (2026-11)
+
+- Bump the minor-patch group with 9 updates
+
 ### Removed
 
 - **The AMQP authz requester's unsigned-response opt-out** (`acceptUnsignedResponses` on
@@ -261,6 +285,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `exp`/`iat` checks. Finite values are still clamped into `[0, 60]`.
 - `SharedSession.isForeignHost` compares the origin, not the host, so a same-host URL on another
   scheme no longer receives the tenant header or the CSRF token.
+
+- Run oidc_refresh flights outside the session guard and resolve the tenant once (#177)
+
+- Key the oidc_refresh single-flight per refresh token (#177)
+
+- Cap the JWKS body and add REST customCa to the trust store (#176)
+
+- Keep the process trust store on the JWKS TLS path (#175)
+
+- Review follow-ups for the JWKS TLS fetch (#175)
+
+- JWKS fetch honours customCa and the client identity (#175)
+
+- OI-32 review round 1 (axiam#883)
+
+- Typed consume, discard event fields, BOM refusal, bounded JWKS stale-if-error (OI-32, axiam#883)
+
+- Nack before logging, throwing logger cannot strand a delivery (OI-10 alignment, round 2)
+
+- BOM body no longer crashes the consumer, reason order, Decision 7 wording (OI-10 alignment, round 1)
+
+- Align with contract 1.69 §8 (OI-10 alignment, axiam#882, axiam#883)
+
+- Nack a non-trailing signature, Decision 7 rule 3 for all invalid Unicode (OI wave B, round 2)
+
+- Consumer over received bytes, normative redirect encoding, event routingKey (OI wave B, round 1)
+
+- Encode the Fastify redirect, drop the unsigned opt-out, logout kid, discard event (OI-10, #167, axiam#880, axiam#881, axiam#882, axiam#883)
+
+- Requester connection errors, cookie cleared on error paths, log context, refetch-window test (wave 3, round 2)
+
+- Bound login glue, safe return_to, access-token rules, roles claim, authz requester (SA-20, C7/C6/N14/N15/N2)
 
 ## [1.3.1] - 2026-11-11
 
